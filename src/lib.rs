@@ -338,10 +338,10 @@ pub fn with_slice_mut<T, R>(slice: &mut [T], f: impl for<'id> FnOnce(&mut SliceM
 /// representing the vec's length at the start of the scope.
 /// The anchor remains valid even as elements are pushed to the vec.
 #[inline]
-pub fn with_vec<T, R>(vec: &mut Vec<T>, f: impl for<'id> FnOnce(&mut VecAppend<'id, T>, Anchor<'id, usize>) -> R) -> R {
+pub fn with_vec<T, R>(vec: &mut Vec<T>, f: impl for<'id> FnOnce(VecAppend<'id, T>, Anchor<'id, usize>) -> R) -> R {
     Anchor::scope(vec.len(), |anchor| {
-        let mut vec_append = VecAppend::new(vec);
-        f(&mut vec_append, anchor)
+        let vec_append = VecAppend::new(vec);
+        f(vec_append, anchor)
     })
 }
 
@@ -464,7 +464,7 @@ mod tests {
     #[test]
     fn test_vec_append() {
         let mut vec = vec![1, 2, 3];
-        with_vec(&mut vec, |vec_append, anchor| {
+        with_vec(&mut vec, |mut vec_append, anchor| {
             // Initial length is 3
             assert_eq!(anchor.get(), 3);
 

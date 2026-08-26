@@ -54,7 +54,7 @@ with_slice_mut(&mut vec, |slice, anchor| {
 
 ```rust
 let mut vec = vec![1, 2, 3];
-with_vec(&mut vec, |vec_append, anchor| {
+with_vec(&mut vec, |mut vec_append, anchor| {
     // anchor represents the initial length (3)
     assert_eq!(anchor.get(), 3);
     
