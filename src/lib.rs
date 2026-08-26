@@ -23,13 +23,25 @@ mod anchor;
 pub use anchor::Anchor;
 
 use std::marker::PhantomData;
-use std::ops::Index;
+use std::ops::{Index, IndexMut};
 
 /// A slice with a branded lifetime 'id
 #[derive(Copy, Clone)]
 pub struct Slice<'id, T> {
     ptr: *const T,
     _marker: PhantomData<(&'id (), *const T)>,
+}
+
+/// A mutable slice with a branded lifetime 'id
+pub struct SliceMut<'id, T> {
+    ptr: *mut T,
+    _marker: PhantomData<(&'id (), *mut T)>,
+}
+
+/// An append-only view of a Vec with a branded lifetime 'id
+pub struct VecAppend<'id, T> {
+    vec: *mut Vec<T>,
+    _marker: PhantomData<&'id ()>,
 }
 
 /// A proof that an index is less than (or no more than) a length
@@ -140,6 +152,46 @@ impl<'id, T> Slice<'id, T> {
     }
 }
 
+impl<'id, T> SliceMut<'id, T> {
+    /// Create a new mutable slice from a raw pointer
+    fn new(ptr: *mut T) -> Self {
+        Self {
+            ptr,
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<'id, T> VecAppend<'id, T> {
+    /// Create a new append-only vec view
+    fn new(vec: &mut Vec<T>) -> Self {
+        Self {
+            vec: vec as *mut Vec<T>,
+            _marker: PhantomData,
+        }
+    }
+
+    /// Push an element to the vec
+    #[inline]
+    pub fn push(&mut self, value: T) {
+        // Safe: we have exclusive access to the vec through &mut self
+        unsafe { (*self.vec).push(value) }
+    }
+
+    /// Get the current length
+    #[inline]
+    pub fn len(&self) -> usize {
+        // Safe: we have access to the vec
+        unsafe { (*self.vec).len() }
+    }
+
+    /// Check if the vec is empty
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
 impl<const N: usize> GreaterThan<N> {
     /// Create a new GreaterThan proof by checking a value
     #[inline]
@@ -238,6 +290,24 @@ impl<'id, T> Index<LessThan<'id, usize>> for Slice<'id, T> {
     }
 }
 
+impl<'id, T> Index<LessThan<'id, usize>> for SliceMut<'id, T> {
+    type Output = T;
+
+    #[inline]
+    fn index(&self, index: LessThan<'id, usize>) -> &T {
+        // Safe: LessThan proves the index is within bounds
+        unsafe { &*self.ptr.add(index.index) }
+    }
+}
+
+impl<'id, T> IndexMut<LessThan<'id, usize>> for SliceMut<'id, T> {
+    #[inline]
+    fn index_mut(&mut self, index: LessThan<'id, usize>) -> &mut T {
+        // Safe: LessThan proves the index is within bounds
+        unsafe { &mut *self.ptr.add(index.index) }
+    }
+}
+
 /// Execute a function with a slice and its length token
 ///
 /// The closure receives a branded slice and length that are
@@ -247,6 +317,31 @@ pub fn with_slice<T, R>(slice: &[T], f: impl for<'id> FnOnce(Slice<'id, T>, Anch
     Anchor::scope(slice.len(), |num| {
         let slice_ref = Slice::new(slice.as_ptr());
         f(slice_ref, num)
+    })
+}
+
+/// Execute a function with a mutable slice and its length token
+///
+/// The closure receives a branded mutable slice and length that are
+/// guaranteed to be consistent within the scope.
+#[inline]
+pub fn with_slice_mut<T, R>(slice: &mut [T], f: impl for<'id> FnOnce(&mut SliceMut<'id, T>, Anchor<'id, usize>) -> R) -> R {
+    Anchor::scope(slice.len(), |num| {
+        let mut slice_mut = SliceMut::new(slice.as_mut_ptr());
+        f(&mut slice_mut, num)
+    })
+}
+
+/// Execute a function with an append-only vec and its initial length token
+///
+/// The closure receives an append-only view of the vec and an anchor
+/// representing the vec's length at the start of the scope.
+/// The anchor remains valid even as elements are pushed to the vec.
+#[inline]
+pub fn with_vec<T, R>(vec: &mut Vec<T>, f: impl for<'id> FnOnce(&mut VecAppend<'id, T>, Anchor<'id, usize>) -> R) -> R {
+    Anchor::scope(vec.len(), |anchor| {
+        let mut vec_append = VecAppend::new(vec);
+        f(&mut vec_append, anchor)
     })
 }
 
@@ -348,6 +443,57 @@ mod tests {
             if let Some(idx) = LessThan::check(&len, 8) {
                 // LessThan can convert to NoMoreThan
                 let _no_more: NoMoreThan<usize> = idx.into();
+            }
+        });
+    }
+
+    #[test]
+    fn test_slice_mut() {
+        let mut vec = vec![1, 2, 3, 4, 5];
+        with_slice_mut(&mut vec, |slice, len| {
+            // Modify elements
+            for i in 0..len.get() {
+                if let Some(idx) = LessThan::check(&len, i) {
+                    slice[idx] *= 2;
+                }
+            }
+        });
+        assert_eq!(vec, vec![2, 4, 6, 8, 10]);
+    }
+
+    #[test]
+    fn test_vec_append() {
+        let mut vec = vec![1, 2, 3];
+        with_vec(&mut vec, |vec_append, anchor| {
+            // Initial length is 3
+            assert_eq!(anchor.get(), 3);
+
+            // Push more elements
+            vec_append.push(4);
+            vec_append.push(5);
+
+            // Length has grown
+            assert_eq!(vec_append.len(), 5);
+
+            // But anchor still represents the original length
+            assert_eq!(anchor.get(), 3);
+        });
+        assert_eq!(vec, vec![1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn test_range() {
+        let vec = vec![0; 10];
+        with_slice(&vec, |_slice, len| {
+            if let Some(left) = LessThan::check(&len, 3) {
+                // Create an anchor for the right bound
+                Anchor::scope(7, |right| {
+                    if let Some(range) = Range::new(left, right) {
+                        assert_eq!(range.left().get(), 3);
+                        assert_eq!(range.right().get(), 7);
+                        assert_eq!(range.len(), 4);
+                    }
+                });
             }
         });
     }
