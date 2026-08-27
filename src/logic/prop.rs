@@ -15,8 +15,8 @@ where
     P: Clone + 'a,
 {
     Prop::mp(
-        Prop::mp(Prop::l2().into(), Prop::l1::<_, Prop::Imply<P, _>>().into()),
-        Prop::l1().into(),
+        Prop::mp(Prop::l2(), Prop::l1::<_, Prop::Imply<P, _>>()),
+        Prop::l1(),
     )
 }
 
@@ -36,7 +36,7 @@ mod sealed_deduction {
     impl<'a, A, P: Clone, Prop: PropLogic<'a>> From<P> for Cert<'a, A, P, Prop> {
         fn from(value: P) -> Self {
             Cert {
-                witness: Prop::mp(Prop::l1().into(), value.into()),
+                witness: Prop::mp(Prop::l1(), value.into()),
                 _marker: PhantomData,
             }
         }
@@ -69,14 +69,16 @@ mod sealed_deduction {
 
     impl<'a, A: Clone + 'a, Prop: PropLogic<'a>> PropLogic<'a> for Deduction<A, Prop> {
         type Imply<P: 'a, Q: 'a> = Prop::Imply<P, Q>;
-        fn l1<P: Clone + 'a, Q>() -> Self::Imply<P, Self::Imply<Q, P>> {
-            Prop::l1()
+        fn l1<P: Clone + 'a, Q>() -> Self::Cert<Self::Imply<P, Self::Imply<Q, P>>> {
+            Self::upgrade(Prop::l1())
         }
-        fn l2<P: Clone + 'a, Q: 'a, R: 'a>() -> Self::Imply<
-            Self::Imply<P, Self::Imply<Q, R>>,
-            Self::Imply<Self::Imply<P, Q>, Self::Imply<P, R>>,
+        fn l2<P: Clone + 'a, Q: 'a, R: 'a>() -> Self::Cert<
+            Self::Imply<
+                Self::Imply<P, Self::Imply<Q, R>>,
+                Self::Imply<Self::Imply<P, Q>, Self::Imply<P, R>>,
+            >,
         > {
-            Prop::l2()
+            Self::upgrade(Prop::l2())
         }
         type BaseCert<P: Clone + 'a> = Prop::Cert<P>;
         type Cert<P: Clone + 'a> = Cert<'a, A, P, Prop>;
@@ -85,13 +87,13 @@ mod sealed_deduction {
             p: Self::Cert<P>,
         ) -> Self::Cert<Q> {
             Cert {
-                witness: Prop::mp(Prop::mp(Prop::l2().into(), pq.witness), p.witness),
+                witness: Prop::mp(Prop::mp(Prop::l2(), pq.witness), p.witness),
                 _marker: PhantomData,
             }
         }
         fn upgrade<P: Clone + 'a>(value: Self::BaseCert<P>) -> Self::Cert<P> {
             Cert {
-                witness: Prop::mp(Prop::l1().into(), value),
+                witness: Prop::mp(Prop::l1(), value),
                 _marker: PhantomData,
             }
         }

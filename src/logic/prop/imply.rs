@@ -31,13 +31,15 @@ pub trait PropLogic<'a> {
 
     /// Axiom L1: P → (Q → P)
     /// If P is true, then Q implies P
-    fn l1<P: Clone + 'a, Q>() -> Self::Imply<P, Self::Imply<Q, P>>;
+    fn l1<P: Clone + 'a, Q>() -> Self::Cert<Self::Imply<P, Self::Imply<Q, P>>>;
 
     /// Axiom L2: (P → (Q → R)) → ((P → Q) → (P → R))
     /// Distribution of implication
-    fn l2<P: Clone + 'a, Q: 'a, R: 'a>() -> Self::Imply<
-        Self::Imply<P, Self::Imply<Q, R>>,
-        Self::Imply<Self::Imply<P, Q>, Self::Imply<P, R>>,
+    fn l2<P: Clone + 'a, Q: 'a, R: 'a>() -> Self::Cert<
+        Self::Imply<
+            Self::Imply<P, Self::Imply<Q, R>>,
+            Self::Imply<Self::Imply<P, Q>, Self::Imply<P, R>>,
+        >,
     >;
 
     type BaseCert<P: Clone + 'a>;
