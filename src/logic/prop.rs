@@ -5,7 +5,9 @@ mod neg;
 
 pub use self::{
     imply::{PropLogic, PropLogicThm},
-    neg::{Contraposition, DoubleNegation, Neg, PeirceLaw, ProofRing as NegProofRing},
+    neg::{
+        Contraposition, DoubleNegation, ExFalsoQuodlibet, Neg, PeirceLaw, ProofRing as NegProofRing,
+    },
 };
 
 pub fn reflexive<'a, P, Prop: PropLogic<'a>>() -> Prop::Cert<Prop::Imply<P, P>>

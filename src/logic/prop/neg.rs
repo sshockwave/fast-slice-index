@@ -79,5 +79,17 @@ where
     }
 }
 
-// TODO: Prove ~p->p->q
+pub trait ExFalsoQuodlibet<'a>: PropLogic<'a> {
+    fn l3<P, Q>() -> Self::Cert<Self::Imply<Neg<P>, Self::Imply<P, Q>>>;
+}
+
+impl<'a, Prop: Contraposition<'a>> ExFalsoQuodlibet<'a> for ProofRing<'a, Prop> {
+    fn l3<P, Q>() -> Self::Cert<Self::Imply<Neg<P>, Self::Imply<P, Q>>> {
+        Prop::mp(
+            Prop::mp(syllogism::<_, _, _, Prop>(), Prop::l1().into()),
+            Prop::l3(),
+        )
+    }
+}
+
 // TODO: Prove Peirce's law
