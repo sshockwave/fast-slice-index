@@ -1,10 +1,38 @@
 #![forbid(unsafe_code)]
 
+use crate::logic::sealed::Sealed;
+
 /// Implication: P implies Q
-pub trait Infer<P, Q> {
+pub trait Infer<P, Q>: Sealed {
+    type Cert: From<P>;
+
     /// Modus Ponens: Given (P → Q) and P, derive Q
     /// This is the only inference rule - all others are axioms
-    fn mp(self, p: P) -> Q;
+    fn mp(self, p: Self::Cert) -> Q;
+}
+
+mod sealed_cert {
+    use ::core::marker::PhantomData;
+
+    pub struct ZeroCert<P>(PhantomData<P>);
+    impl<P> Default for ZeroCert<P> {
+        fn default() -> Self {
+            Self(PhantomData)
+        }
+    }
+}
+pub use sealed_cert::ZeroCert;
+
+impl<P> Clone for ZeroCert<P> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<P> Copy for ZeroCert<P> {}
+impl<P> From<P> for ZeroCert<P> {
+    fn from(_: P) -> Self {
+        Default::default()
+    }
 }
 
 /// Axiom L1: P → (Q → P)
@@ -27,29 +55,36 @@ pub trait L2<P, Q, R, PQR, QR, PQ>: Infer<PQR, Self::PQPR> {
 /// so we can prove this in [`PropLogicThm`] without any unsafe code.
 pub trait PropLogic {
     type L1<P, Q>: L1<P, Q> + Default + Copy;
-    type L2<P: Clone, Q, R, PQR: Infer<P, QR>, QR: Infer<Q, R>, PQ: Infer<P, Q>>: L2<P, Q, R, PQR, QR, PQ>
-        + Default
-        + Copy;
+    type L2<P, Q, R, PQR, QR, PQ>: L2<P, Q, R, PQR, QR, PQ> + Default + Copy
+    where
+        P: Copy,
+        PQR: Infer<P, QR>,
+        QR: Infer<Q, R>,
+        PQ: Infer<P, Q>;
 }
 
 pub struct PropLogicThm;
 
-mod prop_logic_sealed {
-    use super::{Infer, L1, L2, PropLogic, PropLogicThm};
+mod sealed_prop_logic {
+    use super::{Infer, L1, L2, PropLogic, PropLogicThm, Sealed, ZeroCert};
     use ::core::marker::PhantomData;
 
     pub struct Store<P>(P);
 
+    impl<P> Sealed for Store<P> {}
     impl<P, Q> Infer<P, Q> for Store<Q> {
-        fn mp(self, _: P) -> Q {
+        type Cert = ZeroCert<P>;
+        fn mp(self, _: Self::Cert) -> Q {
             self.0
         }
     }
     pub struct L1Proof<P, Q>(PhantomData<(P, Q)>);
+    impl<P, Q> Sealed for L1Proof<P, Q> {}
     impl<P, Q> L1<P, Q> for L1Proof<P, Q> {
         type QP = Store<P>;
     }
     impl<P, Q> Infer<P, Store<P>> for L1Proof<P, Q> {
+        type Cert = P;
         fn mp(self, p: P) -> Store<P> {
             Store(p)
         }
@@ -66,14 +101,14 @@ mod prop_logic_sealed {
         }
     }
     pub trait Params {
-        type P: Clone;
+        type P: Copy;
         type Q;
         type R;
         type PQR: Infer<Self::P, Self::QR>;
         type QR: Infer<Self::Q, Self::R>;
         type PQ: Infer<Self::P, Self::Q>;
     }
-    impl<P: Clone, Q, R, PQR: Infer<P, QR>, QR: Infer<Q, R>, PQ: Infer<P, Q>> Params
+    impl<P: Copy, Q, R, PQR: Infer<P, QR>, QR: Infer<Q, R>, PQ: Infer<P, Q>> Params
         for (P, Q, R, PQR, QR, PQ)
     {
         type P = P;
@@ -86,7 +121,9 @@ mod prop_logic_sealed {
     pub struct Store1<L: Params> {
         pqr: L::PQR,
     }
+    impl<L: Params> Sealed for Store1<L> {}
     impl<L: Params> Infer<L::PQ, Store2<L>> for Store1<L> {
+        type Cert = L::PQ;
         fn mp(self, pq: L::PQ) -> Store2<L> {
             Store2 { pqr: self.pqr, pq }
         }
@@ -95,17 +132,21 @@ mod prop_logic_sealed {
         pqr: L::PQR,
         pq: L::PQ,
     }
+    impl<L: Params> Sealed for Store2<L> {}
     impl<L: Params> Infer<L::P, L::R> for Store2<L> {
+        type Cert = L::P;
         fn mp(self, p: L::P) -> L::R {
-            self.pqr.mp(p.clone()).mp(self.pq.mp(p))
+            self.pqr.mp(p.into()).mp(self.pq.mp(p.into()).into())
         }
     }
     pub struct L2Proof<L>(PhantomData<L>);
+    impl<L: Params> Sealed for L2Proof<L> {}
     impl<L: Params> L2<L::P, L::Q, L::R, L::PQR, L::QR, L::PQ> for L2Proof<L> {
         type PQPR = Store1<L>;
         type PR = Store2<L>;
     }
     impl<L: Params> Infer<L::PQR, Store1<L>> for L2Proof<L> {
+        type Cert = L::PQR;
         fn mp(self, pqr: L::PQR) -> Store1<L> {
             Store1 { pqr }
         }
@@ -123,7 +164,7 @@ mod prop_logic_sealed {
     }
     impl PropLogic for PropLogicThm {
         type L1<P, Q> = L1Proof<P, Q>;
-        type L2<P: Clone, Q, R, PQR: Infer<P, QR>, QR: Infer<Q, R>, PQ: Infer<P, Q>> =
+        type L2<P: Copy, Q, R, PQR: Infer<P, QR>, QR: Infer<Q, R>, PQ: Infer<P, Q>> =
             L2Proof<(P, Q, R, PQR, QR, PQ)>;
     }
 }
