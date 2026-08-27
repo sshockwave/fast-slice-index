@@ -1,15 +1,43 @@
 mod sealed_infer {
-    pub trait Sealed {}
+    pub trait Sealed<P, Q> {}
 }
 use self::sealed_infer::Sealed;
 
 /// Implication: P implies Q
-pub trait Infer<P, Q>: Sealed {
+///
+/// This trait is sealed to hide the assumptions from the Rust type system.
+/// If you have custom implication statement wrappers,
+/// implement [`IntoInfer`] and then use `Imply` instead.
+pub trait Infer<P, Q>: Sealed<P, Q> {
     type Cert: From<P>;
 
     /// Modus Ponens: Given (P → Q) and P, derive Q
     /// This is the only inference rule - all others are axioms
     fn mp(self, p: Self::Cert) -> Q;
+}
+
+#[derive(Default, Clone, Copy)]
+pub struct Imply<T>(T);
+pub trait IntoInfer<P, Q> {
+    type Infer: Infer<P, Q>;
+    fn into_infer(self) -> Self::Infer;
+}
+impl<P, Q, T: IntoInfer<P, Q>> Sealed<P, Q> for Imply<T> {}
+impl<P, Q, T: IntoInfer<P, Q>> Infer<P, Q> for Imply<T> {
+    type Cert = <T::Infer as Infer<P, Q>>::Cert;
+    fn mp(self, p: Self::Cert) -> Q {
+        self.0.into_infer().mp(p)
+    }
+}
+impl<T> From<T> for Imply<T> {
+    fn from(value: T) -> Self {
+        Self(value)
+    }
+}
+impl<T> Imply<T> {
+    fn into_inner(self) -> T {
+        self.0
+    }
 }
 
 mod sealed_cert {
@@ -72,7 +100,7 @@ mod sealed_prop_logic {
 
     pub struct Store<P>(P);
 
-    impl<P> Sealed for Store<P> {}
+    impl<P, Q> Sealed<P, Q> for Store<Q> {}
     impl<P, Q> Infer<P, Q> for Store<Q> {
         type Cert = ZeroCert<P>;
         fn mp(self, _: Self::Cert) -> Q {
@@ -80,7 +108,7 @@ mod sealed_prop_logic {
         }
     }
     pub struct L1Proof<P, Q>(PhantomData<(P, Q)>);
-    impl<P, Q> Sealed for L1Proof<P, Q> {}
+    impl<P, Q> Sealed<P, Store<P>> for L1Proof<P, Q> {}
     impl<P, Q> L1<P, Q> for L1Proof<P, Q> {
         type QP = Store<P>;
     }
@@ -122,7 +150,7 @@ mod sealed_prop_logic {
     pub struct Store1<L: Params> {
         pqr: L::PQR,
     }
-    impl<L: Params> Sealed for Store1<L> {}
+    impl<L: Params> Sealed<L::PQ, Store2<L>> for Store1<L> {}
     impl<L: Params> Infer<L::PQ, Store2<L>> for Store1<L> {
         type Cert = L::PQ;
         fn mp(self, pq: L::PQ) -> Store2<L> {
@@ -133,7 +161,7 @@ mod sealed_prop_logic {
         pqr: L::PQR,
         pq: L::PQ,
     }
-    impl<L: Params> Sealed for Store2<L> {}
+    impl<L: Params> Sealed<L::P, L::R> for Store2<L> {}
     impl<L: Params> Infer<L::P, L::R> for Store2<L> {
         type Cert = L::P;
         fn mp(self, p: L::P) -> L::R {
@@ -143,7 +171,7 @@ mod sealed_prop_logic {
         }
     }
     pub struct L2Proof<L>(PhantomData<L>);
-    impl<L: Params> Sealed for L2Proof<L> {}
+    impl<L: Params> Sealed<L::PQR, Store1<L>> for L2Proof<L> {}
     impl<L: Params> L2<L::P, L::Q, L::R, L::PQR, L::QR, L::PQ> for L2Proof<L> {
         type PQPR = Store1<L>;
         type PR = Store2<L>;
