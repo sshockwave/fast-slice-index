@@ -1,80 +1,25 @@
-mod sealed_infer {
-    pub trait Sealed<P, Q> {}
-}
-use self::sealed_infer::Sealed;
-
 /// Implication: P implies Q
 ///
 /// This trait is sealed to hide the assumptions from the Rust type system.
-/// If you have custom implication statement wrappers,
-/// implement [`IntoInfer`] and then use `Imply` instead.
-pub trait Infer<P, Q>: Sealed<P, Q> {
-    type Cert: From<P>;
-
+trait Infer<'a, P, Q> {
     /// Modus Ponens: Given (P → Q) and P, derive Q
     /// This is the only inference rule - all others are axioms
-    fn mp(self, p: Self::Cert) -> Q;
+    fn mp(&self, p: P) -> Q;
+    fn clone_dyn(&self) -> Imply<'a, P, Q>
+    where
+        Q: 'a;
 }
+pub struct Imply<'a, P, Q>(Box<dyn Infer<'a, P, Q> + 'a>);
 
-#[derive(Default, Clone, Copy)]
-pub struct Imply<T>(T);
-pub trait IntoInfer<P, Q> {
-    type Infer: Infer<P, Q>;
-    fn into_infer(self) -> Self::Infer;
-}
-impl<P, Q, T: IntoInfer<P, Q>> Sealed<P, Q> for Imply<T> {}
-impl<P, Q, T: IntoInfer<P, Q>> Infer<P, Q> for Imply<T> {
-    type Cert = <T::Infer as Infer<P, Q>>::Cert;
-    fn mp(self, p: Self::Cert) -> Q {
-        self.0.into_infer().mp(p)
+impl<'a, P, Q> Imply<'a, P, Q> {
+    fn new(infer: impl Infer<'a, P, Q> + 'a) -> Self {
+        Self(Box::new(infer))
     }
 }
-impl<T> From<T> for Imply<T> {
-    fn from(value: T) -> Self {
-        Self(value)
-    }
-}
-impl<T> Imply<T> {
-    fn into_inner(self) -> T {
-        self.0
-    }
-}
-
-mod sealed_cert {
-    use ::core::marker::PhantomData;
-
-    pub struct ZeroCert<P>(PhantomData<P>);
-    impl<P> Default for ZeroCert<P> {
-        fn default() -> Self {
-            Self(PhantomData)
-        }
-    }
-}
-pub use sealed_cert::ZeroCert;
-
-impl<P> Clone for ZeroCert<P> {
+impl<'a, P, Q: 'a> Clone for Imply<'a, P, Q> {
     fn clone(&self) -> Self {
-        *self
+        self.0.clone_dyn()
     }
-}
-impl<P> Copy for ZeroCert<P> {}
-impl<P> From<P> for ZeroCert<P> {
-    fn from(_: P) -> Self {
-        Default::default()
-    }
-}
-
-/// Axiom L1: P → (Q → P)
-/// If P is true, then Q implies P
-pub trait L1<P, Q>: Infer<P, Self::QP> {
-    type QP: Infer<Q, P>;
-}
-
-/// Axiom L2: (P → (Q → R)) → ((P → Q) → (P → R))
-/// Distribution of implication
-pub trait L2<P, Q, R, PQR, QR, PQ>: Infer<PQR, Self::PQPR> {
-    type PQPR: Infer<PQ, Self::PR>;
-    type PR: Infer<P, R>;
 }
 
 /// Axiomatic propositional logic
@@ -83,119 +28,108 @@ pub trait L2<P, Q, R, PQR, QR, PQ>: Infer<PQR, Self::PQPR> {
 /// Rust type system implies propositional logic,
 /// so we can prove this in [`PropLogicThm`] without any unsafe code.
 pub trait PropLogic {
-    type L1<P, Q>: L1<P, Q> + Default + Copy;
-    type L2<P, Q, R, PQR, QR, PQ>: L2<P, Q, R, PQR, QR, PQ> + Default + Copy
-    where
-        P: Clone,
-        PQR: Infer<P, QR>,
-        QR: Infer<Q, R>,
-        PQ: Infer<P, Q>;
+    /// Axiom L1: P → (Q → P)
+    /// If P is true, then Q implies P
+    fn l1<'a, P: Clone + 'a, Q>() -> Imply<'a, P, Imply<'a, Q, P>>;
+
+    /// Axiom L2: (P → (Q → R)) → ((P → Q) → (P → R))
+    /// Distribution of implication
+    fn l2<'a, P: Clone + 'a, Q: 'a, R: 'a>()
+    -> Imply<'a, Imply<'a, P, Imply<'a, Q, R>>, Imply<'a, Imply<'a, P, Q>, Imply<'a, P, R>>>;
+
+    fn mp<'a, P, Q>(pq: Imply<'a, P, Q>, p: P) -> Q;
 }
 
 pub struct PropLogicThm;
 
 mod sealed_prop_logic {
-    use super::{Infer, L1, L2, PropLogic, PropLogicThm, Sealed, ZeroCert};
+    use super::{Imply, Infer, PropLogic, PropLogicThm};
     use ::core::marker::PhantomData;
 
     pub struct Store<P>(P);
 
-    impl<P, Q> Sealed<P, Q> for Store<Q> {}
-    impl<P, Q> Infer<P, Q> for Store<Q> {
-        type Cert = ZeroCert<P>;
-        fn mp(self, _: Self::Cert) -> Q {
-            self.0
+    impl<'a, P, Q: Clone> Infer<'a, P, Q> for Store<Q> {
+        fn mp(&self, _: P) -> Q {
+            self.0.clone()
+        }
+        fn clone_dyn(&self) -> super::Imply<'a, P, Q>
+        where
+            Q: 'a,
+        {
+            Imply::new(Store(self.0.clone()))
         }
     }
-    pub struct L1Proof<P, Q>(PhantomData<(P, Q)>);
-    impl<P, Q> Sealed<P, Store<P>> for L1Proof<P, Q> {}
-    impl<P, Q> L1<P, Q> for L1Proof<P, Q> {
-        type QP = Store<P>;
-    }
-    impl<P, Q> Infer<P, Store<P>> for L1Proof<P, Q> {
-        type Cert = P;
-        fn mp(self, p: P) -> Store<P> {
-            Store(p)
+    pub struct L1Proof;
+    impl<'a, P: Clone + 'a, Q> Infer<'a, P, Imply<'a, Q, P>> for L1Proof {
+        fn mp(&self, p: P) -> Imply<'a, Q, P> {
+            Imply::new(Store(p))
+        }
+        fn clone_dyn(&self) -> Imply<'a, P, Imply<'a, Q, P>> {
+            Imply::new(L1Proof)
         }
     }
-    impl<P, Q> Clone for L1Proof<P, Q> {
-        fn clone(&self) -> Self {
-            *self
-        }
+    pub struct Store1<'a, P, Q, R> {
+        pqr: Imply<'a, P, Imply<'a, Q, R>>,
     }
-    impl<P, Q> Copy for L1Proof<P, Q> {}
-    impl<P, Q> Default for L1Proof<P, Q> {
-        fn default() -> Self {
-            Self(PhantomData)
-        }
-    }
-    pub trait Params {
-        type P: Clone;
-        type Q;
-        type R;
-        type PQR: Infer<Self::P, Self::QR>;
-        type QR: Infer<Self::Q, Self::R>;
-        type PQ: Infer<Self::P, Self::Q>;
-    }
-    impl<P: Clone, Q, R, PQR: Infer<P, QR>, QR: Infer<Q, R>, PQ: Infer<P, Q>> Params
-        for (P, Q, R, PQR, QR, PQ)
+    impl<'a, P: Clone + 'a, Q: 'a, R: 'a> Infer<'a, Imply<'a, P, Q>, Imply<'a, P, R>>
+        for Store1<'a, P, Q, R>
     {
-        type P = P;
-        type Q = Q;
-        type R = R;
-        type PQR = PQR;
-        type QR = QR;
-        type PQ = PQ;
-    }
-    pub struct Store1<L: Params> {
-        pqr: L::PQR,
-    }
-    impl<L: Params> Sealed<L::PQ, Store2<L>> for Store1<L> {}
-    impl<L: Params> Infer<L::PQ, Store2<L>> for Store1<L> {
-        type Cert = L::PQ;
-        fn mp(self, pq: L::PQ) -> Store2<L> {
-            Store2 { pqr: self.pqr, pq }
+        fn mp(&self, pq: Imply<'a, P, Q>) -> Imply<'a, P, R> {
+            Imply::new(Store2 {
+                pqr: self.pqr.clone(),
+                pq,
+            })
+        }
+        fn clone_dyn(&self) -> Imply<'a, Imply<'a, P, Q>, Imply<'a, P, R>> {
+            Imply::new(Self {
+                pqr: self.pqr.clone(),
+            })
         }
     }
-    pub struct Store2<L: Params> {
-        pqr: L::PQR,
-        pq: L::PQ,
+    pub struct Store2<'a, P, Q, R> {
+        pqr: Imply<'a, P, Imply<'a, Q, R>>,
+        pq: Imply<'a, P, Q>,
     }
-    impl<L: Params> Sealed<L::P, L::R> for Store2<L> {}
-    impl<L: Params> Infer<L::P, L::R> for Store2<L> {
-        type Cert = L::P;
-        fn mp(self, p: L::P) -> L::R {
-            self.pqr
-                .mp(p.clone().into())
-                .mp(self.pq.mp(p.into()).into())
+    impl<'a, P: Clone + 'a, Q: 'a, R: 'a> Infer<'a, P, R> for Store2<'a, P, Q, R> {
+        fn mp(&self, p: P) -> R {
+            self.pqr.0.mp(p.clone()).0.mp(self.pq.0.mp(p.into()).into())
+        }
+        fn clone_dyn(&self) -> Imply<'a, P, R> {
+            Imply::new(Store2 {
+                pqr: self.pqr.clone(),
+                pq: self.pq.clone(),
+            })
         }
     }
-    pub struct L2Proof<L>(PhantomData<L>);
-    impl<L: Params> Sealed<L::PQR, Store1<L>> for L2Proof<L> {}
-    impl<L: Params> L2<L::P, L::Q, L::R, L::PQR, L::QR, L::PQ> for L2Proof<L> {
-        type PQPR = Store1<L>;
-        type PR = Store2<L>;
-    }
-    impl<L: Params> Infer<L::PQR, Store1<L>> for L2Proof<L> {
-        type Cert = L::PQR;
-        fn mp(self, pqr: L::PQR) -> Store1<L> {
-            Store1 { pqr }
+    pub struct L2Proof<P, Q, R>(PhantomData<(P, Q, R)>);
+    impl<'a, P: Clone + 'a, Q: 'a, R: 'a>
+        Infer<'a, Imply<'a, P, Imply<'a, Q, R>>, Imply<'a, Imply<'a, P, Q>, Imply<'a, P, R>>>
+        for L2Proof<P, Q, R>
+    {
+        fn mp(
+            &self,
+            p: Imply<'a, P, Imply<'a, Q, R>>,
+        ) -> Imply<'a, Imply<'a, P, Q>, Imply<'a, P, R>> {
+            Imply::new(Store1 { pqr: p })
         }
-    }
-    impl<L> Clone for L2Proof<L> {
-        fn clone(&self) -> Self {
-            *self
-        }
-    }
-    impl<L> Copy for L2Proof<L> {}
-    impl<L> Default for L2Proof<L> {
-        fn default() -> Self {
-            Self(PhantomData)
+        fn clone_dyn(
+            &self,
+        ) -> Imply<'a, Imply<'a, P, Imply<'a, Q, R>>, Imply<'a, Imply<'a, P, Q>, Imply<'a, P, R>>>
+        {
+            Imply::new(L2Proof(PhantomData))
         }
     }
     impl PropLogic for PropLogicThm {
-        type L1<P, Q> = L1Proof<P, Q>;
-        type L2<P: Clone, Q, R, PQR: Infer<P, QR>, QR: Infer<Q, R>, PQ: Infer<P, Q>> =
-            L2Proof<(P, Q, R, PQR, QR, PQ)>;
+        fn l1<'a, P: Clone + 'a, Q>() -> Imply<'a, P, Imply<'a, Q, P>> {
+            Imply::new(L1Proof)
+        }
+        fn l2<'a, P: Clone + 'a, Q: 'a, R: 'a>()
+        -> Imply<'a, Imply<'a, P, Imply<'a, Q, R>>, Imply<'a, Imply<'a, P, Q>, Imply<'a, P, R>>>
+        {
+            Imply::new(L2Proof(PhantomData))
+        }
+        fn mp<'a, P, Q>(pq: Imply<'a, P, Q>, p: P) -> Q {
+            pq.0.mp(p)
+        }
     }
 }
