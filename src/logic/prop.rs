@@ -11,13 +11,11 @@ mod sealed_deduction {
     /// Deduction theorem: If
     pub struct Deduction<A, Prop>(PhantomData<(A, Prop)>);
 
-    pub struct Cert<P, T> {
-        witness: T,
+    pub struct Cert<'a, A: 'a, P: 'a, Prop: PropLogic<'a>> {
+        witness: Prop::Cert<Prop::Imply<A, P>>,
         _marker: PhantomData<P>,
     }
-    impl<'a, A, P: Clone, Prop: PropLogic<'a>> From<P>
-        for Cert<(A, Prop), Prop::Cert<Prop::Imply<A, P>>>
-    {
+    impl<'a, A, P: Clone, Prop: PropLogic<'a>> From<P> for Cert<'a, A, P, Prop> {
         fn from(value: P) -> Self {
             Cert {
                 witness: Prop::mp(Prop::l1().into(), value.into()),
@@ -39,13 +37,10 @@ mod sealed_deduction {
                 _marker: PhantomData,
             }
         }
-        pub fn finish<P: Clone>(
-            value: <Self as PropLogic<'a>>::Cert<P>,
-        ) -> Prop::Cert<Prop::Imply<A, P>>
-        where
-            A: Clone,
-        {
-            value.witness
+    }
+    impl<'a, A: 'a, P: 'a, Prop: PropLogic<'a>> Cert<'a, A, P, Prop> {
+        pub fn finish(self) -> Prop::Cert<Prop::Imply<A, P>> {
+            self.witness
         }
     }
 
@@ -61,7 +56,7 @@ mod sealed_deduction {
             Prop::l2()
         }
         type BaseCert<P: Clone + 'a> = Prop::Cert<P>;
-        type Cert<P: Clone + 'a> = Cert<(A, Prop), Prop::Cert<Prop::Imply<A, P>>>;
+        type Cert<P: Clone + 'a> = Cert<'a, A, P, Prop>;
         fn mp<P: Clone, Q: Clone>(
             pq: Self::Cert<Self::Imply<P, Q>>,
             p: Self::Cert<P>,
@@ -95,5 +90,5 @@ where
         Deduction::upgrade(qr),
         Deduction::mp(Deduction::upgrade(Deduction::upgrade(pq)), p),
     );
-    Deduction::finish(Deduction::finish(Deduction::finish(r)))
+    r.finish().finish().finish()
 }
