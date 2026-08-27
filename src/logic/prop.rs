@@ -3,27 +3,49 @@
 mod imply;
 
 pub use self::imply::{PropLogic, PropLogicThm};
-use ::core::marker::PhantomData;
 
-/// Deduction theorem: If
-pub struct Deduction<A, Prop>(PhantomData<(A, Prop)>);
 mod sealed_deduction {
-    use super::{Deduction, PropLogic};
-    pub struct Cert<'a, A: 'a, P: 'a, Prop: PropLogic<'a>>(Prop::Cert<Prop::Imply<A, P>>);
-    impl<'a, A, P: Clone, Prop: PropLogic<'a>> From<P> for Cert<'a, A, P, Prop> {
+    use super::PropLogic;
+    use ::core::marker::PhantomData;
+
+    /// Deduction theorem: If
+    pub struct Deduction<A, Prop>(PhantomData<(A, Prop)>);
+
+    pub struct Cert<P, T> {
+        witness: T,
+        _marker: PhantomData<P>,
+    }
+    impl<'a, A, P: Clone, Prop: PropLogic<'a>> From<P>
+        for Cert<(A, Prop), Prop::Cert<Prop::Imply<A, P>>>
+    {
         fn from(value: P) -> Self {
-            Cert(Prop::mp(Prop::l1().into(), value.into()))
+            Cert {
+                witness: Prop::mp(Prop::l1().into(), value.into()),
+                _marker: PhantomData,
+            }
         }
     }
 
     impl<'a, A, Prop: PropLogic<'a>> Deduction<A, Prop> {
+        pub fn assume() -> <Self as PropLogic<'a>>::Cert<A>
+        where
+            A: Clone,
+        {
+            Cert {
+                witness: Prop::mp(
+                    Prop::mp(Prop::l2().into(), Prop::l1::<_, Prop::Imply<A, _>>().into()),
+                    Prop::l1().into(),
+                ),
+                _marker: PhantomData,
+            }
+        }
         pub fn finish<P: Clone>(
             value: <Self as PropLogic<'a>>::Cert<P>,
         ) -> Prop::Cert<Prop::Imply<A, P>>
         where
             A: Clone,
         {
-            value.0
+            value.witness
         }
     }
 
@@ -38,12 +60,40 @@ mod sealed_deduction {
         > {
             Prop::l2()
         }
-        type Cert<P: Clone + 'a> = Cert<'a, A, P, Prop>;
+        type BaseCert<P: Clone + 'a> = Prop::Cert<P>;
+        type Cert<P: Clone + 'a> = Cert<(A, Prop), Prop::Cert<Prop::Imply<A, P>>>;
         fn mp<P: Clone, Q: Clone>(
             pq: Self::Cert<Self::Imply<P, Q>>,
             p: Self::Cert<P>,
         ) -> Self::Cert<Q> {
-            Cert(Prop::mp(Prop::mp(Prop::l2().into(), pq.0), p.0))
+            Cert {
+                witness: Prop::mp(Prop::mp(Prop::l2().into(), pq.witness), p.witness),
+                _marker: PhantomData,
+            }
+        }
+        fn upgrade<P: Clone + 'a>(value: Self::BaseCert<P>) -> Self::Cert<P> {
+            Cert {
+                witness: Prop::mp(Prop::l1().into(), value),
+                _marker: PhantomData,
+            }
         }
     }
+}
+pub use sealed_deduction::Deduction;
+
+pub fn syllogism<'a, P, Q, R, Prop: PropLogic<'a>>()
+-> Prop::Cert<Prop::Imply<Prop::Imply<P, Q>, Prop::Imply<Prop::Imply<Q, R>, Prop::Imply<P, R>>>>
+where
+    P: Clone + 'a,
+    Q: Clone + 'a,
+    R: Clone + 'a,
+{
+    let pq = Deduction::<_, Prop>::assume();
+    let qr = Deduction::<_, Deduction<_, _>>::assume();
+    let p = Deduction::<_, Deduction<_, _>>::assume();
+    let r = Deduction::mp(
+        Deduction::upgrade(qr),
+        Deduction::mp(Deduction::upgrade(Deduction::upgrade(pq)), p),
+    );
+    Deduction::finish(Deduction::finish(Deduction::finish(r)))
 }

@@ -40,11 +40,14 @@ pub trait PropLogic<'a> {
         Self::Imply<Self::Imply<P, Q>, Self::Imply<P, R>>,
     >;
 
+    type BaseCert<P: Clone + 'a>;
     type Cert<P: Clone + 'a>: From<P>;
     fn mp<P: Clone, Q: Clone + 'a>(
         pq: Self::Cert<Self::Imply<P, Q>>,
         p: Self::Cert<P>,
     ) -> Self::Cert<Q>;
+
+    fn upgrade<P: Clone + 'a>(value: Self::BaseCert<P>) -> Self::Cert<P>;
 }
 
 pub struct PropLogicThm;
@@ -134,12 +137,16 @@ mod sealed_prop_logic {
         fn l2<P: Clone + 'a, Q: 'a, R: 'a>() -> L2<'a, P, Q, R> {
             Imply::new(L2Proof)
         }
+        type BaseCert<P: Clone + 'a> = P;
         type Cert<P: Clone + 'a> = P;
         fn mp<P: Clone + 'a, Q: Clone + 'a>(
             pq: Self::Cert<Imply<'a, P, Q>>,
             p: Self::Cert<P>,
         ) -> Self::Cert<Q> {
             pq.0.mp(p)
+        }
+        fn upgrade<P: Clone + 'a>(value: Self::BaseCert<P>) -> Self::Cert<P> {
+            value
         }
     }
 }
