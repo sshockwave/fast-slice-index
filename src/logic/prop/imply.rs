@@ -1,5 +1,3 @@
-/// Implication: P implies Q
-///
 /// This trait is sealed to hide the assumptions from the Rust type system.
 trait Infer<'a, P, Q> {
     /// Modus Ponens: Given (P → Q) and P, derive Q
@@ -22,29 +20,35 @@ impl<'a, P, Q: 'a> Clone for Imply<'a, P, Q> {
     }
 }
 
+type L1<'a, P, Q> = Imply<'a, P, Imply<'a, Q, P>>;
+type L2<'a, P, Q, R> =
+    Imply<'a, Imply<'a, P, Imply<'a, Q, R>>, Imply<'a, Imply<'a, P, Q>, Imply<'a, P, R>>>;
+
 /// Axiomatic propositional logic
 ///
 /// This is a logic system where all theorems are derived from axioms using inference rules.
 /// Rust type system implies propositional logic,
 /// so we can prove this in [`PropLogicThm`] without any unsafe code.
 pub trait PropLogic {
+    /// Implication: P implies Q
+    type Imply<'a, P, Q>;
+
     /// Axiom L1: P → (Q → P)
     /// If P is true, then Q implies P
-    fn l1<'a, P: Clone + 'a, Q>() -> Imply<'a, P, Imply<'a, Q, P>>;
+    fn l1<'a, P: Clone + 'a, Q>() -> L1<'a, P, Q>;
 
     /// Axiom L2: (P → (Q → R)) → ((P → Q) → (P → R))
     /// Distribution of implication
-    fn l2<'a, P: Clone + 'a, Q: 'a, R: 'a>()
-    -> Imply<'a, Imply<'a, P, Imply<'a, Q, R>>, Imply<'a, Imply<'a, P, Q>, Imply<'a, P, R>>>;
+    fn l2<'a, P: Clone + 'a, Q: 'a, R: 'a>() -> L2<'a, P, Q, R>;
 
-    fn mp<'a, P, Q>(pq: Imply<'a, P, Q>, p: P) -> Q;
+    type Cert<P>: From<P>;
+    fn mp<'a, P, Q>(pq: Self::Cert<Self::Imply<'a, P, Q>>, p: Self::Cert<P>) -> Self::Cert<Q>;
 }
 
 pub struct PropLogicThm;
 
 mod sealed_prop_logic {
-    use super::{Imply, Infer, PropLogic, PropLogicThm};
-    use ::core::marker::PhantomData;
+    use super::{Imply, Infer, L1, L2, PropLogic, PropLogicThm};
 
     pub struct Store<P>(P);
 
@@ -64,7 +68,7 @@ mod sealed_prop_logic {
         fn mp(&self, p: P) -> Imply<'a, Q, P> {
             Imply::new(Store(p))
         }
-        fn clone_dyn(&self) -> Imply<'a, P, Imply<'a, Q, P>> {
+        fn clone_dyn(&self) -> L1<'a, P, Q> {
             Imply::new(L1Proof)
         }
     }
@@ -101,10 +105,10 @@ mod sealed_prop_logic {
             })
         }
     }
-    pub struct L2Proof<P, Q, R>(PhantomData<(P, Q, R)>);
+    pub struct L2Proof;
     impl<'a, P: Clone + 'a, Q: 'a, R: 'a>
         Infer<'a, Imply<'a, P, Imply<'a, Q, R>>, Imply<'a, Imply<'a, P, Q>, Imply<'a, P, R>>>
-        for L2Proof<P, Q, R>
+        for L2Proof
     {
         fn mp(
             &self,
@@ -112,22 +116,19 @@ mod sealed_prop_logic {
         ) -> Imply<'a, Imply<'a, P, Q>, Imply<'a, P, R>> {
             Imply::new(Store1 { pqr: p })
         }
-        fn clone_dyn(
-            &self,
-        ) -> Imply<'a, Imply<'a, P, Imply<'a, Q, R>>, Imply<'a, Imply<'a, P, Q>, Imply<'a, P, R>>>
-        {
-            Imply::new(L2Proof(PhantomData))
+        fn clone_dyn(&self) -> L2<'a, P, Q, R> {
+            Imply::new(L2Proof)
         }
     }
     impl PropLogic for PropLogicThm {
+        type Imply<'a, P, Q> = Imply<'a, P, Q>;
         fn l1<'a, P: Clone + 'a, Q>() -> Imply<'a, P, Imply<'a, Q, P>> {
             Imply::new(L1Proof)
         }
-        fn l2<'a, P: Clone + 'a, Q: 'a, R: 'a>()
-        -> Imply<'a, Imply<'a, P, Imply<'a, Q, R>>, Imply<'a, Imply<'a, P, Q>, Imply<'a, P, R>>>
-        {
-            Imply::new(L2Proof(PhantomData))
+        fn l2<'a, P: Clone + 'a, Q: 'a, R: 'a>() -> L2<'a, P, Q, R> {
+            Imply::new(L2Proof)
         }
+        type Cert<P> = P;
         fn mp<'a, P, Q>(pq: Imply<'a, P, Q>, p: P) -> Q {
             pq.0.mp(p)
         }
