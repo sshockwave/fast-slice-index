@@ -41,7 +41,7 @@ pub trait PropLogic<'a> {
     >;
 
     type BaseCert<P: Clone + 'a>;
-    type Cert<P: Clone + 'a>: From<P>;
+    type Cert<P: Clone + 'a>: From<P> + Clone;
     fn mp<P: Clone, Q: Clone + 'a>(
         pq: Self::Cert<Self::Imply<P, Q>>,
         p: Self::Cert<P>,

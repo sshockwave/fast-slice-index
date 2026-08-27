@@ -1,10 +1,26 @@
 #![forbid(unsafe_code)]
 
 mod imply;
+mod neg;
 
-pub use self::imply::{PropLogic, PropLogicThm};
+pub use self::{
+    imply::{PropLogic, PropLogicThm},
+    neg::{Contraposition, DoubleNegation, Neg, PeirceLaw, ProofRing as NegProofRing},
+};
+
+pub fn reflexive<'a, P, Prop: PropLogic<'a>>() -> Prop::Cert<Prop::Imply<P, P>>
+where
+    P: Clone + 'a,
+{
+    Prop::mp(
+        Prop::mp(Prop::l2().into(), Prop::l1::<_, Prop::Imply<P, _>>().into()),
+        Prop::l1().into(),
+    )
+}
 
 mod sealed_deduction {
+    use crate::logic::prop::reflexive;
+
     use super::PropLogic;
     use ::core::marker::PhantomData;
 
@@ -23,6 +39,14 @@ mod sealed_deduction {
             }
         }
     }
+    impl<'a, A, P, Prop: PropLogic<'a>> Clone for Cert<'a, A, P, Prop> {
+        fn clone(&self) -> Self {
+            Cert {
+                witness: self.witness.clone(),
+                _marker: PhantomData,
+            }
+        }
+    }
 
     impl<'a, A, Prop: PropLogic<'a>> Deduction<A, Prop> {
         pub fn assume() -> <Self as PropLogic<'a>>::Cert<A>
@@ -30,10 +54,7 @@ mod sealed_deduction {
             A: Clone,
         {
             Cert {
-                witness: Prop::mp(
-                    Prop::mp(Prop::l2().into(), Prop::l1::<_, Prop::Imply<A, _>>().into()),
-                    Prop::l1().into(),
-                ),
+                witness: reflexive::<_, Prop>(),
                 _marker: PhantomData,
             }
         }
