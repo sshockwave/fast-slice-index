@@ -7,13 +7,18 @@ use ::core::marker::PhantomData;
 
 pub trait DeductionLogic<A>: PropLogic {
     type Assumption: Infer<A, A>;
-    fn mp<P, Q, PQ: Infer<P, Q>>(pq: impl Infer<A, PQ>, p: impl Infer<A, P>) -> impl Infer<A, Q>;
+    type MP<P, Q, PQ: Infer<P, Q>, APQ: Infer<A, PQ>, AP: Infer<A, P>>: Infer<A, Q>;
+    fn mp<P, Q, PQ: Infer<P, Q>, APQ: Infer<A, PQ>, AP: Infer<A, P>>(
+        pq: APQ,
+        p: AP,
+    ) -> Self::MP<P, Q, PQ, APQ, AP>;
 }
 
 pub trait Deduce {
     type P: Clone;
     type Q;
-    fn deduce<Prop: DeductionLogic<Self::P>>(p: Prop::Assumption) -> impl Infer<Self::P, Self::Q>;
+    type Output<Prop: DeductionLogic<Self::P>>: Infer<Self::P, Self::Q>;
+    fn deduce<Prop: DeductionLogic<Self::P>>(p: Prop::Assumption) -> Self::Output<Prop>;
 }
 
 pub fn deduce<D: Deduce, Prop: PropLogic>() -> impl Infer<D::P, D::Q> {
@@ -30,10 +35,12 @@ pub fn deduce<D: Deduce, Prop: PropLogic>() -> impl Infer<D::P, D::Q> {
     }
     impl<D: Deduce, Prop: PropLogic> DeductionLogic<D::P> for DeduceImpl<D, Prop> {
         type Assumption = Reflexive<D::P, Prop>;
-        fn mp<P, Q, PQ: Infer<P, Q>>(
-            pq: impl Infer<D::P, PQ>,
-            p: impl Infer<D::P, P>,
-        ) -> impl Infer<D::P, Q> {
+        type MP<P, Q, PQ: Infer<P, Q>, APQ: Infer<D::P, PQ>, AP: Infer<D::P, P>> =
+            <Prop::L2<D::P, P, Q, APQ, PQ, AP> as L2<D::P, P, Q, APQ, PQ, AP>>::PR;
+        fn mp<P, Q, PQ: Infer<P, Q>, APQ: Infer<D::P, PQ>, AP: Infer<D::P, P>>(
+            pq: APQ,
+            p: AP,
+        ) -> Self::MP<P, Q, PQ, APQ, AP> {
             Prop::L2::default().mp(pq.into()).mp(p.into())
         }
     }
