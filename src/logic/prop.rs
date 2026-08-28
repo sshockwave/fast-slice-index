@@ -6,7 +6,8 @@ mod neg;
 pub use self::{
     imply::{PropLogic, PropLogicThm},
     neg::{
-        Contraposition, DoubleNegation, ExFalsoQuodlibet, Neg, PeirceLaw, ProofRing as NegProofRing,
+        Contraposition, DoubleNegIntro, DoubleNegation, ExFalsoQuodlibet, Neg, PeirceLaw,
+        ProofRing as NegProofRing,
     },
 };
 
@@ -32,14 +33,6 @@ mod sealed_deduction {
     pub struct Cert<'a, A: 'a, P: 'a, Prop: PropLogic<'a>> {
         witness: Prop::Cert<Prop::Imply<A, P>>,
         _marker: PhantomData<P>,
-    }
-    impl<'a, A, P: Clone, Prop: PropLogic<'a>> From<P> for Cert<'a, A, P, Prop> {
-        fn from(value: P) -> Self {
-            Cert {
-                witness: Prop::mp(Prop::l1(), value.into()),
-                _marker: PhantomData,
-            }
-        }
     }
     impl<'a, A, P, Prop: PropLogic<'a>> Clone for Cert<'a, A, P, Prop> {
         fn clone(&self) -> Self {
@@ -97,6 +90,13 @@ mod sealed_deduction {
                 _marker: PhantomData,
             }
         }
+        fn def<P, Q>() -> Self::Cert<Self::Imply<P, Q>>
+        where
+            P: Into<Q> + Clone + 'a,
+            Q: Clone + 'a,
+        {
+            Self::upgrade(Prop::def())
+        }
     }
 }
 pub use sealed_deduction::Deduction;
@@ -117,3 +117,61 @@ where
     );
     r.finish().finish().finish()
 }
+
+pub struct Or<'a, P: 'a, Q: 'a, Prop: PropLogic<'a>>(Prop::Cert<Prop::Imply<Neg<P>, Q>>);
+pub struct And<'a, P: 'a, Q: 'a, Prop: PropLogic<'a> + ?Sized>(
+    Prop::Cert<Neg<Prop::Imply<Q, Neg<P>>>>,
+);
+
+impl<'a, P: 'a, Q: 'a, Prop: PropLogic<'a>> And<'a, P, Q, Prop> {
+    pub fn intro(p: Prop::Cert<P>, q: Prop::Cert<Q>) -> Self
+    where
+        P: Clone,
+        Q: Clone,
+    {
+        todo!()
+    }
+}
+
+impl<'a, P: 'a, Q: 'a, Prop: Contraposition<'a>> Or<'a, P, Q, Prop> {
+    pub fn intro_left(p: Prop::Cert<P>) -> Self
+    where
+        P: Clone,
+    {
+        Self(Prop::mp(
+            Prop::l3(),
+            Prop::mp(
+                Prop::l1(),
+                Prop::mp(<NegProofRing<Prop> as DoubleNegIntro<'_>>::l3(), p),
+            ),
+        ))
+    }
+    pub fn intro_right(q: Prop::Cert<Q>) -> Self
+    where
+        Q: Clone,
+    {
+        Self(Prop::mp(Prop::l1(), q))
+    }
+    pub fn p_to_q(self) -> Prop::Cert<Prop::Imply<Neg<P>, Q>> {
+        self.0
+    }
+    pub fn q_to_p(self) -> Prop::Cert<Prop::Imply<Neg<Q>, P>>
+    where
+        P: Clone,
+    {
+        Prop::mp(
+            Prop::l3(),
+            Prop::mp(
+                Prop::mp(
+                    Prop::l2(),
+                    Prop::mp(Prop::l1(), <NegProofRing<Prop> as DoubleNegIntro<'_>>::l3()),
+                ),
+                self.0,
+            ),
+        )
+    }
+}
+
+pub struct Iff<'a, P: 'a, Q: 'a, Prop: PropLogic<'a> + ?Sized>(
+    And<'a, Prop::Imply<P, Q>, Prop::Imply<Q, P>, Prop>,
+);

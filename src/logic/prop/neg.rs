@@ -1,4 +1,4 @@
-use crate::logic::prop::{PropLogic, reflexive, syllogism};
+use crate::logic::prop::{Deduction, PropLogic, reflexive, syllogism};
 use ::core::marker::PhantomData;
 
 pub struct Neg<P>(PhantomData<P>);
@@ -18,8 +18,12 @@ pub trait DoubleNegation<'a>: PropLogic<'a> {
     fn l3<P>() -> Self::Cert<Self::Imply<Neg<Neg<P>>, P>>;
 }
 
+pub trait DoubleNegIntro<'a>: PropLogic<'a> {
+    fn l3<P>() -> Self::Cert<Self::Imply<P, Neg<Neg<P>>>>;
+}
+
 pub trait PeirceLaw<'a>: PropLogic<'a> {
-    fn l3<P, Q>() -> Self::Cert<Self::Imply<Self::Imply<Self::Imply<P, Q>, P>, P>>;
+    fn peirce<P, Q>() -> Self::Cert<Self::Imply<Self::Imply<Self::Imply<P, Q>, P>, P>>;
 }
 
 pub struct ProofRing<'a, Prop>(PhantomData<(&'a (), Prop)>);
@@ -51,6 +55,13 @@ where
     fn upgrade<P: Clone + 'a>(value: Self::BaseCert<P>) -> Self::Cert<P> {
         value
     }
+    fn def<P, Q>() -> Self::Cert<Self::Imply<P, Q>>
+    where
+        P: Into<Q> + Clone + 'a,
+        Q: Clone + 'a,
+    {
+        Prop::def()
+    }
 }
 
 impl<'a, Prop> DoubleNegation<'a> for ProofRing<'a, Prop>
@@ -81,6 +92,12 @@ where
     }
 }
 
+impl<'a, Prop: Contraposition<'a>> DoubleNegIntro<'a> for ProofRing<'a, Prop> {
+    fn l3<P>() -> Self::Cert<Self::Imply<P, Neg<Neg<P>>>> {
+        Prop::mp(Prop::l3(), <ProofRing<Prop> as DoubleNegation<'_>>::l3())
+    }
+}
+
 pub trait ExFalsoQuodlibet<'a>: PropLogic<'a> {
     fn l3<P, Q>() -> Self::Cert<Self::Imply<Neg<P>, Self::Imply<P, Q>>>;
 }
@@ -94,4 +111,22 @@ impl<'a, Prop: Contraposition<'a>> ExFalsoQuodlibet<'a> for ProofRing<'a, Prop> 
     }
 }
 
-// TODO: Prove Peirce's law
+pub fn simplification<'a, P, Q, Prop: Contraposition<'a>>()
+-> Prop::Cert<Prop::Imply<Neg<Prop::Imply<P, Q>>, P>> {
+    Prop::mp(
+        Prop::l3(),
+        Prop::mp(
+            Prop::mp(
+                syllogism::<_, _, _, Prop>(),
+                <ProofRing<Prop> as ExFalsoQuodlibet<'_>>::l3(),
+            ),
+            <ProofRing<Prop> as DoubleNegIntro<'_>>::l3(),
+        ),
+    )
+}
+
+impl<'a, Prop: Contraposition<'a>> PeirceLaw<'a> for ProofRing<'a, Prop> {
+    fn peirce<P, Q>() -> Self::Cert<Self::Imply<Self::Imply<Self::Imply<P, Q>, P>, P>> {
+        todo!()
+    }
+}
