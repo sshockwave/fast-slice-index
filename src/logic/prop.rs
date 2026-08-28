@@ -4,43 +4,19 @@ mod imply;
 mod neg;
 
 pub use self::{
-    imply::{PropLogic, PropLogicThm},
+    imply::{Chain, PropLogic, PropLogicThm},
     neg::{
         Contraposition, DoubleNegIntro, DoubleNegation, ExFalsoQuodlibet, Neg, PeirceLaw,
         ProofRing as NegProofRing, simplification, transposition,
     },
 };
 
-mod sealed_chain {
-    use super::PropLogic;
-    pub struct Chain<'l, P: Clone + 'l, Prop: PropLogic<'l>>(Prop::Cert<P>);
-    impl<'l, PQ: Clone, Prop: PropLogic<'l>> Chain<'l, PQ, Prop> {
-        pub fn mp<P: Clone, Q: Clone>(self, p: Prop::Cert<P>) -> Chain<'l, Q, Prop>
-        where
-            Prop::Cert<PQ>: Into<Prop::Cert<Prop::Imply<P, Q>>>,
-        {
-            Chain(Prop::mp(self.0.into(), p))
-        }
-        pub fn end(self) -> Prop::Cert<PQ> {
-            self.0
-        }
-        pub fn upgrade<Prop2: PropLogic<'l, BaseCert<PQ> = Prop::Cert<PQ>>>(
-            self,
-        ) -> Chain<'l, PQ, Prop2> {
-            Chain(Prop2::upgrade(self.0))
-        }
-    }
-    pub fn chain<'l, Prop: PropLogic<'l>, P: Clone + 'l>(p: Prop::Cert<P>) -> Chain<'l, P, Prop> {
-        Chain(p)
-    }
-}
-pub use self::sealed_chain::chain;
-
 pub fn reflexive<'a, P, Prop: PropLogic<'a>>() -> Prop::Cert<Prop::Imply<P, P>>
 where
     P: Clone + 'a,
 {
-    chain::<Prop, _>(Prop::l2())
+    Prop::l2()
+        .chain()
         .mp(Prop::l1())
         .mp(Prop::l1::<_, P>())
         .end()
@@ -130,7 +106,7 @@ where
     let pq = Deduction::<_, Prop>::assume();
     let qr = Deduction::<_, Deduction<_, _>>::assume();
     let p = Deduction::<_, Deduction<_, _>>::assume();
-    chain::<Deduction<_, _>, _>(qr)
+    Chain::<Deduction<_, _>, _>::chain(qr)
         .upgrade::<Deduction<_, _>>()
         .mp(Deduction::mp(Deduction::upgrade(Deduction::upgrade(pq)), p))
         .end()
@@ -213,16 +189,17 @@ impl<'a, P: 'a, Q: 'a, Prop: Contraposition<'a>> Or<'a, P, Q, Prop> {
     where
         P: Clone,
     {
-        Prop::mp(
-            Prop::l3(),
-            Prop::mp(
-                Prop::mp(
-                    Prop::l2(),
-                    Prop::mp(Prop::l1(), <NegProofRing<Prop> as DoubleNegIntro<'_>>::l3()),
-                ),
-                self.0,
-            ),
-        )
+        Prop::l3()
+            .chain()
+            .mp(Prop::l2()
+                .chain()
+                .mp(Prop::l1()
+                    .chain()
+                    .mp(<NegProofRing<Prop> as DoubleNegIntro<'_>>::l3())
+                    .end())
+                .mp(self.0)
+                .end())
+            .end()
     }
 }
 

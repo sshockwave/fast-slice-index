@@ -18,6 +18,33 @@ impl<'a, P, Q: 'a> Clone for Imply<'a, P, Q> {
     }
 }
 
+pub trait Chain<'l, Prop: PropLogic<'l> + ?Sized, P: Clone + 'l> {
+    fn chain(self) -> ChainImpl<'l, P, Prop>;
+}
+impl<'l, P: Clone + 'l, Prop: PropLogic<'l> + ?Sized> Chain<'l, Prop, P> for Prop::Cert<P> {
+    fn chain(self) -> ChainImpl<'l, P, Prop> {
+        ChainImpl(self)
+    }
+}
+
+pub struct ChainImpl<'l, P: Clone + 'l, Prop: PropLogic<'l> + ?Sized>(Prop::Cert<P>);
+impl<'l, PQ: Clone + 'l, Prop: PropLogic<'l> + ?Sized> ChainImpl<'l, PQ, Prop> {
+    pub fn mp<P: Clone, Q: Clone>(self, p: Prop::Cert<P>) -> ChainImpl<'l, Q, Prop>
+    where
+        Prop::Cert<PQ>: Into<Prop::Cert<Prop::Imply<P, Q>>>,
+    {
+        ChainImpl(Prop::mp(self.0.into(), p))
+    }
+    pub fn upgrade<Prop2: PropLogic<'l, BaseCert<PQ> = Prop::Cert<PQ>>>(
+        self,
+    ) -> ChainImpl<'l, PQ, Prop2> {
+        ChainImpl(Prop2::upgrade(self.0))
+    }
+    pub fn end(self) -> Prop::Cert<PQ> {
+        self.0
+    }
+}
+
 /// Axiomatic propositional logic
 ///
 /// This is a logic system where all theorems are derived from axioms using inference rules.
@@ -41,7 +68,7 @@ pub trait PropLogic<'a> {
     >;
 
     type BaseCert<P: Clone + 'a>;
-    type Cert<P: Clone + 'a>: Clone;
+    type Cert<P: Clone + 'a>: Clone + Chain<'a, Self, P>;
 
     /// Modus Ponens: Given (P → Q) and P, derive Q
     /// This is the only inference rule - all others are axioms
