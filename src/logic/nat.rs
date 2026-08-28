@@ -5,6 +5,19 @@ use crate::logic::prop::Neg;
 /// Equivalent to: x ∈ Dom(SuccFn)
 pub type IsNat<'l, 'x, N> = <<N as NaturalNumbers<'l>>::SuccFn as Function<'l, N>>::Dom<'x>;
 
+/// Type alias: "x is zero"
+/// Equivalent to: ∀p∀s. Succ(p,s) → s≠x (no element's successor equals x)
+pub type IsZero<'l, 'x, N: Equality<'l>> = &'l dyn for<'p> View<
+    'p,
+    Output = &'l dyn for<'s> View<
+        's,
+        Output = N::Imply<
+            <<N as NaturalNumbers<'l>>::SuccFn as Function<'l, N>>::F<'p, 's>,
+            Neg<N::Eq<'s, 'x>>
+        >
+    >
+>;
+
 /// Natural numbers trait using function-based approach
 ///
 /// Design:
@@ -22,26 +35,14 @@ where
     /// SuccFn::F<'x, 'y> means "y is the successor of x"
     type SuccFn: Function<'l, Self> + Injection<'l, Self>;
 
-    /// Zero is defined existentially: ∃z. z is a nat ∧ ∀n. ∀s. Succ(n, s) → s ≠ z
+    /// Zero is defined existentially: ∃z. z is a nat ∧ IsZero(z)
     /// "There exists something such that no natural's successor equals it"
     fn zero_exists() -> Self::Cert<
         Neg<&'l dyn for<'z> View<
             'z,
             Output = Self::Imply<
                 IsNat<'l, 'z, Self>,
-                &'l dyn for<'n> View<
-                    'n,
-                    Output = Self::Imply<
-                        IsNat<'l, 'n, Self>,
-                        &'l dyn for<'s> View<
-                            's,
-                            Output = Self::Imply<
-                                <Self::SuccFn as Function<'l, Self>>::F<'n, 's>,
-                                Neg<Self::Eq<'s, 'z>>
-                            >
-                        >
-                    >
-                >
+                IsZero<'l, 'z, Self>
             >
         >>
     >;
@@ -59,17 +60,7 @@ where
                 Output = Self::Imply<
                     IsNat<'l, 'z, Self>,
                     Self::Imply<
-                        // z is zero (no predecessor)
-                        &'l dyn for<'p> View<
-                            'p,
-                            Output = &'l dyn for<'s> View<
-                                's,
-                                Output = Self::Imply<
-                                    <Self::SuccFn as Function<'l, Self>>::F<'p, 's>,
-                                    Neg<Self::Eq<'s, 'z>>
-                                >
-                            >
-                        >,
+                        IsZero<'l, 'z, Self>,
                         <P as View<'z>>::Output
                     >
                 >
@@ -105,4 +96,21 @@ where
     >
     where
         P: for<'n> View<'n> + 'l;
+
+    /// Zero is unique: ∀x∀y. IsZero(x) ∧ IsZero(y) → x = y
+    fn zero_unique() -> Self::Cert<
+        &'l dyn for<'x> View<
+            'x,
+            Output = &'l dyn for<'y> View<
+                'y,
+                Output = Self::Imply<
+                    IsZero<'l, 'x, Self>,
+                    Self::Imply<
+                        IsZero<'l, 'y, Self>,
+                        Self::Eq<'x, 'y>
+                    >
+                >
+            >
+        >
+    >;
 }
