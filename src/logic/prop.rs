@@ -61,10 +61,7 @@ mod sealed_deduction {
     }
     impl<'a, A, P, Prop: PropLogic<'a>> Clone for Cert<'a, A, P, Prop> {
         fn clone(&self) -> Self {
-            Cert {
-                witness: self.witness.clone(),
-                _marker: PhantomData,
-            }
+            Cert::new(self.witness.clone())
         }
     }
 
@@ -73,13 +70,16 @@ mod sealed_deduction {
         where
             A: Clone,
         {
-            Cert {
-                witness: reflexive::<_, Prop>(),
-                _marker: PhantomData,
-            }
+            Cert::new(reflexive::<_, Prop>())
         }
     }
     impl<'a, A: 'a, P: 'a, Prop: PropLogic<'a>> Cert<'a, A, P, Prop> {
+        fn new(witness: Prop::Cert<Prop::Imply<A, P>>) -> Self {
+            Cert {
+                witness,
+                _marker: PhantomData,
+            }
+        }
         pub fn finish(self) -> Prop::Cert<Prop::Imply<A, P>> {
             self.witness
         }
@@ -104,16 +104,10 @@ mod sealed_deduction {
             pq: Self::Cert<Self::Imply<P, Q>>,
             p: Self::Cert<P>,
         ) -> Self::Cert<Q> {
-            Cert {
-                witness: Prop::mp(Prop::mp(Prop::l2(), pq.witness), p.witness),
-                _marker: PhantomData,
-            }
+            Cert::new(Prop::mp(Prop::mp(Prop::l2(), pq.witness), p.witness))
         }
         fn upgrade<P: Clone + 'a>(value: Self::BaseCert<P>) -> Self::Cert<P> {
-            Cert {
-                witness: Prop::mp(Prop::l1(), value),
-                _marker: PhantomData,
-            }
+            Cert::new(Prop::mp(Prop::l1(), value))
         }
         fn def<P, Q>() -> Self::Cert<Self::Imply<P, Q>>
         where
