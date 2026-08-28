@@ -5,9 +5,10 @@ use crate::logic::prop::Neg;
 /// Equivalent to: x ∈ Dom(SuccFn)
 pub type IsNat<'l, 'x, N> = <<N as NaturalNumbers<'l>>::SuccFn as Function<'l, N>>::Dom<'x>;
 
-/// Type alias: "x is zero"
+/// Type alias: "x is zero-like"
 /// Equivalent to: ∀p∀s. Succ(p,s) → s≠x (no element's successor equals x)
-pub type IsZero<'l, 'x, N: Equality<'l>> = &'l dyn for<'p> View<
+/// Note: doesn't require x to be a natural number
+pub type IsZeroLike<'l, 'x, N: Equality<'l>> = &'l dyn for<'p> View<
     'p,
     Output = &'l dyn for<'s> View<
         's,
@@ -17,6 +18,11 @@ pub type IsZero<'l, 'x, N: Equality<'l>> = &'l dyn for<'p> View<
         >
     >
 >;
+
+/// Type alias: "x is zero"
+/// Equivalent to: x is a natural number AND x is zero-like
+pub type IsZero<'l, 'x, N: Equality<'l>> =
+    Neg<N::Imply<IsZeroLike<'l, 'x, N>, Neg<IsNat<'l, 'x, N>>>>;
 
 /// Natural numbers trait using function-based approach
 ///
@@ -35,14 +41,14 @@ where
     /// SuccFn::F<'x, 'y> means "y is the successor of x"
     type SuccFn: Function<'l, Self> + Injection<'l, Self>;
 
-    /// Zero is defined existentially: ∃z. z is a nat ∧ IsZero(z)
-    /// "There exists something such that no natural's successor equals it"
+    /// Zero is defined existentially: ∃z. IsNat(z) ∧ IsZeroLike(z)
+    /// "There exists a natural number such that no natural's successor equals it"
     fn zero_exists() -> Self::Cert<
         Neg<&'l dyn for<'z> View<
             'z,
             Output = Self::Imply<
                 IsNat<'l, 'z, Self>,
-                IsZero<'l, 'z, Self>
+                IsZeroLike<'l, 'z, Self>
             >
         >>
     >;
@@ -60,7 +66,7 @@ where
                 Output = Self::Imply<
                     IsNat<'l, 'z, Self>,
                     Self::Imply<
-                        IsZero<'l, 'z, Self>,
+                        IsZeroLike<'l, 'z, Self>,
                         <P as View<'z>>::Output
                     >
                 >
