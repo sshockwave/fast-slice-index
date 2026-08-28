@@ -123,7 +123,7 @@ pub struct And<'a, P: 'a, Q: 'a, Prop: PropLogic<'a> + ?Sized>(
     Prop::Cert<Neg<Prop::Imply<Q, Neg<P>>>>,
 );
 
-impl<'a, P: 'a, Q: 'a, Prop: PropLogic<'a>> And<'a, P, Q, Prop> {
+impl<'a, P: 'a, Q: 'a, Prop: Contraposition<'a>> And<'a, P, Q, Prop> {
     pub fn intro(p: Prop::Cert<P>, q: Prop::Cert<Q>) -> Self
     where
         P: Clone,

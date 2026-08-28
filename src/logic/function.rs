@@ -13,9 +13,7 @@ where
     type Eq<'a: 'l, 'b: 'l>;
 
     /// Reflexivity: ∀x. x = x
-    fn eq_refl() -> Self::Cert<
-        &'l dyn for<'x> View<'x, Output = Self::Eq<'x, 'x>>
-    >;
+    fn eq_refl() -> Self::Cert<&'l dyn for<'x> View<'x, Output = Self::Eq<'x, 'x>>>;
 
     /// Symmetry: ∀x ∀y. x = y → y = x
     fn eq_symm() -> Self::Cert<
@@ -23,9 +21,9 @@ where
             'x,
             Output = &'l dyn for<'y> View<
                 'y,
-                Output = Self::Imply<Self::Eq<'x, 'y>, Self::Eq<'y, 'x>>
-            >
-        >
+                Output = Self::Imply<Self::Eq<'x, 'y>, Self::Eq<'y, 'x>>,
+            >,
+        >,
     >;
 
     /// Transitivity: ∀x ∀y ∀z. x = y → y = z → x = z
@@ -38,11 +36,11 @@ where
                     'z,
                     Output = Self::Imply<
                         Self::Eq<'x, 'y>,
-                        Self::Imply<Self::Eq<'y, 'z>, Self::Eq<'x, 'z>>
-                    >
-                >
-            >
-        >
+                        Self::Imply<Self::Eq<'y, 'z>, Self::Eq<'x, 'z>>,
+                    >,
+                >,
+            >,
+        >,
     >;
 
     /// Substitution (Leibniz's law): ∀x ∀y. x = y → (P(x) → P(y))
@@ -54,13 +52,10 @@ where
                 'y,
                 Output = Self::Imply<
                     Self::Eq<'x, 'y>,
-                    Self::Imply<
-                        <P as View<'x>>::Output,
-                        <P as View<'y>>::Output
-                    >
-                >
-            >
-        >
+                    Self::Imply<<P as View<'x>>::Output, <P as View<'y>>::Output>,
+                >,
+            >,
+        >,
     >
     where
         P: for<'a> View<'a> + 'l;
@@ -96,15 +91,14 @@ where
             Output = Self::Imply<
                 Self::Dom<'x>,
                 // ∃y. Codom(y) ∧ F(x,y)
-                Neg<&'l dyn for<'y> View<
-                    'y,
-                    Output = Self::Imply<
-                        Self::Codom<'y>,
-                        Neg<Self::F<'x, 'y>>
-                    >
-                >>
-            >
-        >
+                Neg<
+                    &'l dyn for<'y> View<
+                        'y,
+                        Output = Self::Imply<Self::Codom<'y>, Neg<Self::F<'x, 'y>>>,
+                    >,
+                >,
+            >,
+        >,
     >;
 
     /// Functional (single-valued): ∀x ∀y ∀z. F(x,y) ∧ F(x,z) → y = z
@@ -118,14 +112,11 @@ where
                     'z,
                     Output = Self::Imply<
                         Self::F<'x, 'y>,
-                        Self::Imply<
-                            Self::F<'x, 'z>,
-                            Eq::Eq<'y, 'z>
-                        >
-                    >
-                >
-            >
-        >
+                        Self::Imply<Self::F<'x, 'z>, Eq::Eq<'y, 'z>>,
+                    >,
+                >,
+            >,
+        >,
     >;
 
     /// Well-typed: ∀x ∀y. F(x,y) → Dom(x) ∧ Codom(y)
@@ -134,15 +125,9 @@ where
             'x,
             Output = &'l dyn for<'y> View<
                 'y,
-                Output = Self::Imply<
-                    Self::F<'x, 'y>,
-                    Self::Imply<
-                        Self::Dom<'x>,
-                        Self::Codom<'y>
-                    >
-                >
-            >
-        >
+                Output = Self::Imply<Self::F<'x, 'y>, Self::Imply<Self::Dom<'x>, Self::Codom<'y>>>,
+            >,
+        >,
     >;
 }
 
@@ -163,14 +148,11 @@ where
                     'z,
                     Output = Self::Imply<
                         Self::F<'x, 'z>,
-                        Self::Imply<
-                            Self::F<'y, 'z>,
-                            Eq::Eq<'x, 'y>
-                        >
-                    >
-                >
-            >
-        >
+                        Self::Imply<Self::F<'y, 'z>, Eq::Eq<'x, 'y>>,
+                    >,
+                >,
+            >,
+        >,
     >;
 }
 
