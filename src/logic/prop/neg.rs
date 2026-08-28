@@ -125,6 +125,35 @@ pub fn simplification<'a, P, Q, Prop: Contraposition<'a>>()
     )
 }
 
+/// Transposition: (P → Q) → (¬Q → ¬P)
+///
+/// The converse of [`Contraposition`], obtained by wrapping both sides in a
+/// double negation so that [`Contraposition::l3`] applies.
+pub fn transposition<'a, P: Clone + 'a, Q: Clone + 'a, Prop: Contraposition<'a>>()
+-> Prop::Cert<Prop::Imply<Prop::Imply<P, Q>, Prop::Imply<Neg<Q>, Neg<P>>>> {
+    // (P → Q) → (¬¬P → Q)
+    let pre = Prop::mp(
+        syllogism::<_, _, _, Prop>(),
+        <ProofRing<Prop> as DoubleNegation<'_>>::l3::<P>(),
+    );
+    // (¬¬P → Q) → (¬¬P → ¬¬Q)
+    let post = Prop::mp(
+        Prop::l2(),
+        Prop::mp(
+            Prop::l1(),
+            <ProofRing<Prop> as DoubleNegIntro<'_>>::l3::<Q>(),
+        ),
+    );
+    Prop::mp(
+        Prop::mp(
+            syllogism::<_, _, _, Prop>(),
+            // (P → Q) → (¬¬P → ¬¬Q)
+            Prop::mp(Prop::mp(syllogism::<_, _, _, Prop>(), pre), post),
+        ),
+        Prop::l3(),
+    )
+}
+
 impl<'a, Prop: Contraposition<'a>> PeirceLaw<'a> for ProofRing<'a, Prop> {
     fn peirce<P, Q>() -> Self::Cert<Self::Imply<Self::Imply<Self::Imply<P, Q>, P>, P>> {
         todo!()

@@ -7,7 +7,7 @@ pub use self::{
     imply::{PropLogic, PropLogicThm},
     neg::{
         Contraposition, DoubleNegIntro, DoubleNegation, ExFalsoQuodlibet, Neg, PeirceLaw,
-        ProofRing as NegProofRing,
+        ProofRing as NegProofRing, transposition,
     },
 };
 
@@ -129,7 +129,16 @@ impl<'a, P: 'a, Q: 'a, Prop: Contraposition<'a>> And<'a, P, Q, Prop> {
         P: Clone,
         Q: Clone,
     {
-        todo!()
+        // From Q, derive (Q → ¬P) → ¬P by modus ponens on the assumption.
+        let apply_q = Prop::mp(
+            Prop::mp(Prop::l2(), reflexive::<_, Prop>()),
+            Prop::mp(Prop::l1(), q),
+        );
+        // Transposing gives ¬¬P → ¬(Q → ¬P), and ¬¬P follows from P.
+        Self(Prop::mp(
+            Prop::mp(transposition::<_, _, Prop>(), apply_q),
+            Prop::mp(<NegProofRing<Prop> as DoubleNegIntro<'_>>::l3(), p),
+        ))
     }
 }
 
