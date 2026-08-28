@@ -22,8 +22,13 @@ pub trait DoubleNegIntro<'a>: PropLogic<'a> {
     fn l3<P>() -> Self::Cert<Self::Imply<P, Neg<Neg<P>>>>;
 }
 
+/// Peirce's law: ((P → Q) → P) → P
+///
+/// The characteristic classical axiom: it is equivalent to [`Contraposition`]
+/// over the intuitionistic base `L1`/`L2`, so it is derivable here.
 pub trait PeirceLaw<'a>: PropLogic<'a> {
-    fn peirce<P, Q>() -> Self::Cert<Self::Imply<Self::Imply<Self::Imply<P, Q>, P>, P>>;
+    fn peirce<P: Clone + 'a, Q: 'a>()
+    -> Self::Cert<Self::Imply<Self::Imply<Self::Imply<P, Q>, P>, P>>;
 }
 
 pub struct ProofRing<'a, Prop>(PhantomData<(&'a (), Prop)>);
@@ -138,8 +143,45 @@ pub fn transposition<'a, P: Clone + 'a, Q: Clone + 'a, Prop: Contraposition<'a>>
     )
 }
 
+/// Consequentia mirabilis: (¬P → P) → P
+///
+/// If denying `P` proves `P`, then `P` holds outright. The self-implication
+/// `P → P` stands in for "truth": deriving `¬(P → P)` from `¬P` lets
+/// [`Contraposition::l3`] transpose it back into `(P → P) → P`.
+pub fn consequentia_mirabilis<'a, P: Clone + 'a, Prop: Contraposition<'a>>()
+-> Prop::Cert<Prop::Imply<Prop::Imply<Neg<P>, P>, P>> {
+    // ¬P → (P → ¬(P → P)), distributed over the assumption ¬P → P,
+    // yields ¬P → ¬(P → P).
+    let absurd = Prop::l2().apply(<ProofRing<Prop> as ExFalsoQuodlibet<'_>>::l3::<
+        P,
+        Neg<Prop::Imply<P, P>>,
+    >());
+    // Transposing gives (P → P) → P, and P → P is a theorem.
+    Prop::l2()
+        .apply(syllogism::<_, _, _, Prop>().apply(absurd).apply(Prop::l3()))
+        .apply(Prop::l1().apply(reflexive::<_, Prop>()))
+}
+
 impl<'a, Prop: Contraposition<'a>> PeirceLaw<'a> for ProofRing<'a, Prop> {
-    fn peirce<P, Q>() -> Self::Cert<Self::Imply<Self::Imply<Self::Imply<P, Q>, P>, P>> {
-        todo!()
+    fn peirce<P: Clone + 'a, Q: 'a>()
+    -> Self::Cert<Self::Imply<Self::Imply<Self::Imply<P, Q>, P>, P>> {
+        // ¬P → (P → Q) composed with the antecedent (P → Q) → P gives ¬P → P.
+        let self_deny = syllogism::<_, _, _, Prop>()
+            .apply(<ProofRing<Prop> as ExFalsoQuodlibet<'_>>::l3::<P, Q>());
+        syllogism::<_, _, _, Prop>()
+            .apply(self_deny)
+            .apply(consequentia_mirabilis::<P, Prop>())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Contraposition, PeirceLaw, ProofRing};
+
+    /// Peirce's law is derivable in any system with [`Contraposition`], and the
+    /// bounds are loose enough to instantiate it from outside this module.
+    fn _peirce_is_callable<'a, P: Clone + 'a, Q: 'a, Prop: Contraposition<'a>>()
+    -> Prop::Cert<Prop::Imply<Prop::Imply<Prop::Imply<P, Q>, P>, P>> {
+        <ProofRing<Prop> as PeirceLaw<'_>>::peirce::<P, Q>()
     }
 }

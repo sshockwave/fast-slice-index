@@ -7,7 +7,7 @@ pub use self::{
     imply::{Chain, PropLogic, PropLogicThm},
     neg::{
         Contraposition, DoubleNegIntro, DoubleNegation, ExFalsoQuodlibet, Neg, PeirceLaw,
-        ProofRing as NegProofRing, simplification, transposition,
+        ProofRing as NegProofRing, consequentia_mirabilis, simplification, transposition,
     },
 };
 
