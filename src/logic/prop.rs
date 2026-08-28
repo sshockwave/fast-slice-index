@@ -11,14 +11,39 @@ pub use self::{
     },
 };
 
+mod sealed_chain {
+    use super::PropLogic;
+    pub struct Chain<'l, P: Clone + 'l, Prop: PropLogic<'l>>(Prop::Cert<P>);
+    impl<'l, PQ: Clone, Prop: PropLogic<'l>> Chain<'l, PQ, Prop> {
+        pub fn mp<P: Clone, Q: Clone>(self, p: Prop::Cert<P>) -> Chain<'l, Q, Prop>
+        where
+            Prop::Cert<PQ>: Into<Prop::Cert<Prop::Imply<P, Q>>>,
+        {
+            Chain(Prop::mp(self.0.into(), p))
+        }
+        pub fn end(self) -> Prop::Cert<PQ> {
+            self.0
+        }
+        pub fn upgrade<Prop2: PropLogic<'l, BaseCert<PQ> = Prop::Cert<PQ>>>(
+            self,
+        ) -> Chain<'l, PQ, Prop2> {
+            Chain(Prop2::upgrade(self.0))
+        }
+    }
+    pub fn chain<'l, Prop: PropLogic<'l>, P: Clone + 'l>(p: Prop::Cert<P>) -> Chain<'l, P, Prop> {
+        Chain(p)
+    }
+}
+pub use self::sealed_chain::chain;
+
 pub fn reflexive<'a, P, Prop: PropLogic<'a>>() -> Prop::Cert<Prop::Imply<P, P>>
 where
     P: Clone + 'a,
 {
-    Prop::mp(
-        Prop::mp(Prop::l2(), Prop::l1::<_, Prop::Imply<P, _>>()),
-        Prop::l1(),
-    )
+    chain::<Prop, _>(Prop::l2())
+        .mp(Prop::l1())
+        .mp(Prop::l1::<_, P>())
+        .end()
 }
 
 mod sealed_deduction {
@@ -111,11 +136,13 @@ where
     let pq = Deduction::<_, Prop>::assume();
     let qr = Deduction::<_, Deduction<_, _>>::assume();
     let p = Deduction::<_, Deduction<_, _>>::assume();
-    let r = Deduction::mp(
-        Deduction::upgrade(qr),
-        Deduction::mp(Deduction::upgrade(Deduction::upgrade(pq)), p),
-    );
-    r.finish().finish().finish()
+    chain::<Deduction<_, _>, _>(qr)
+        .upgrade::<Deduction<_, _>>()
+        .mp(Deduction::mp(Deduction::upgrade(Deduction::upgrade(pq)), p))
+        .end()
+        .finish()
+        .finish()
+        .finish()
 }
 
 pub struct Or<'a, P: 'a, Q: 'a, Prop: PropLogic<'a>>(Prop::Cert<Prop::Imply<Neg<P>, Q>>);
