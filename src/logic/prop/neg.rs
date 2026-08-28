@@ -1,4 +1,4 @@
-use crate::logic::prop::{Deduction, PropLogic, reflexive, syllogism};
+use crate::logic::prop::{Chain, PropLogic, reflexive, syllogism};
 use ::core::marker::PhantomData;
 
 pub struct Neg<P>(PhantomData<P>);
@@ -73,28 +73,19 @@ where
         P: 'a,
     {
         // https://math.stackexchange.com/questions/4634566/prove-that-contrapositive-rule-is-equivalent-to-the-rule-of-double-negation
-        Prop::mp(
-            Prop::mp(
-                Prop::l2(),
-                Prop::mp(
-                    Prop::mp(
-                        syllogism::<_, _, _, Prop>(),
-                        Prop::mp(
-                            Prop::mp(syllogism::<_, _, _, Prop>(), Prop::l1()),
-                            Prop::l3(),
-                        ),
-                    ),
-                    Prop::l3(),
-                ),
-            ),
-            reflexive::<_, Prop>(),
-        )
+        syllogism::<_, _, _, Prop>()
+            .apply(Prop::l1())
+            .apply(Prop::l3())
+            .pipe(syllogism::<_, _, _, Prop>())
+            .apply(Prop::l3())
+            .pipe(Prop::l2())
+            .apply(reflexive::<_, Prop>())
     }
 }
 
 impl<'a, Prop: Contraposition<'a>> DoubleNegIntro<'a> for ProofRing<'a, Prop> {
     fn l3<P>() -> Self::Cert<Self::Imply<P, Neg<Neg<P>>>> {
-        Prop::mp(Prop::l3(), <ProofRing<Prop> as DoubleNegation<'_>>::l3())
+        Prop::l3().apply(<ProofRing<Prop> as DoubleNegation<'_>>::l3())
     }
 }
 
@@ -104,25 +95,18 @@ pub trait ExFalsoQuodlibet<'a>: PropLogic<'a> {
 
 impl<'a, Prop: Contraposition<'a>> ExFalsoQuodlibet<'a> for ProofRing<'a, Prop> {
     fn l3<P, Q>() -> Self::Cert<Self::Imply<Neg<P>, Self::Imply<P, Q>>> {
-        Prop::mp(
-            Prop::mp(syllogism::<_, _, _, Prop>(), Prop::l1()),
-            Prop::l3(),
-        )
+        syllogism::<_, _, _, Prop>()
+            .apply(Prop::l1())
+            .apply(Prop::l3())
     }
 }
 
 pub fn simplification<'a, P, Q, Prop: Contraposition<'a>>()
 -> Prop::Cert<Prop::Imply<Neg<Prop::Imply<P, Q>>, P>> {
-    Prop::mp(
-        Prop::l3(),
-        Prop::mp(
-            Prop::mp(
-                syllogism::<_, _, _, Prop>(),
-                <ProofRing<Prop> as ExFalsoQuodlibet<'_>>::l3(),
-            ),
-            <ProofRing<Prop> as DoubleNegIntro<'_>>::l3(),
-        ),
-    )
+    syllogism::<_, _, _, Prop>()
+        .apply(<ProofRing<Prop> as ExFalsoQuodlibet<'_>>::l3())
+        .apply(<ProofRing<Prop> as DoubleNegIntro<'_>>::l3())
+        .pipe(Prop::l3())
 }
 
 /// Transposition: (P → Q) → (¬Q → ¬P)

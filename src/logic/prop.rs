@@ -11,21 +11,29 @@ pub use self::{
     },
 };
 
+impl<'l, PQ: Clone + 'l, Prop: PropLogic<'l> + ?Sized> Chain<'l, Prop, PQ> for Prop::Cert<PQ> {
+    fn apply<P: Clone, Q: Clone>(self, p: Prop::Cert<P>) -> Prop::Cert<Q>
+    where
+        Prop::Cert<PQ>: Into<Prop::Cert<Prop::Imply<P, Q>>>,
+    {
+        Prop::mp(self.into(), p)
+    }
+    fn pipe<Q: Clone>(self, pq: Prop::Cert<Prop::Imply<PQ, Q>>) -> Prop::Cert<Q> {
+        Prop::mp(pq, self)
+    }
+}
+
 pub fn reflexive<'a, P, Prop: PropLogic<'a>>() -> Prop::Cert<Prop::Imply<P, P>>
 where
     P: Clone + 'a,
 {
-    Prop::l2()
-        .chain()
-        .mp(Prop::l1())
-        .mp(Prop::l1::<_, P>())
-        .end()
+    Prop::l2().apply(Prop::l1()).apply(Prop::l1::<_, P>())
 }
 
 mod sealed_deduction {
     use crate::logic::prop::reflexive;
 
-    use super::PropLogic;
+    use super::{Chain, PropLogic};
     use ::core::marker::PhantomData;
 
     /// Deduction theorem: If
@@ -80,10 +88,10 @@ mod sealed_deduction {
             pq: Self::Cert<Self::Imply<P, Q>>,
             p: Self::Cert<P>,
         ) -> Self::Cert<Q> {
-            Cert::new(Prop::mp(Prop::mp(Prop::l2(), pq.witness), p.witness))
+            Cert::new(Prop::l2().apply(pq.witness).apply(p.witness))
         }
         fn upgrade<P: Clone + 'a>(value: Self::BaseCert<P>) -> Self::Cert<P> {
-            Cert::new(Prop::mp(Prop::l1(), value))
+            Cert::new(Prop::l1().apply(value))
         }
         fn def<P, Q>() -> Self::Cert<Self::Imply<P, Q>>
         where
@@ -95,6 +103,13 @@ mod sealed_deduction {
     }
 }
 pub use sealed_deduction::Deduction;
+impl<'l, A: Clone, Props: PropLogic<'l>> Deduction<A, Props> {
+    fn scope<R: Clone>(
+        f: impl FnOnce(<Self as PropLogic<'l>>::Cert<A>) -> <Self as PropLogic<'l>>::Cert<R>,
+    ) -> Props::Cert<Props::Imply<A, R>> {
+        f(Self::assume()).finish()
+    }
+}
 
 pub fn syllogism<'a, P, Q, R, Prop: PropLogic<'a>>()
 -> Prop::Cert<Prop::Imply<Prop::Imply<P, Q>, Prop::Imply<Prop::Imply<Q, R>, Prop::Imply<P, R>>>>
@@ -103,16 +118,15 @@ where
     Q: Clone + 'a,
     R: Clone + 'a,
 {
-    let pq = Deduction::<_, Prop>::assume();
-    let qr = Deduction::<_, Deduction<_, _>>::assume();
-    let p = Deduction::<_, Deduction<_, _>>::assume();
-    Chain::<Deduction<_, _>, _>::chain(qr)
-        .upgrade::<Deduction<_, _>>()
-        .mp(Deduction::mp(Deduction::upgrade(Deduction::upgrade(pq)), p))
-        .end()
-        .finish()
-        .finish()
-        .finish()
+    Deduction::<_, Prop>::scope(|pq| {
+        Deduction::<_, Deduction<_, _>>::scope(|qr| {
+            Deduction::<_, Deduction<_, _>>::scope(|p| {
+                let pq = Deduction::upgrade(Deduction::upgrade(pq));
+                let qr = Deduction::upgrade(qr);
+                Deduction::mp(qr, Deduction::mp(pq, p))
+            })
+        })
+    })
 }
 
 pub struct Or<'a, P: 'a, Q: 'a, Prop: PropLogic<'a>>(Prop::Cert<Prop::Imply<Neg<P>, Q>>);
@@ -126,16 +140,15 @@ impl<'a, P: 'a, Q: 'a, Prop: Contraposition<'a>> And<'a, P, Q, Prop> {
         P: Clone,
         Q: Clone,
     {
-        // From Q, derive (Q → ¬P) → ¬P by modus ponens on the assumption.
-        let apply_q = Prop::mp(
-            Prop::mp(Prop::l2(), reflexive::<_, Prop>()),
-            Prop::mp(Prop::l1(), q),
-        );
-        // Transposing gives ¬¬P → ¬(Q → ¬P), and ¬¬P follows from P.
-        Self(Prop::mp(
-            Prop::mp(transposition::<_, _, Prop>(), apply_q),
-            Prop::mp(<NegProofRing<Prop> as DoubleNegIntro<'_>>::l3(), p),
-        ))
+        Self(
+            // From Q, derive (Q → ¬P) → ¬P by modus ponens on the assumption.
+            Prop::l2()
+                .apply(reflexive::<_, Prop>())
+                .apply(Prop::l1().apply(q))
+                // Transposing gives ¬¬P → ¬(Q → ¬P), and ¬¬P follows from P.
+                .pipe(transposition::<_, _, Prop>())
+                .apply(<NegProofRing<Prop> as DoubleNegIntro<'_>>::l3().apply(p)),
+        )
     }
 
     /// Left elimination: P ∧ Q → P
@@ -145,13 +158,10 @@ impl<'a, P: 'a, Q: 'a, Prop: Contraposition<'a>> And<'a, P, Q, Prop> {
         Q: Clone,
     {
         // ¬P → (Q → ¬P) transposes to ¬(Q → ¬P) → ¬¬P, then double negation.
-        Prop::mp(
-            <NegProofRing<Prop> as DoubleNegation<'_>>::l3(),
-            Prop::mp(
-                Prop::mp(transposition::<_, _, Prop>(), Prop::l1::<Neg<P>, Q>()),
-                self.0,
-            ),
-        )
+        transposition::<_, _, Prop>()
+            .apply(Prop::l1::<Neg<P>, Q>())
+            .apply(self.0)
+            .pipe(<NegProofRing<Prop> as DoubleNegation<'_>>::l3())
     }
 
     /// Right elimination: P ∧ Q → Q
@@ -159,7 +169,7 @@ impl<'a, P: 'a, Q: 'a, Prop: Contraposition<'a>> And<'a, P, Q, Prop> {
     where
         Q: Clone,
     {
-        Prop::mp(simplification::<Q, Neg<P>, Prop>(), self.0)
+        simplification::<_, _, Prop>().apply(self.0)
     }
 }
 
@@ -168,19 +178,18 @@ impl<'a, P: 'a, Q: 'a, Prop: Contraposition<'a>> Or<'a, P, Q, Prop> {
     where
         P: Clone,
     {
-        Self(Prop::mp(
-            Prop::l3(),
-            Prop::mp(
-                Prop::l1(),
-                Prop::mp(<NegProofRing<Prop> as DoubleNegIntro<'_>>::l3(), p),
-            ),
-        ))
+        Self(
+            <NegProofRing<Prop> as DoubleNegIntro<'_>>::l3()
+                .apply(p)
+                .pipe(Prop::l1())
+                .pipe(Prop::l3()),
+        )
     }
     pub fn intro_right(q: Prop::Cert<Q>) -> Self
     where
         Q: Clone,
     {
-        Self(Prop::mp(Prop::l1(), q))
+        Self(Prop::l1().apply(q))
     }
     pub fn p_to_q(self) -> Prop::Cert<Prop::Imply<Neg<P>, Q>> {
         self.0
@@ -189,17 +198,11 @@ impl<'a, P: 'a, Q: 'a, Prop: Contraposition<'a>> Or<'a, P, Q, Prop> {
     where
         P: Clone,
     {
-        Prop::l3()
-            .chain()
-            .mp(Prop::l2()
-                .chain()
-                .mp(Prop::l1()
-                    .chain()
-                    .mp(<NegProofRing<Prop> as DoubleNegIntro<'_>>::l3())
-                    .end())
-                .mp(self.0)
-                .end())
-            .end()
+        Prop::l1()
+            .apply(<NegProofRing<Prop> as DoubleNegIntro<'_>>::l3())
+            .pipe(Prop::l2())
+            .apply(self.0)
+            .pipe(Prop::l3())
     }
 }
 

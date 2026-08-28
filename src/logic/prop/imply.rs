@@ -18,31 +18,14 @@ impl<'a, P, Q: 'a> Clone for Imply<'a, P, Q> {
     }
 }
 
-pub trait Chain<'l, Prop: PropLogic<'l> + ?Sized, P: Clone + 'l> {
-    fn chain(self) -> ChainImpl<'l, P, Prop>;
-}
-impl<'l, P: Clone + 'l, Prop: PropLogic<'l> + ?Sized> Chain<'l, Prop, P> for Prop::Cert<P> {
-    fn chain(self) -> ChainImpl<'l, P, Prop> {
-        ChainImpl(self)
-    }
-}
+pub trait TypeEq<P>: From<P> + Into<P> {}
+impl<T> TypeEq<T> for T {}
 
-pub struct ChainImpl<'l, P: Clone + 'l, Prop: PropLogic<'l> + ?Sized>(Prop::Cert<P>);
-impl<'l, PQ: Clone + 'l, Prop: PropLogic<'l> + ?Sized> ChainImpl<'l, PQ, Prop> {
-    pub fn mp<P: Clone, Q: Clone>(self, p: Prop::Cert<P>) -> ChainImpl<'l, Q, Prop>
+pub trait Chain<'l, Prop: PropLogic<'l> + ?Sized, PQ: Clone + 'l> {
+    fn apply<P: Clone, Q: Clone>(self, p: Prop::Cert<P>) -> Prop::Cert<Q>
     where
-        Prop::Cert<PQ>: Into<Prop::Cert<Prop::Imply<P, Q>>>,
-    {
-        ChainImpl(Prop::mp(self.0.into(), p))
-    }
-    pub fn upgrade<Prop2: PropLogic<'l, BaseCert<PQ> = Prop::Cert<PQ>>>(
-        self,
-    ) -> ChainImpl<'l, PQ, Prop2> {
-        ChainImpl(Prop2::upgrade(self.0))
-    }
-    pub fn end(self) -> Prop::Cert<PQ> {
-        self.0
-    }
+        Prop::Cert<PQ>: TypeEq<Prop::Cert<Prop::Imply<P, Q>>>;
+    fn pipe<Q: Clone>(self, pq: Prop::Cert<Prop::Imply<PQ, Q>>) -> Prop::Cert<Q>;
 }
 
 /// Axiomatic propositional logic
