@@ -1,21 +1,26 @@
-use crate::logic::function::{Equality, View};
+use crate::logic::function::{Equality, Function, Injection, View};
 use crate::logic::prop::Neg;
 
-/// Equiv<'x, T> means "the variable at lifetime 'x is an instance of type T"
-/// This bridges lifetimes (for quantification) with types (for classification)
-pub trait Equiv<'x, T> {}
+/// Type alias: "x is a natural number"
+/// Equivalent to: x ∈ Dom(SuccFn)
+pub type IsNat<'l, 'x, N> = <<N as NaturalNumbers<'l>>::SuccFn as Function<'l, N>>::Dom<'x>;
 
-/// Marker for natural number types
-pub struct Nat;
-
-/// Natural numbers trait using existential definitions
+/// Natural numbers trait using function-based approach
+///
+/// Design:
+/// - SuccFn is a Function (and Injection) from ℕ → ℕ
+/// - SuccFn::F<'x, 'y> means "y is the successor of x"
+/// - SuccFn::Dom and SuccFn::Codom define what counts as a natural number
+/// - Zero is defined existentially: ∃z. ∀n∀s. Succ(n,s) → s≠z
+/// - Induction uses P as a type parameter (schema) to remain predicative
 pub trait NaturalNumbers<'l>: Equality<'l>
 where
     Self: 'l,
 {
-    /// Successor relation: Succ<'x, 'y> means "y is the successor of x"
-    /// This is a SPECIFIC function, not a quantified one
-    type Succ<'x: 'l, 'y: 'l>;
+    /// Successor function: ℕ → ℕ
+    /// An injection from natural numbers to natural numbers
+    /// SuccFn::F<'x, 'y> means "y is the successor of x"
+    type SuccFn: Function<'l, Self> + Injection<'l, Self>;
 
     /// Zero is defined existentially: ∃z. z is a nat ∧ ∀n. ∀s. Succ(n, s) → s ≠ z
     /// "There exists something such that no natural's successor equals it"
@@ -23,15 +28,15 @@ where
         Neg<&'l dyn for<'z> View<
             'z,
             Output = Self::Imply<
-                Self::Equiv<'z, Nat>,
+                IsNat<'l, 'z, Self>,
                 &'l dyn for<'n> View<
                     'n,
                     Output = Self::Imply<
-                        Self::Equiv<'n, Nat>,
+                        IsNat<'l, 'n, Self>,
                         &'l dyn for<'s> View<
                             's,
                             Output = Self::Imply<
-                                Self::Succ<'n, 's>,
+                                <Self::SuccFn as Function<'l, Self>>::F<'n, 's>,
                                 Neg<Self::Eq<'s, 'z>>
                             >
                         >
@@ -39,63 +44,6 @@ where
                 >
             >
         >>
-    >;
-
-    /// Successor is total: ∀n. n is a nat → ∃s. s is a nat ∧ Succ(n, s)
-    fn succ_total() -> Self::Cert<
-        &'l dyn for<'n> View<
-            'n,
-            Output = Self::Imply<
-                Self::Equiv<'n, Nat>,
-                Neg<&'l dyn for<'s> View<
-                    's,
-                    Output = Self::Imply<
-                        Self::Equiv<'s, Nat>,
-                        Neg<Self::Succ<'n, 's>>
-                    >
-                >>
-            >
-        >
-    >;
-
-    /// Successor is functional: ∀x ∀y ∀z. Succ(x,y) ∧ Succ(x,z) → y = z
-    fn succ_functional() -> Self::Cert<
-        &'l dyn for<'x> View<
-            'x,
-            Output = &'l dyn for<'y> View<
-                'y,
-                Output = &'l dyn for<'z> View<
-                    'z,
-                    Output = Self::Imply<
-                        Self::Succ<'x, 'y>,
-                        Self::Imply<
-                            Self::Succ<'x, 'z>,
-                            Self::Eq<'y, 'z>
-                        >
-                    >
-                >
-            >
-        >
-    >;
-
-    /// Successor is injective: ∀x ∀y ∀z. Succ(x,z) ∧ Succ(y,z) → x = y
-    fn succ_injective() -> Self::Cert<
-        &'l dyn for<'x> View<
-            'x,
-            Output = &'l dyn for<'y> View<
-                'y,
-                Output = &'l dyn for<'z> View<
-                    'z,
-                    Output = Self::Imply<
-                        Self::Succ<'x, 'z>,
-                        Self::Imply<
-                            Self::Succ<'y, 'z>,
-                            Self::Eq<'x, 'y>
-                        >
-                    >
-                >
-            >
-        >
     >;
 
     /// Induction: ∀P. [P(0) ∧ (∀n. n is nat ∧ P(n) → ∀s. Succ(n,s) → P(s))] → ∀n. n is nat → P(n)
@@ -109,7 +57,7 @@ where
             &'l dyn for<'z> View<
                 'z,
                 Output = Self::Imply<
-                    Self::Equiv<'z, Nat>,
+                    IsNat<'l, 'z, Self>,
                     Self::Imply<
                         // z is zero (no predecessor)
                         &'l dyn for<'p> View<
@@ -117,7 +65,7 @@ where
                             Output = &'l dyn for<'s> View<
                                 's,
                                 Output = Self::Imply<
-                                    Self::Succ<'p, 's>,
+                                    <Self::SuccFn as Function<'l, Self>>::F<'p, 's>,
                                     Neg<Self::Eq<'s, 'z>>
                                 >
                             >
@@ -131,13 +79,13 @@ where
                 &'l dyn for<'n> View<
                     'n,
                     Output = Self::Imply<
-                        Self::Equiv<'n, Nat>,
+                        IsNat<'l, 'n, Self>,
                         Self::Imply<
                             <P as View<'n>>::Output,
                             &'l dyn for<'s> View<
                                 's,
                                 Output = Self::Imply<
-                                    Self::Succ<'n, 's>,
+                                    <Self::SuccFn as Function<'l, Self>>::F<'n, 's>,
                                     <P as View<'s>>::Output
                                 >
                             >
@@ -148,7 +96,7 @@ where
                 &'l dyn for<'n> View<
                     'n,
                     Output = Self::Imply<
-                        Self::Equiv<'n, Nat>,
+                        IsNat<'l, 'n, Self>,
                         <P as View<'n>>::Output
                     >
                 >
@@ -157,15 +105,4 @@ where
     >
     where
         P: for<'n> View<'n> + 'l;
-
-    /// Equiv axiom: if something is equivalent to Nat, it behaves like a natural number
-    /// This is the key axiom that gives us flexibility in implementation
-    type Equiv<'x: 'l, T>
-    where
-        T: 'l;
-
-    /// Equiv is reflexive on Nat: ∀n. Equiv(n, Nat)
-    fn equiv_nat() -> Self::Cert<
-        &'l dyn for<'n> View<'n, Output = Self::Equiv<'n, Nat>>
-    >;
 }

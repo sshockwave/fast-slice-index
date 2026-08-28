@@ -68,12 +68,15 @@ where
 
 /// Function trait: A binary relation F that is total and functional
 ///
+/// Generic over Eq: the equality relation used in the codomain
+///
 /// WARNING: We do NOT quantify over all possible F generically.
 /// Instead, each specific function (like Succ) is a concrete associated type.
 /// This avoids impredicativity issues.
-pub trait Function<'l>: Equality<'l>
+pub trait Function<'l, Eq>: PropLogic<'l>
 where
     Self: 'l,
+    Eq: Equality<'l> + ?Sized,
 {
     /// The function's graph: F<'x, 'y> means "F maps x to y"
     /// This is an associated type, not a quantified predicate
@@ -117,7 +120,7 @@ where
                         Self::F<'x, 'y>,
                         Self::Imply<
                             Self::F<'x, 'z>,
-                            Self::Eq<'y, 'z>
+                            Eq::Eq<'y, 'z>
                         >
                     >
                 >
@@ -144,9 +147,10 @@ where
 }
 
 /// Injection trait: A function that is injective
-pub trait Injection<'l>: Function<'l>
+pub trait Injection<'l, Eq>: Function<'l, Eq>
 where
     Self: 'l,
+    Eq: Equality<'l> + ?Sized,
 {
     /// Injective: ∀x ∀y ∀z. F(x,z) ∧ F(y,z) → x = y
     /// Different inputs map to different outputs
@@ -161,7 +165,7 @@ where
                         Self::F<'x, 'z>,
                         Self::Imply<
                             Self::F<'y, 'z>,
-                            Self::Eq<'x, 'y>
+                            Eq::Eq<'x, 'y>
                         >
                     >
                 >
@@ -188,5 +192,10 @@ where
 //    - Lifetimes 'x, 'y range over domain elements (first-order)
 //    - Predicates are type-level (metalanguage)
 //    - No "set of all sets that don't contain themselves"
+//
+// 4. Eq is a GENERIC PARAMETER
+//    - Allows different equality relations
+//    - More composable and flexible
+//    - Still resolved at compile time
 //
 // This is predicative and consistent.
