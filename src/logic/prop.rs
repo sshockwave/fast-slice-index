@@ -7,7 +7,7 @@ pub use self::{
     imply::{PropLogic, PropLogicThm},
     neg::{
         Contraposition, DoubleNegIntro, DoubleNegation, ExFalsoQuodlibet, Neg, PeirceLaw,
-        ProofRing as NegProofRing, transposition,
+        ProofRing as NegProofRing, simplification, transposition,
     },
 };
 
@@ -139,6 +139,30 @@ impl<'a, P: 'a, Q: 'a, Prop: Contraposition<'a>> And<'a, P, Q, Prop> {
             Prop::mp(transposition::<_, _, Prop>(), apply_q),
             Prop::mp(<NegProofRing<Prop> as DoubleNegIntro<'_>>::l3(), p),
         ))
+    }
+
+    /// Left elimination: P ∧ Q → P
+    pub fn left(self) -> Prop::Cert<P>
+    where
+        P: Clone,
+        Q: Clone,
+    {
+        // ¬P → (Q → ¬P) transposes to ¬(Q → ¬P) → ¬¬P, then double negation.
+        Prop::mp(
+            <NegProofRing<Prop> as DoubleNegation<'_>>::l3(),
+            Prop::mp(
+                Prop::mp(transposition::<_, _, Prop>(), Prop::l1::<Neg<P>, Q>()),
+                self.0,
+            ),
+        )
+    }
+
+    /// Right elimination: P ∧ Q → Q
+    pub fn right(self) -> Prop::Cert<Q>
+    where
+        Q: Clone,
+    {
+        Prop::mp(simplification::<Q, Neg<P>, Prop>(), self.0)
     }
 }
 
