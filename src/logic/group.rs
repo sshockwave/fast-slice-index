@@ -50,7 +50,7 @@
 //! instead of mixing the operation's `Imply` with the field's.
 
 use crate::logic::function::Equality;
-use crate::logic::prop::{Contraposition, Imply, Negation, PropLogic, View, neg::And};
+use crate::logic::prop::{And, Contraposition, Imply, Negation, PropLogic, View};
 
 /// Type alias: "e is neutral for the operation"
 /// Equivalent to: ∀y. El(y) → e ∘ y = y
@@ -87,7 +87,7 @@ pub type IsUnitLike<'l, 'e, M, Eq> = &'l dyn for<'y> View<
 pub trait CommutativeMonoid<'l, Eq>
 where
     Self: 'l,
-    Eq: PropLogic<'l> + Negation<'l> + Equality<'l> + ?Sized,
+    Eq: PropLogic<'l> + Negation<'l> + Equality<'l> + And<'l> + ?Sized,
 {
     /// Carrier predicate: which elements the operation is defined on
     type El<'x>;
@@ -147,7 +147,7 @@ where
                     'z,
                     Output = Eq::Imply<
                         Self::Op<'x, 'y, 'z>,
-                        And<'l, Self::El<'x>, And<'l, Self::El<'y>, Self::El<'z>, Eq>, Eq>,
+                        Eq::And<Self::El<'x>, Eq::And<Self::El<'y>, Self::El<'z>>>,
                     >,
                 >,
             >,
@@ -218,7 +218,7 @@ where
 pub trait AbelianGroup<'l, Eq>: CommutativeMonoid<'l, Eq>
 where
     Self: 'l,
-    Eq: Contraposition<'l> + Equality<'l> + ?Sized,
+    Eq: Contraposition<'l> + Equality<'l> + And<'l>,
 {
     /// Inverses: ∀x. El(x) → ∃y. El(y) ∧ (x ∘ y is neutral)
     fn inverse() -> Eq::Cert<

@@ -182,10 +182,10 @@ impl<'l, Prop: PeirceLaw<'l>> Contraposition<'l> for IntuitionisticImpl<'l, Prop
     }
 }
 
-pub struct Or<'a, P: 'a, Q: 'a, Prop: PropLogic<'a> + Negation<'a>>(
+struct Or<'a, P: 'a, Q: 'a, Prop: PropLogic<'a> + Negation<'a>>(
     Prop::Cert<Prop::Imply<Prop::Neg<P>, Q>>,
 );
-pub struct And<'a, P: 'a, Q: 'a, Prop: PropLogic<'a> + Negation<'a>>(
+struct And<'a, P: 'a, Q: 'a, Prop: PropLogic<'a> + Negation<'a>>(
     Prop::Cert<Prop::Neg<Prop::Imply<Q, Prop::Neg<P>>>>,
 );
 
@@ -261,6 +261,6 @@ impl<'a, P: 'a, Q: 'a, Prop: Contraposition<'a>> Or<'a, P, Q, Prop> {
     }
 }
 
-pub struct Iff<'a, P: 'a, Q: 'a, Prop: Contraposition<'a>>(
+struct Iff<'a, P: 'a, Q: 'a, Prop: Contraposition<'a>>(
     And<'a, Prop::Imply<P, Q>, Prop::Imply<Q, P>, Prop>,
 );

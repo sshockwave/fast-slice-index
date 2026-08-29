@@ -1,7 +1,4 @@
-use crate::logic::prop::{
-    Contraposition, Imply, Negation, View,
-    neg::{And, Iff},
-};
+use crate::logic::prop::{And, Contraposition, Iff, Imply, Negation, View};
 
 pub trait Spec<'x, 'w, 'z> {
     type Output;
@@ -23,7 +20,7 @@ pub type Subset<'l, 'x, 'y, P> = dyn for<'z> View<
         Output = <P as Imply<'l>>::Imply<<P as ZF<'l>>::In<'z, 'x>, <P as ZF<'l>>::In<'z, 'y>>,
     > + 'l;
 
-pub trait ZF<'l>: Contraposition<'l> + Sized + 'l {
+pub trait ZF<'l>: Contraposition<'l> + Sized + And<'l> + 'l {
     type In<'b: 'l, 'c: 'l>;
 
     // First-order Logic
@@ -37,11 +34,11 @@ pub trait ZF<'l>: Contraposition<'l> + Sized + 'l {
                 Output = Self::Imply<
                     &'l dyn for<'z> View<
                         'z,
-                        Output = Iff<'l, Self::In<'z, 'x>, Self::In<'z, 'y>, Self>,
+                        Output = Iff<'l, Self, Self::In<'z, 'x>, Self::In<'z, 'y>>,
                     >,
                     &'l dyn for<'w> View<
                         'w,
-                        Output = Iff<'l, Self::In<'w, 'x>, Self::In<'w, 'y>, Self>,
+                        Output = Iff<'l, Self, Self::In<'w, 'x>, Self::In<'w, 'y>>,
                     >,
                 >,
             >,
@@ -76,9 +73,9 @@ pub trait ZF<'l>: Contraposition<'l> + Sized + 'l {
                                         'x,
                                         Output = Iff<
                                             'l,
+                                            Self,
                                             Self::In<'x, 'z>,
                                             <S as Spec<'x, 'w, 'z>>::Output,
-                                            Self,
                                         >,
                                     > + 'l,
                             >,
@@ -111,7 +108,7 @@ pub trait ZF<'l>: Contraposition<'l> + Sized + 'l {
                                     Output = dyn for<'x> View<
                                         'x,
                                         Output = Self::Imply<
-                                            And<'l, Self::In<'x, 'y>, Self::In<'y, 'f>, Self>,
+                                            Self::And<Self::In<'x, 'y>, Self::In<'y, 'f>>,
                                             Self::In<'x, 'a>,
                                         >,
                                     > + 'l,

@@ -1,6 +1,6 @@
 use crate::logic::function::Equality;
 use crate::logic::group::{AbelianGroup, CommutativeMonoid, IsUnitLike};
-use crate::logic::prop::{Contraposition, Negation, View, neg::And, neg::Iff, neg::Or};
+use crate::logic::prop::{And, Contraposition, Iff, Negation, Or, View};
 
 /// Type alias: "x is a rational"
 /// Equivalent to: x is in the additive group's carrier
@@ -27,7 +27,7 @@ pub type IsZeroLike<'l, 'x, Q> = IsUnitLike<'l, 'x, <Q as Rationals<'l>>::Add, Q
 
 /// Type alias: "x is zero"
 /// Equivalent to: x is a rational AND x is additively neutral
-pub type IsZero<'l, 'x, Q> = And<'l, IsRat<'l, 'x, Q>, IsZeroLike<'l, 'x, Q>, Q>;
+pub type IsZero<'l, 'x, Q> = <Q as And<'l>>::And<IsRat<'l, 'x, Q>, IsZeroLike<'l, 'x, Q>>;
 
 /// Type alias: "x is multiplicatively neutral"
 /// Equivalent to: ∀y. IsRatMul(y) → x · y = y
@@ -39,11 +39,9 @@ pub type IsOneLike<'l, 'x, Q> = IsUnitLike<'l, 'x, <Q as Rationals<'l>>::Mul, Q>
 /// The `Neg<IsZeroLike>` conjunct is the field's nontriviality condition
 /// (1 ≠ 0), which rules out the one-element degenerate "field"; it is
 /// discharged by [`Rationals::nontrivial`].
-pub type IsOne<'l, 'x, Q> = And<
-    'l,
+pub type IsOne<'l, 'x, Q> = <Q as And<'l>>::And<
     IsRat<'l, 'x, Q>,
-    And<'l, IsOneLike<'l, 'x, Q>, <Q as Negation<'l>>::Neg<IsZeroLike<'l, 'x, Q>>, Q>,
-    Q,
+    <Q as And<'l>>::And<IsOneLike<'l, 'x, Q>, <Q as Negation<'l>>::Neg<IsZeroLike<'l, 'x, Q>>>,
 >;
 
 /// Rational numbers as the prime ordered field
@@ -71,7 +69,7 @@ pub type IsOne<'l, 'x, Q> = And<
 /// encoding is strictly weaker than the existential it stands for, and the
 /// witnesses in [`AbelianGroup::inverse`] and [`Rationals::mul_inverse`] could
 /// not be extracted.
-pub trait Rationals<'l>: Equality<'l> + Contraposition<'l> + 'l {
+pub trait Rationals<'l>: Equality<'l> + Contraposition<'l> + And<'l> + Or<'l> + 'l {
     /// Addition: an abelian group on all of ℚ
     ///
     /// [`AbelianGroup::inverse`] is the additive inverse axiom, and
@@ -95,7 +93,7 @@ pub trait Rationals<'l>: Equality<'l> + Contraposition<'l> + 'l {
     fn same_carrier() -> Self::Cert<
         &'l dyn for<'x> View<
             'x,
-            Output = Iff<'l, IsRat<'l, 'x, Self>, IsRatMul<'l, 'x, Self>, Self>,
+            Output = Iff<'l, Self, IsRat<'l, 'x, Self>, IsRatMul<'l, 'x, Self>>,
         >,
     >;
 
@@ -197,7 +195,7 @@ pub trait Rationals<'l>: Equality<'l> + Contraposition<'l> + 'l {
                 'y,
                 Output = Self::Imply<
                     Self::Lt<'x, 'y>,
-                    And<'l, IsRat<'l, 'x, Self>, IsRat<'l, 'y, Self>, Self>,
+                    <Self as And<'l>>::And<IsRat<'l, 'x, Self>, IsRat<'l, 'y, Self>>,
                 >,
             >,
         >,
@@ -235,12 +233,7 @@ pub trait Rationals<'l>: Equality<'l> + Contraposition<'l> + 'l {
                     IsRat<'l, 'x, Self>,
                     Self::Imply<
                         IsRat<'l, 'y, Self>,
-                        Or<
-                            'l,
-                            Self::Lt<'x, 'y>,
-                            Or<'l, Self::Eq<'x, 'y>, Self::Lt<'y, 'x>, Self>,
-                            Self,
-                        >,
+                        Self::Or<Self::Lt<'x, 'y>, Self::Or<Self::Eq<'x, 'y>, Self::Lt<'y, 'x>>>,
                     >,
                 >,
             >,

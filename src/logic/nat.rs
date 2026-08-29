@@ -1,5 +1,5 @@
 use crate::logic::function::{Equality, Function, Injection};
-use crate::logic::prop::{Contraposition, Imply, Negation, View, neg::And};
+use crate::logic::prop::{And, Contraposition, Imply, Negation, View};
 
 /// Type alias: "x is a natural number"
 /// Equivalent to: x ∈ Dom(SuccFn)
@@ -21,7 +21,7 @@ pub type IsZeroLike<'l, 'x, N> = &'l dyn for<'p> View<
 
 /// Type alias: "x is zero"
 /// Equivalent to: x is a natural number AND x is zero-like
-pub type IsZero<'l, 'x, N> = And<'l, IsNat<'l, 'x, N>, IsZeroLike<'l, 'x, N>, N>;
+pub type IsZero<'l, 'x, N> = <N as And<'l>>::And<IsNat<'l, 'x, N>, IsZeroLike<'l, 'x, N>>;
 
 /// Natural numbers trait using function-based approach
 ///
@@ -31,7 +31,7 @@ pub type IsZero<'l, 'x, N> = And<'l, IsNat<'l, 'x, N>, IsZeroLike<'l, 'x, N>, N>
 /// - SuccFn::Dom and SuccFn::Codom define what counts as a natural number
 /// - Zero is defined existentially: ∃z. ∀n∀s. Succ(n,s) → s≠z
 /// - Induction uses P as a type parameter (schema) to remain predicative
-pub trait NaturalNumbers<'l>: Equality<'l> + Contraposition<'l> {
+pub trait NaturalNumbers<'l>: Equality<'l> + Contraposition<'l> + And<'l> {
     /// Successor function: ℕ → ℕ
     /// An injection from natural numbers to natural numbers
     /// SuccFn::F<'x, 'y> means "y is the successor of x"

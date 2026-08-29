@@ -65,7 +65,7 @@ pub trait And<'l>: PropLogic<'l> {
     fn and_intro<P, Q>() -> Self::Cert<Self::Imply<P, Self::Imply<Q, Self::And<P, Q>>>>;
 }
 
-type Iff<'l, L, P, Q> =
+pub type Iff<'l, L, P, Q> =
     <L as And<'l>>::And<<L as Imply<'l>>::Imply<P, Q>, <L as Imply<'l>>::Imply<Q, P>>;
 
 pub trait Or<'l>: PropLogic<'l> {
