@@ -26,9 +26,9 @@ pub trait PeirceLaw<'a>: PropLogic<'a> {
     -> Cert<'a, Self, Self::Imply<Self::Imply<Self::Imply<P, Q>, P>, P>>;
 }
 
-pub struct ProofRing<'a, Prop>(PhantomData<(&'a (), Prop)>);
+pub struct ProofRing<Prop>(PhantomData<Prop>);
 
-impl<'a, Prop> PropLogic<'a> for ProofRing<'a, Prop>
+impl<'a, Prop> PropLogic<'a> for ProofRing<Prop>
 where
     Prop: PropLogic<'a>,
 {
@@ -47,7 +47,7 @@ where
     }
 }
 
-impl<'a, Prop: Imply<'a>> Imply<'a> for ProofRing<'a, Prop> {
+impl<'a, Prop: Imply<'a>> Imply<'a> for ProofRing<Prop> {
     type Imply<P: 'a, Q: 'a> = Prop::Imply<P, Q>;
     type Cert<P: Clone + 'a> = Prop::Cert<P>;
     fn mp<P: Clone, Q: Clone + 'a>(
@@ -65,11 +65,11 @@ impl<'a, Prop: Imply<'a>> Imply<'a> for ProofRing<'a, Prop> {
     }
 }
 
-impl<'a, Prop: Negation<'a>> Negation<'a> for ProofRing<'a, Prop> {
+impl<'a, Prop: Negation<'a>> Negation<'a> for ProofRing<Prop> {
     type Neg<P: 'a> = Prop::Neg<P>;
 }
 
-impl<'a, Prop> DoubleNegElim<'a> for ProofRing<'a, Prop>
+impl<'a, Prop> DoubleNegElim<'a> for ProofRing<Prop>
 where
     Prop: Contraposition<'a> + PropLogic<'a>,
 {
@@ -86,7 +86,7 @@ where
     }
 }
 
-impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> DoubleNegIntro<'a> for ProofRing<'a, Prop> {
+impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> DoubleNegIntro<'a> for ProofRing<Prop> {
     fn l3<P: Clone + 'a>() -> Cert<'a, Self, Self::Imply<P, Self::Neg<Self::Neg<P>>>> {
         Prop::l3()
             .mp(<ProofRing<Prop> as DoubleNegElim<'_>>::l3().cast())
@@ -97,7 +97,7 @@ impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> DoubleNegIntro<'a> for ProofR
 /// [`Contraposition`] proves [`Reductio`], so requiring it costs nothing for
 /// logics that already have the classical axiom: transposing `P → ¬Q` gives
 /// `¬¬Q → ¬P`, and `Q → ¬¬Q` feeds it.
-impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> Reductio<'a> for ProofRing<'a, Prop> {
+impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> Reductio<'a> for ProofRing<Prop> {
     fn reductio<P: Clone + 'a, Q: Clone + 'a>()
     -> Cert<'a, Self, Self::Imply<Self::Imply<P, Self::Neg<Q>>, Self::Imply<Q, Self::Neg<P>>>> {
         // (¬¬Q → ¬P) → (Q → ¬P)
@@ -117,7 +117,7 @@ pub trait ExFalsoQuodlibet<'a>: PropLogic<'a> + Negation<'a> {
     -> Cert<'a, Self, Self::Imply<Self::Neg<P>, Self::Imply<P, Q>>>;
 }
 
-impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> ExFalsoQuodlibet<'a> for ProofRing<'a, Prop> {
+impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> ExFalsoQuodlibet<'a> for ProofRing<Prop> {
     fn l3<P: Clone + 'a, Q: Clone + 'a>()
     -> Cert<'a, Self, Self::Imply<Self::Neg<P>, Self::Imply<P, Q>>> {
         syllogism::<_, _, _, Prop>()
@@ -188,7 +188,7 @@ pub fn consequentia_mirabilis<'a, P: Clone + 'a, Prop: Contraposition<'a> + Prop
         .mp(Prop::l1().mp(reflexive()))
 }
 
-impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> PeirceLaw<'a> for ProofRing<'a, Prop> {
+impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> PeirceLaw<'a> for ProofRing<Prop> {
     fn peirce<P: Clone + 'a, Q: Clone + 'a>()
     -> Cert<'a, Self, Self::Imply<Self::Imply<Self::Imply<P, Q>, P>, P>> {
         // ¬P → (P → Q) composed with the antecedent (P → Q) → P gives ¬P → P.
@@ -200,7 +200,7 @@ impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> PeirceLaw<'a> for ProofRing<'
     }
 }
 
-impl<'l, Logic: DoubleNegElim<'l> + Reductio<'l>> Contraposition<'l> for ProofRing<'l, Logic> {
+impl<'l, Logic: DoubleNegElim<'l> + Reductio<'l>> Contraposition<'l> for ProofRing<Logic> {
     fn l3<P: Clone + 'l, Q: Clone + 'l>()
     -> Cert<'l, Self, Self::Imply<Self::Imply<Self::Neg<P>, Self::Neg<Q>>, Self::Imply<Q, P>>> {
         // Reductio at (¬P, Q) introduces the outer negation:
@@ -214,7 +214,7 @@ impl<'l, Logic: DoubleNegElim<'l> + Reductio<'l>> Contraposition<'l> for ProofRi
     }
 }
 
-impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> super::And<'l> for ProofRing<'l, Logic> {
+impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> super::And<'l> for ProofRing<Logic> {
     type And<P: 'l, Q: 'l> = Logic::Neg<Self::Imply<Q, Logic::Neg<P>>>;
     fn and_intro<P: Clone, Q: Clone>()
     -> Cert<'l, Self, Self::Imply<P, Self::Imply<Q, Self::And<P, Q>>>> {
@@ -274,7 +274,7 @@ impl<'l, A: Clone + 'l, Logic: Contraposition<'l> + PropLogic<'l>> Contrapositio
         Self::upgrade(Logic::l3())
     }
 }
-impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> super::Or<'l> for ProofRing<'l, Logic> {
+impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> super::Or<'l> for ProofRing<Logic> {
     type Or<P: 'l, Q: 'l> = Logic::Imply<Logic::Neg<P>, Q>;
     fn or_left<P: Clone, Q: Clone>() -> Cert<'l, Self, Self::Imply<P, Self::Or<P, Q>>> {
         <ProofRing<Logic> as DoubleNegIntro<'_>>::l3()
@@ -329,7 +329,7 @@ impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> super::Or<'l> for ProofRing<
             .cast()
     }
 }
-impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> Intuitionistic<'l> for ProofRing<'l, Logic> {
+impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> Intuitionistic<'l> for ProofRing<Logic> {
     type False = Self::And<(), Self::Neg<()>>;
     fn explosion<P: Clone>() -> Cert<'l, Self, Self::Imply<Self::False, P>> {
         let absurd = Deduction::assume();
@@ -370,13 +370,13 @@ const _: () = {
     /// mentions neither the classical axiom nor any concrete logic, so nothing
     /// smuggles it in.
     const fn cp_from_dne_and_reductio<'l, L: DoubleNegElim<'l> + Reductio<'l>>() {
-        need_contraposition::<ProofRing<'l, L>>();
+        need_contraposition::<ProofRing<L>>();
     }
 
     /// `Reductio` itself needs no classical axiom -- it holds for `¬P := P → ⊥`
     /// over plain L1/L2, so it is strictly weaker than `Contraposition`.
     const fn reductio_is_intuitionistic<'l, L: PropLogic<'l>>() {
-        need_reductio::<crate::logic::prop::il::IntuitionisticImpl<'l, L>>();
+        need_reductio::<crate::logic::prop::il::IntuitionisticImpl<L>>();
     }
 
     // No in-crate instantiation is possible: no concrete logic asserts the

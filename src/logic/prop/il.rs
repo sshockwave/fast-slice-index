@@ -1,9 +1,9 @@
 use super::{Cert, Imply, Negation, PropLogic, Reductio, exchange};
 use ::core::{convert::Infallible, marker::PhantomData};
 
-pub struct IntuitionisticImpl<'l, Prop>(PhantomData<(&'l (), Prop)>);
+pub struct IntuitionisticImpl<Prop>(PhantomData<Prop>);
 
-impl<'a, Prop: PropLogic<'a>> Imply<'a> for IntuitionisticImpl<'a, Prop> {
+impl<'a, Prop: PropLogic<'a>> Imply<'a> for IntuitionisticImpl<Prop> {
     type Imply<P: 'a, Q: 'a> = Prop::Imply<P, Q>;
     type Cert<P: Clone + 'a> = Prop::Cert<P>;
     fn mp<P: Clone, Q: Clone + 'a>(
@@ -20,7 +20,7 @@ impl<'a, Prop: PropLogic<'a>> Imply<'a> for IntuitionisticImpl<'a, Prop> {
         Prop::def().cast()
     }
 }
-impl<'a, Prop: PropLogic<'a>> PropLogic<'a> for IntuitionisticImpl<'a, Prop> {
+impl<'a, Prop: PropLogic<'a>> PropLogic<'a> for IntuitionisticImpl<Prop> {
     fn l1<P: Clone + 'a, Q>() -> Cert<'a, Self, Self::Imply<P, Self::Imply<Q, P>>> {
         Prop::l1().cast()
     }
@@ -36,7 +36,7 @@ impl<'a, Prop: PropLogic<'a>> PropLogic<'a> for IntuitionisticImpl<'a, Prop> {
     }
 }
 
-impl<'l, Prop: PropLogic<'l>> Negation<'l> for IntuitionisticImpl<'l, Prop> {
+impl<'l, Prop: PropLogic<'l>> Negation<'l> for IntuitionisticImpl<Prop> {
     type Neg<P: 'l> = Prop::Imply<P, Infallible>;
 }
 
@@ -44,7 +44,7 @@ impl<'l, Prop: PropLogic<'l>> Negation<'l> for IntuitionisticImpl<'l, Prop> {
 /// [`exchange`] of antecedents, provable from L1/L2 alone. This is what
 /// separates it from [`super::neg::Contraposition`], whose classical content
 /// cannot be recovered here.
-impl<'l, Prop: PropLogic<'l>> Reductio<'l> for IntuitionisticImpl<'l, Prop> {
+impl<'l, Prop: PropLogic<'l>> Reductio<'l> for IntuitionisticImpl<Prop> {
     fn reductio<P: Clone + 'l, Q: Clone + 'l>()
     -> Cert<'l, Self, Self::Imply<Self::Imply<P, Self::Neg<Q>>, Self::Imply<Q, Self::Neg<P>>>> {
         exchange::<P, Q, Infallible, Prop>().cast()
