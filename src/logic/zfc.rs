@@ -1,11 +1,7 @@
 use crate::logic::prop::{
-    Contraposition, Imply, Negation,
+    Contraposition, Imply, Negation, View,
     neg::{And, Iff},
 };
-
-pub trait View<'x> {
-    type Output;
-}
 
 pub trait Spec<'x, 'w, 'z> {
     type Output;
