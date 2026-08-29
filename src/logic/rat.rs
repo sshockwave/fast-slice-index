@@ -1,6 +1,6 @@
-use crate::logic::function::{Equality, View};
+use crate::logic::function::Equality;
 use crate::logic::group::{AbelianGroup, CommutativeMonoid, IsUnitLike};
-use crate::logic::prop::{Contraposition, Negation, neg::And, neg::Iff, neg::Or};
+use crate::logic::prop::{Contraposition, Negation, View, neg::And, neg::Iff, neg::Or};
 
 /// Type alias: "x is a rational"
 /// Equivalent to: x is in the additive group's carrier
@@ -418,8 +418,7 @@ pub trait Rationals<'l>: Equality<'l> + Contraposition<'l> + 'l {
 
 #[cfg(test)]
 mod tests {
-    use super::{IsOne, IsRat, IsZero, Prod, Rationals, Sum};
-    use crate::logic::function::View;
+    use super::{IsOne, IsRat, IsZero, Prod, Rationals, Sum, View};
     use crate::logic::group::{AbelianGroup, CommutativeMonoid};
 
     /// The field-specific axioms are reachable from outside this module, and

@@ -1,5 +1,5 @@
-use crate::logic::function::{Equality, Function, Injection, View};
-use crate::logic::prop::{Contraposition, Imply, Negation, neg::And};
+use crate::logic::function::{Equality, Function, Injection};
+use crate::logic::prop::{Contraposition, Imply, Negation, View, neg::And};
 
 /// Type alias: "x is a natural number"
 /// Equivalent to: x ∈ Dom(SuccFn)

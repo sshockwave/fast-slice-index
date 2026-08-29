@@ -49,8 +49,8 @@
 //! keeps a consumer such as [`crate::logic::rat`] in one logic throughout,
 //! instead of mixing the operation's `Imply` with the field's.
 
-use crate::logic::function::{Equality, View};
-use crate::logic::prop::{Contraposition, Imply, Negation, PropLogic, neg::And};
+use crate::logic::function::Equality;
+use crate::logic::prop::{Contraposition, Imply, Negation, PropLogic, View, neg::And};
 
 /// Type alias: "e is neutral for the operation"
 /// Equivalent to: ∀y. El(y) → e ∘ y = y

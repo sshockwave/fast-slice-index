@@ -1,8 +1,4 @@
-use crate::logic::prop::{Negation, PropLogic};
-
-pub trait View<'x> {
-    type Output;
-}
+use crate::logic::prop::{Negation, PropLogic, View};
 
 /// Equality trait - axiomatizes equality relation
 pub trait Equality<'l>: PropLogic<'l>
