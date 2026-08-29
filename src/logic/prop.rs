@@ -1,11 +1,10 @@
 #![forbid(unsafe_code)]
 
 pub mod il;
-mod imply;
 pub mod neg;
 mod thm;
 
-pub use self::{imply::PropLogicThm, thm::*};
+pub use self::thm::*;
 
 pub trait View<'x> {
     type Output;
