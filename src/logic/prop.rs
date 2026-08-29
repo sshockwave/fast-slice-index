@@ -88,7 +88,7 @@ pub trait Reductio<'a>: PropLogic<'a> + Negation<'a> {
 }
 
 pub trait And<'l>: PropLogic<'l> {
-    type And<P: 'l, Q: 'l>: Clone;
+    type And<P: Clone + 'l, Q: Clone + 'l>: Clone;
     fn and_left<P: Clone, Q: Clone>() -> Cert<'l, Self, Self::Imply<Self::And<P, Q>, P>>;
     fn and_right<P: Clone, Q: Clone>() -> Cert<'l, Self, Self::Imply<Self::And<P, Q>, Q>>;
     fn and_intro<P: Clone, Q: Clone>()
@@ -99,7 +99,7 @@ pub type Iff<'l, L, P, Q> =
     <L as And<'l>>::And<<L as Imply<'l>>::Imply<P, Q>, <L as Imply<'l>>::Imply<Q, P>>;
 
 pub trait Or<'l>: PropLogic<'l> {
-    type Or<P: 'l, Q: 'l>: Clone;
+    type Or<P: Clone + 'l, Q: Clone + 'l>: Clone;
     fn or_left<P: Clone, Q: Clone>() -> Cert<'l, Self, Self::Imply<P, Self::Or<P, Q>>>;
     fn or_right<P: Clone, Q: Clone>() -> Cert<'l, Self, Self::Imply<Q, Self::Or<P, Q>>>;
     fn or_elim<P: Clone, Q: Clone, R: Clone>() -> Cert<

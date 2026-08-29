@@ -1,4 +1,6 @@
-use super::{Cert, Imply, Negation, PropLogic, Reductio, exchange};
+use crate::logic::prop::reflexive;
+
+use super::{And, Cert, Imply, Intuitionistic, Negation, Or, PropLogic, Reductio, exchange};
 use ::core::{convert::Infallible, marker::PhantomData};
 
 /// This trait is sealed to hide the assumptions from the Rust type system.
@@ -9,6 +11,7 @@ mod sealed_imply {
         where
             Q: 'a;
     }
+    /// We have to use `dyn` until https://github.com/rust-lang/rfcs/issues/2999 is resolved.
     pub struct Implication<'a, P: ?Sized, Q>(pub Box<dyn Infer<'a, P, Q> + 'a>);
 }
 use self::sealed_imply::{Implication, Infer};
@@ -190,5 +193,107 @@ impl<'l, Prop: PropLogic<'l>> Reductio<'l> for IntuitionisticImpl<Prop> {
     fn reductio<P: Clone + 'l, Q: Clone + 'l>()
     -> Cert<'l, Self, Self::Imply<Self::Imply<P, Self::Neg<Q>>, Self::Imply<Q, Self::Neg<P>>>> {
         exchange::<P, Q, Infallible, Prop>().cast()
+    }
+}
+
+impl<'l> And<'l> for IntuitionisticImpl<PropLogicThm> {
+    type And<P: Clone + 'l, Q: Clone + 'l> = (P, Q);
+    fn and_intro<P: Clone, Q: Clone>()
+    -> Cert<'l, Self, Self::Imply<P, Self::Imply<Q, Self::And<P, Q>>>> {
+        struct Store1;
+        impl<'l, P: Clone + 'l, Q: Clone> Infer<'l, P, Implication<'l, Q, (P, Q)>> for Store1 {
+            fn mp(&self, p: &P) -> Implication<'l, Q, (P, Q)> {
+                Implication::new(Store2(p.clone()))
+            }
+            fn clone_dyn(&self) -> Implication<'l, P, Implication<'l, Q, (P, Q)>> {
+                Implication::new(Store1)
+            }
+        }
+        struct Store2<P>(P);
+        impl<'l, P: Clone, Q: Clone> Infer<'l, Q, (P, Q)> for Store2<P> {
+            fn mp(&self, q: &Q) -> (P, Q) {
+                (self.0.clone(), q.clone())
+            }
+            fn clone_dyn(&self) -> Implication<'l, Q, (P, Q)>
+            where
+                (P, Q): 'l,
+            {
+                Implication::new(Store2(self.0.clone()))
+            }
+        }
+        Cert::new(Implication::new(Store1))
+    }
+    fn and_left<P: Clone, Q: Clone>() -> Cert<'l, Self, Self::Imply<Self::And<P, Q>, P>> {
+        struct Proof;
+        impl<'l, P: Clone, Q> Infer<'l, (P, Q), P> for Proof {
+            fn mp(&self, pq: &(P, Q)) -> P {
+                pq.0.clone()
+            }
+            fn clone_dyn(&self) -> Implication<'l, (P, Q), P>
+            where
+                P: 'l,
+            {
+                Implication::new(Proof)
+            }
+        }
+        Cert::new(Implication::new(Proof))
+    }
+    fn and_right<P: Clone, Q: Clone>() -> Cert<'l, Self, Self::Imply<Self::And<P, Q>, Q>> {
+        struct Proof;
+        impl<'l, P, Q: Clone> Infer<'l, (P, Q), Q> for Proof {
+            fn mp(&self, pq: &(P, Q)) -> Q {
+                pq.1.clone()
+            }
+            fn clone_dyn(&self) -> Implication<'l, (P, Q), Q>
+            where
+                Q: 'l,
+            {
+                Implication::new(Proof)
+            }
+        }
+        Cert::new(Implication::new(Proof))
+    }
+}
+
+impl<'l> Or<'l> for IntuitionisticImpl<PropLogicThm> {
+    type Or<P: Clone + 'l, Q: Clone + 'l> = Result<P, Q>;
+    fn or_elim<P: Clone, Q: Clone, R: Clone>() -> Cert<
+        'l,
+        Self,
+        Self::Imply<
+            Self::Imply<P, R>,
+            Self::Imply<Self::Imply<Q, R>, Self::Imply<Self::Or<P, Q>, R>>,
+        >,
+    > {
+        todo!()
+    }
+    fn or_left<P: Clone, Q: Clone>() -> Cert<'l, Self, Self::Imply<P, Self::Or<P, Q>>> {
+        todo!()
+    }
+    fn or_right<P: Clone, Q: Clone>() -> Cert<'l, Self, Self::Imply<Q, Self::Or<P, Q>>> {
+        todo!()
+    }
+}
+
+impl<'l> Intuitionistic<'l> for IntuitionisticImpl<PropLogicThm> {
+    type False = Infallible;
+    fn explosion<P: Clone>() -> Cert<'l, Self, Self::Imply<Self::False, P>> {
+        struct Proof;
+        impl<'l, P: Clone> Infer<'l, Infallible, P> for Proof {
+            fn mp(&self, p: &Infallible) -> P {
+                match *p {}
+            }
+            fn clone_dyn(&self) -> Implication<'l, Infallible, P>
+            where
+                P: 'l,
+            {
+                Implication::new(Proof)
+            }
+        }
+        Cert::new(Implication::new(Proof))
+    }
+    fn neg_def<P: Clone>()
+    -> Cert<'l, Self, super::Iff<'l, Self, Self::Neg<P>, Self::Imply<P, Self::False>>> {
+        Self::and_intro().mp(reflexive()).mp(reflexive())
     }
 }

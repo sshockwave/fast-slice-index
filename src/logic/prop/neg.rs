@@ -205,7 +205,7 @@ impl<'l, Logic: DoubleNegElim<'l> + Reductio<'l>> Contraposition<'l> for ProofRi
 }
 
 impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> super::And<'l> for ProofRing<Logic> {
-    type And<P: 'l, Q: 'l> = Logic::Neg<Self::Imply<Q, Logic::Neg<P>>>;
+    type And<P: Clone + 'l, Q: Clone + 'l> = Logic::Neg<Self::Imply<Q, Logic::Neg<P>>>;
     fn and_intro<P: Clone, Q: Clone>()
     -> Cert<'l, Self, Self::Imply<P, Self::Imply<Q, Self::And<P, Q>>>> {
         pub fn intro<'l, P, Q, Prop: Contraposition<'l> + PropLogic<'l>>(
@@ -243,7 +243,7 @@ impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> super::And<'l> for ProofRing
             .cast()
     }
     /// Right elimination: P ∧ Q → Q
-    fn and_right<P, Q: Clone>() -> Cert<'l, Self, Self::Imply<Self::And<P, Q>, Q>> {
+    fn and_right<P: Clone, Q: Clone>() -> Cert<'l, Self, Self::Imply<Self::And<P, Q>, Q>> {
         simplification()
             .upgrade()
             .mp(Deduction::<_, Logic>::assume())
@@ -260,7 +260,7 @@ impl<'l, A: Clone + 'l, Logic: Contraposition<'l> + PropLogic<'l>> Contrapositio
     }
 }
 impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> super::Or<'l> for ProofRing<Logic> {
-    type Or<P: 'l, Q: 'l> = Logic::Imply<Logic::Neg<P>, Q>;
+    type Or<P: Clone + 'l, Q: Clone + 'l> = Logic::Imply<Logic::Neg<P>, Q>;
     fn or_left<P: Clone, Q: Clone>() -> Cert<'l, Self, Self::Imply<P, Self::Or<P, Q>>> {
         Self::double_neg_intro()
             .cast()
@@ -270,7 +270,7 @@ impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> super::Or<'l> for ProofRing<
             .pipe(Logic::l3().upgrade())
             .cast()
     }
-    fn or_right<P, Q: Clone>() -> Cert<'l, Self, Self::Imply<Q, Self::Or<P, Q>>> {
+    fn or_right<P: Clone, Q: Clone>() -> Cert<'l, Self, Self::Imply<Q, Self::Or<P, Q>>> {
         Logic::l1().upgrade().mp(Deduction::assume()).cast()
     }
     fn or_elim<P: Clone, Q: Clone, R: Clone>() -> Cert<
