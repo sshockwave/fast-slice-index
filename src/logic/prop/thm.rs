@@ -1,4 +1,29 @@
-use super::{Chain, PropLogic};
+use super::{Imply, PropLogic};
+
+use self::sealed_type_eq::TypeEq;
+mod sealed_type_eq {
+    pub trait TypeEq<P>: From<P> + Into<P> {}
+    impl<T> TypeEq<T> for T {}
+}
+
+pub trait Chain<'l, Prop: Imply<'l> + ?Sized, PQ: Clone + 'l> {
+    fn apply<P: Clone, Q: Clone>(self, p: Prop::Cert<P>) -> Prop::Cert<Q>
+    where
+        Prop::Cert<PQ>: TypeEq<Prop::Cert<Prop::Imply<P, Q>>>;
+    fn pipe<Q: Clone>(self, pq: Prop::Cert<Prop::Imply<PQ, Q>>) -> Prop::Cert<Q>;
+}
+
+impl<'l, PQ: Clone + 'l, Prop: Imply<'l> + ?Sized> Chain<'l, Prop, PQ> for Prop::Cert<PQ> {
+    fn apply<P: Clone, Q: Clone>(self, p: Prop::Cert<P>) -> Prop::Cert<Q>
+    where
+        Prop::Cert<PQ>: Into<Prop::Cert<Prop::Imply<P, Q>>>,
+    {
+        Prop::mp(self.into(), p)
+    }
+    fn pipe<Q: Clone>(self, pq: Prop::Cert<Prop::Imply<PQ, Q>>) -> Prop::Cert<Q> {
+        Prop::mp(pq, self)
+    }
+}
 
 pub fn reflexive<'a, P, Prop: PropLogic<'a>>() -> Prop::Cert<Prop::Imply<P, P>>
 where
@@ -8,7 +33,7 @@ where
 }
 
 mod sealed_deduction {
-    use super::{Chain, PropLogic, reflexive};
+    use super::{Chain, Imply, PropLogic, reflexive};
     use ::core::marker::PhantomData;
 
     /// Deduction theorem: If
@@ -25,7 +50,7 @@ mod sealed_deduction {
     }
 
     impl<'a, A, Prop: PropLogic<'a>> Deduction<A, Prop> {
-        pub fn assume() -> <Self as PropLogic<'a>>::Cert<A>
+        pub fn assume() -> <Self as Imply<'a>>::Cert<A>
         where
             A: Clone,
         {
@@ -44,19 +69,8 @@ mod sealed_deduction {
         }
     }
 
-    impl<'a, A: Clone + 'a, Prop: PropLogic<'a>> PropLogic<'a> for Deduction<A, Prop> {
+    impl<'a, A: Clone + 'a, Prop: PropLogic<'a>> Imply<'a> for Deduction<A, Prop> {
         type Imply<P: 'a, Q: 'a> = Prop::Imply<P, Q>;
-        fn l1<P: Clone + 'a, Q>() -> Self::Cert<Self::Imply<P, Self::Imply<Q, P>>> {
-            Self::upgrade(Prop::l1())
-        }
-        fn l2<P: Clone + 'a, Q: 'a, R: 'a>() -> Self::Cert<
-            Self::Imply<
-                Self::Imply<P, Self::Imply<Q, R>>,
-                Self::Imply<Self::Imply<P, Q>, Self::Imply<P, R>>,
-            >,
-        > {
-            Self::upgrade(Prop::l2())
-        }
         type BaseCert<P: Clone + 'a> = Prop::Cert<P>;
         type Cert<P: Clone + 'a> = Cert<'a, A, P, Prop>;
         fn mp<P: Clone, Q: Clone>(
@@ -76,11 +90,24 @@ mod sealed_deduction {
             Self::upgrade(Prop::def())
         }
     }
+    impl<'a, A: Clone + 'a, Prop: PropLogic<'a>> PropLogic<'a> for Deduction<A, Prop> {
+        fn l1<P: Clone + 'a, Q>() -> Self::Cert<Self::Imply<P, Self::Imply<Q, P>>> {
+            Self::upgrade(Prop::l1())
+        }
+        fn l2<P: Clone + 'a, Q: 'a, R: 'a>() -> Self::Cert<
+            Self::Imply<
+                Self::Imply<P, Self::Imply<Q, R>>,
+                Self::Imply<Self::Imply<P, Q>, Self::Imply<P, R>>,
+            >,
+        > {
+            Self::upgrade(Prop::l2())
+        }
+    }
 }
 pub use sealed_deduction::Deduction;
 impl<'l, A: Clone, Props: PropLogic<'l>> Deduction<A, Props> {
     fn scope<R: Clone>(
-        f: impl FnOnce(<Self as PropLogic<'l>>::Cert<A>) -> <Self as PropLogic<'l>>::Cert<R>,
+        f: impl FnOnce(<Self as Imply<'l>>::Cert<A>) -> <Self as Imply<'l>>::Cert<R>,
     ) -> Props::Cert<Props::Imply<A, R>> {
         f(Self::assume()).finish()
     }

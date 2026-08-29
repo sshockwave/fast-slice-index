@@ -8,34 +8,13 @@ mod thm;
 pub use self::{
     imply::PropLogicThm,
     neg::{
-        Contraposition, DoubleNegIntro, DoubleNegation, ExFalsoQuodlibet, Negation, PeirceLaw,
+        Contraposition, DoubleNegIntro, DoubleNegation, ExFalsoQuodlibet, PeirceLaw,
         ProofRing as NegProofRing, consequentia_mirabilis, simplification, transposition,
     },
     thm::*,
 };
 
-use self::sealed_type_eq::TypeEq;
-mod sealed_type_eq {
-    pub trait TypeEq<P>: From<P> + Into<P> {}
-    impl<T> TypeEq<T> for T {}
-}
-
-pub trait Chain<'l, Prop: PropLogic<'l> + ?Sized, PQ: Clone + 'l> {
-    fn apply<P: Clone, Q: Clone>(self, p: Prop::Cert<P>) -> Prop::Cert<Q>
-    where
-        Prop::Cert<PQ>: TypeEq<Prop::Cert<Prop::Imply<P, Q>>>;
-    fn pipe<Q: Clone>(self, pq: Prop::Cert<Prop::Imply<PQ, Q>>) -> Prop::Cert<Q>;
-}
-
-/// Axiomatic propositional logic
-///
-/// This is a logic system where all theorems are derived from axioms using inference rules.
-/// Rust type system implies propositional logic,
-/// so we can prove this in [`PropLogicThm`] without any unsafe code.
-pub trait PropLogic<'a>: Sized {
-    /// Implication: P implies Q
-    type Imply<P: 'a, Q: 'a>: Clone + 'a;
-
+pub trait PropLogic<'a>: Imply<'a> {
     /// Axiom L1: P → (Q → P)
     /// If P is true, then Q implies P
     fn l1<P: Clone + 'a, Q>() -> Self::Cert<Self::Imply<P, Self::Imply<Q, P>>>;
@@ -48,7 +27,11 @@ pub trait PropLogic<'a>: Sized {
             Self::Imply<Self::Imply<P, Q>, Self::Imply<P, R>>,
         >,
     >;
+}
 
+pub trait Imply<'a>: Sized {
+    /// Implication: P implies Q
+    type Imply<P: 'a, Q: 'a>: Clone + 'a;
     type BaseCert<P: Clone + 'a>;
     type Cert<P: Clone + 'a>: Clone + Chain<'a, Self, P>;
 
@@ -66,17 +49,15 @@ pub trait PropLogic<'a>: Sized {
         Q: Clone + 'a;
 }
 
-impl<'l, PQ: Clone + 'l, Prop: PropLogic<'l> + ?Sized> Chain<'l, Prop, PQ> for Prop::Cert<PQ> {
-    fn apply<P: Clone, Q: Clone>(self, p: Prop::Cert<P>) -> Prop::Cert<Q>
-    where
-        Prop::Cert<PQ>: Into<Prop::Cert<Prop::Imply<P, Q>>>,
-    {
-        Prop::mp(self.into(), p)
-    }
-    fn pipe<Q: Clone>(self, pq: Prop::Cert<Prop::Imply<PQ, Q>>) -> Prop::Cert<Q> {
-        Prop::mp(pq, self)
-    }
+pub trait Negation<'l> {
+    type Neg<P: 'l>: Clone + 'l;
 }
+
+pub trait LogicalAnd<'l>: PropLogic<'l> {
+    type And<P, Q>: Clone;
+}
+
+pub trait Intuitionistic<'l>: PropLogic<'l> {}
 
 pub struct Or<'a, P: 'a, Q: 'a, Prop: PropLogic<'a> + Negation<'a>>(
     Prop::Cert<Prop::Imply<Prop::Neg<P>, Q>>,

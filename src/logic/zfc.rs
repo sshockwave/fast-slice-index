@@ -1,5 +1,4 @@
-use crate::logic::prop::{And, Contraposition, Iff, Negation, PropLogic};
-use ::core::marker::PhantomData;
+use crate::logic::prop::{And, Contraposition, Iff, Imply, Negation};
 
 pub trait View<'x> {
     type Output;
@@ -14,7 +13,7 @@ pub type Empty<'l, 'x, P> =
 
 pub type Disjoint<'l, 'x, 'y, P> = dyn for<'z> View<
         'z,
-        Output = <P as PropLogic<'l>>::Imply<
+        Output = <P as Imply<'l>>::Imply<
             <P as ZF<'l>>::In<'z, 'x>,
             <P as Negation<'l>>::Neg<<P as ZF<'l>>::In<'z, 'y>>,
         >,
@@ -22,7 +21,7 @@ pub type Disjoint<'l, 'x, 'y, P> = dyn for<'z> View<
 
 pub type Subset<'l, 'x, 'y, P> = dyn for<'z> View<
         'z,
-        Output = <P as PropLogic<'l>>::Imply<<P as ZF<'l>>::In<'z, 'x>, <P as ZF<'l>>::In<'z, 'y>>,
+        Output = <P as Imply<'l>>::Imply<<P as ZF<'l>>::In<'z, 'x>, <P as ZF<'l>>::In<'z, 'y>>,
     > + 'l;
 
 pub trait ZF<'l>: Contraposition<'l> + Sized + 'l {
@@ -144,7 +143,3 @@ pub trait ZF<'l>: Contraposition<'l> + Sized + 'l {
             >,
         >;
 }
-
-struct ForAll<V>(PhantomData<V>);
-
-struct Set<'a>(PhantomData<&'a ()>);

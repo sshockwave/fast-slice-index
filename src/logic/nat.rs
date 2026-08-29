@@ -1,5 +1,5 @@
 use crate::logic::function::{Equality, Function, Injection, View};
-use crate::logic::prop::{And, Contraposition, Negation, PropLogic};
+use crate::logic::prop::{And, Contraposition, Imply, Negation};
 
 /// Type alias: "x is a natural number"
 /// Equivalent to: x ∈ Dom(SuccFn)
@@ -12,7 +12,7 @@ pub type IsZeroLike<'l, 'x, N> = &'l dyn for<'p> View<
     'p,
     Output = &'l dyn for<'s> View<
         's,
-        Output = <N as PropLogic<'l>>::Imply<
+        Output = <N as Imply<'l>>::Imply<
             <<N as NaturalNumbers<'l>>::SuccFn as Function<'l, N>>::F<'p, 's>,
             <N as Negation<'l>>::Neg<<N as Equality<'l>>::Eq<'s, 'x>>,
         >,

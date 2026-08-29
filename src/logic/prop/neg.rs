@@ -1,9 +1,7 @@
-use crate::logic::prop::{Chain, PropLogic, il::IntuitionisticImpl, reflexive, syllogism};
+use crate::logic::prop::{
+    Chain, Imply, Negation, PropLogic, il::IntuitionisticImpl, reflexive, syllogism,
+};
 use ::core::marker::PhantomData;
-
-pub trait Negation<'l> {
-    type Neg<P: 'l>: Clone + 'l;
-}
 
 pub trait Contraposition<'a>: PropLogic<'a> + Negation<'a> {
     fn l3<P, Q>()
@@ -33,7 +31,6 @@ impl<'a, Prop> PropLogic<'a> for ProofRing<'a, Prop>
 where
     Prop: PropLogic<'a>,
 {
-    type Imply<P: 'a, Q: 'a> = Prop::Imply<P, Q>;
     fn l1<P: Clone + 'a, Q>() -> Self::Cert<Self::Imply<P, Self::Imply<Q, P>>> {
         Prop::l1()
     }
@@ -45,6 +42,10 @@ where
     > {
         Prop::l2()
     }
+}
+
+impl<'a, Prop: Imply<'a>> Imply<'a> for ProofRing<'a, Prop> {
+    type Imply<P: 'a, Q: 'a> = Prop::Imply<P, Q>;
     type BaseCert<P: Clone + 'a> = Prop::Cert<P>;
     type Cert<P: Clone + 'a> = Prop::Cert<P>;
     fn mp<P: Clone, Q: Clone + 'a>(

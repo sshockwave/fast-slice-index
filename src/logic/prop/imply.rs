@@ -1,4 +1,4 @@
-use super::PropLogic;
+use super::{Imply as Implication, PropLogic};
 
 /// This trait is sealed to hide the assumptions from the Rust type system.
 mod sealed_imply {
@@ -26,7 +26,7 @@ impl<'a, P, Q: 'a> Clone for Imply<'a, P, Q> {
 pub struct PropLogicThm;
 
 mod sealed_prop_logic {
-    use super::{Imply, Infer, PropLogic, PropLogicThm};
+    use super::{Implication, Imply, Infer, PropLogic, PropLogicThm};
 
     type L1<'a, P, Q> = Imply<'a, P, Imply<'a, Q, P>>;
     type L2<'a, P, Q, R> =
@@ -103,13 +103,15 @@ mod sealed_prop_logic {
         }
     }
     impl<'a> PropLogic<'a> for PropLogicThm {
-        type Imply<P: 'a, Q: 'a> = Imply<'a, P, Q>;
         fn l1<P: Clone + 'a, Q: 'a>() -> Self::Cert<Imply<'a, P, Imply<'a, Q, P>>> {
             Imply::new(L1Proof).into()
         }
         fn l2<P: Clone + 'a, Q: 'a, R: 'a>() -> Self::Cert<L2<'a, P, Q, R>> {
             Imply::new(L2Proof).into()
         }
+    }
+    impl<'a> Implication<'a> for PropLogicThm {
+        type Imply<P: 'a, Q: 'a> = Imply<'a, P, Q>;
         type BaseCert<P: Clone + 'a> = P;
         type Cert<P: Clone + 'a> = P;
         fn mp<P: Clone + 'a, Q: Clone + 'a>(

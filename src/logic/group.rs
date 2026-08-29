@@ -50,7 +50,7 @@
 //! instead of mixing the operation's `Imply` with the field's.
 
 use crate::logic::function::{Equality, View};
-use crate::logic::prop::{And, Contraposition, Negation, PropLogic};
+use crate::logic::prop::{And, Contraposition, Imply, Negation, PropLogic};
 
 /// Type alias: "e is neutral for the operation"
 /// Equivalent to: ∀y. El(y) → e ∘ y = y
@@ -60,11 +60,11 @@ use crate::logic::prop::{And, Contraposition, Negation, PropLogic};
 /// `nat` splits `IsZeroLike` from `IsZero`.
 pub type IsUnitLike<'l, 'e, M, Eq> = &'l dyn for<'y> View<
     'y,
-    Output = <Eq as PropLogic<'l>>::Imply<
+    Output = <Eq as Imply<'l>>::Imply<
         <M as CommutativeMonoid<'l, Eq>>::El<'y>,
         &'l dyn for<'z> View<
             'z,
-            Output = <Eq as PropLogic<'l>>::Imply<
+            Output = <Eq as Imply<'l>>::Imply<
                 <M as CommutativeMonoid<'l, Eq>>::Op<'e, 'y, 'z>,
                 <Eq as Equality<'l>>::Eq<'z, 'y>,
             >,
