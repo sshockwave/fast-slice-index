@@ -129,7 +129,7 @@ where
     })
 }
 
-pub struct Or<'a, P: 'a, Q: 'a, Prop: PropLogic<'a>>(Prop::Cert<Prop::Imply<Neg<P>, Q>>);
+pub struct Or<'a, P: 'a, Q: 'a, Prop: PropLogic<'a> + ?Sized>(Prop::Cert<Prop::Imply<Neg<P>, Q>>);
 pub struct And<'a, P: 'a, Q: 'a, Prop: PropLogic<'a> + ?Sized>(
     Prop::Cert<Neg<Prop::Imply<Q, Neg<P>>>>,
 );

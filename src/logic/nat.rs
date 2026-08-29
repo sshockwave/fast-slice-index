@@ -46,7 +46,7 @@ where
         Neg<
             &'l dyn for<'z> View<
                 'z,
-                Output = Self::Imply<IsNat<'l, 'z, Self>, IsZeroLike<'l, 'z, Self>>,
+                Output = Self::Imply<IsNat<'l, 'z, Self>, Neg<IsZeroLike<'l, 'z, Self>>>,
             >,
         >,
     >;
