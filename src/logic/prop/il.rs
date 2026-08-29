@@ -1,4 +1,4 @@
-use super::{Imply, Negation, PropLogic};
+use super::{Cert, Imply, Negation, PropLogic};
 use ::core::{convert::Infallible, marker::PhantomData};
 
 pub struct IntuitionisticImpl<'l, Prop>(PhantomData<(&'l (), Prop)>);
@@ -7,30 +7,32 @@ impl<'a, Prop: PropLogic<'a>> Imply<'a> for IntuitionisticImpl<'a, Prop> {
     type Imply<P: 'a, Q: 'a> = Prop::Imply<P, Q>;
     type Cert<P: Clone + 'a> = Prop::Cert<P>;
     fn mp<P: Clone, Q: Clone + 'a>(
-        pq: Self::Cert<Self::Imply<P, Q>>,
-        p: Self::Cert<P>,
-    ) -> Self::Cert<Q> {
-        Prop::mp(pq, p)
+        pq: Cert<'a, Self, Self::Imply<P, Q>>,
+        p: Cert<'a, Self, P>,
+    ) -> Cert<'a, Self, Q> {
+        pq.apply(p)
     }
-    fn def<P, Q>() -> Self::Cert<Self::Imply<P, Q>>
+    fn def<P, Q>() -> Cert<'a, Self, Self::Imply<P, Q>>
     where
         P: Into<Q> + Clone + 'a,
         Q: Clone + 'a,
     {
-        Prop::def()
+        Prop::def().cast()
     }
 }
 impl<'a, Prop: PropLogic<'a>> PropLogic<'a> for IntuitionisticImpl<'a, Prop> {
-    fn l1<P: Clone + 'a, Q>() -> Self::Cert<Self::Imply<P, Self::Imply<Q, P>>> {
-        Prop::l1()
+    fn l1<P: Clone + 'a, Q>() -> Cert<'a, Self, Self::Imply<P, Self::Imply<Q, P>>> {
+        Prop::l1().cast()
     }
-    fn l2<P: Clone + 'a, Q: 'a, R: 'a>() -> Self::Cert<
+    fn l2<P: Clone + 'a, Q: 'a, R: 'a>() -> Cert<
+        'a,
+        Self,
         Self::Imply<
             Self::Imply<P, Self::Imply<Q, R>>,
             Self::Imply<Self::Imply<P, Q>, Self::Imply<P, R>>,
         >,
     > {
-        Prop::l2()
+        Prop::l2().cast()
     }
 }
 

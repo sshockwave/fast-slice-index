@@ -1,4 +1,4 @@
-use super::{Imply as Implication, PropLogic};
+use super::{Cert, Imply as Implication, PropLogic};
 
 /// This trait is sealed to hide the assumptions from the Rust type system.
 mod sealed_imply {
@@ -26,7 +26,7 @@ impl<'a, P, Q: 'a> Clone for Imply<'a, P, Q> {
 pub struct PropLogicThm;
 
 mod sealed_prop_logic {
-    use super::{Implication, Imply, Infer, PropLogic, PropLogicThm};
+    use super::{Cert, Implication, Imply, Infer, PropLogic, PropLogicThm};
 
     type L1<'a, P, Q> = Imply<'a, P, Imply<'a, Q, P>>;
     type L2<'a, P, Q, R> =
@@ -103,23 +103,23 @@ mod sealed_prop_logic {
         }
     }
     impl<'a> PropLogic<'a> for PropLogicThm {
-        fn l1<P: Clone + 'a, Q: 'a>() -> Self::Cert<Imply<'a, P, Imply<'a, Q, P>>> {
-            Imply::new(L1Proof).into()
+        fn l1<P: Clone + 'a, Q: 'a>() -> Cert<'a, Self, Imply<'a, P, Imply<'a, Q, P>>> {
+            Cert::new(Imply::new(L1Proof))
         }
-        fn l2<P: Clone + 'a, Q: 'a, R: 'a>() -> Self::Cert<L2<'a, P, Q, R>> {
-            Imply::new(L2Proof).into()
+        fn l2<P: Clone + 'a, Q: 'a, R: 'a>() -> Cert<'a, Self, L2<'a, P, Q, R>> {
+            Cert::new(Imply::new(L2Proof))
         }
     }
     impl<'a> Implication<'a> for PropLogicThm {
         type Imply<P: 'a, Q: 'a> = Imply<'a, P, Q>;
         type Cert<P: Clone + 'a> = P;
         fn mp<P: Clone + 'a, Q: Clone + 'a>(
-            pq: Self::Cert<Imply<'a, P, Q>>,
-            p: Self::Cert<P>,
-        ) -> Self::Cert<Q> {
-            pq.0.mp(&p).into()
+            pq: Cert<'a, Self, Imply<'a, P, Q>>,
+            p: Cert<'a, Self, P>,
+        ) -> Cert<'a, Self, Q> {
+            Cert::new(pq.into_inner().0.mp(&p.into_inner()).into())
         }
-        fn def<P, Q>() -> Self::Cert<Self::Imply<P, Q>>
+        fn def<P, Q>() -> Cert<'a, Self, Self::Imply<P, Q>>
         where
             P: Into<Q> + Clone + 'a,
             Q: Clone + 'a,
@@ -137,7 +137,7 @@ mod sealed_prop_logic {
                     Imply::new(DefProof)
                 }
             }
-            Imply::new(DefProof).into()
+            Cert::new(Imply::new(DefProof).into())
         }
     }
 }

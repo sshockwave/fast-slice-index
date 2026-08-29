@@ -1,31 +1,24 @@
-use super::{Imply, Negation, PropLogic};
+use super::{Cert, Imply, Negation, PropLogic};
 
-use self::sealed_type_eq::TypeEq;
-mod sealed_type_eq {
-    pub trait TypeEq<P>: From<P> + Into<P> {}
-    impl<T> TypeEq<T> for T {}
-}
-
-pub trait Chain<'l, Prop: Imply<'l> + ?Sized, PQ: Clone + 'l> {
-    fn apply<P: Clone, Q: Clone>(self, p: Prop::Cert<P>) -> Prop::Cert<Q>
+impl<'l, PQ: Clone + 'l, Prop: Imply<'l> + ?Sized> Cert<'l, Prop, PQ> {
+    pub fn apply<P: Clone, Q: Clone>(self, p: Cert<'l, Prop, P>) -> Cert<'l, Prop, Q>
     where
-        Prop::Cert<PQ>: TypeEq<Prop::Cert<Prop::Imply<P, Q>>>;
-    fn pipe<Q: Clone>(self, pq: Prop::Cert<Prop::Imply<PQ, Q>>) -> Prop::Cert<Q>;
-}
-
-impl<'l, PQ: Clone + 'l, Prop: Imply<'l> + ?Sized> Chain<'l, Prop, PQ> for Prop::Cert<PQ> {
-    fn apply<P: Clone, Q: Clone>(self, p: Prop::Cert<P>) -> Prop::Cert<Q>
-    where
-        Prop::Cert<PQ>: Into<Prop::Cert<Prop::Imply<P, Q>>>,
+        Self: Into<Cert<'l, Prop, Prop::Imply<P, Q>>>,
     {
         Prop::mp(self.into(), p)
     }
-    fn pipe<Q: Clone>(self, pq: Prop::Cert<Prop::Imply<PQ, Q>>) -> Prop::Cert<Q> {
+    pub fn pipe<Q: Clone>(self, pq: Cert<'l, Prop, Prop::Imply<PQ, Q>>) -> Cert<'l, Prop, Q> {
         Prop::mp(pq, self)
+    }
+    pub fn cast<Logic, R: Clone>(self) -> Cert<'l, Logic, R>
+    where
+        Logic: Imply<'l, Cert<R> = Prop::Cert<PQ>>,
+    {
+        Cert::new(self.into_inner())
     }
 }
 
-pub fn reflexive<'a, P, Prop: PropLogic<'a>>() -> Prop::Cert<Prop::Imply<P, P>>
+pub fn reflexive<'a, P, Prop: PropLogic<'a>>() -> Cert<'a, Prop, Prop::Imply<P, P>>
 where
     P: Clone + 'a,
 {
@@ -33,7 +26,7 @@ where
 }
 
 mod sealed_deduction {
-    use super::{Chain, Imply, PropLogic, reflexive};
+    use super::{Cert, Imply, PropLogic, reflexive};
     use ::core::marker::PhantomData;
 
     /// Deduction theorem: If we can derive Q from P, then we can derive P → Q.
@@ -45,20 +38,17 @@ mod sealed_deduction {
     }
     impl<A, Prop> Copy for Deduction<A, Prop> {}
 
-    impl<'a, A: Clone, Prop: PropLogic<'a>> Deduction<A, Prop> {
-        pub fn assume() -> <Self as Imply<'a>>::Cert<A> {
-            reflexive::<_, Prop>()
+    impl<'a, A: Clone + 'a, Prop: PropLogic<'a>> Deduction<A, Prop> {
+        pub fn assume() -> Cert<'a, Self, A> {
+            reflexive::<_, Prop>().cast()
         }
-        pub fn upgrade<P: Clone + 'a>(value: Prop::Cert<P>) -> <Self as Imply<'a>>::Cert<P> {
-            Prop::l1().apply(value)
+        pub fn upgrade<P: Clone + 'a>(value: Cert<'a, Prop, P>) -> Cert<'a, Self, P> {
+            Prop::l1().apply(value).cast()
         }
         pub fn scope<R: Clone>(
-            f: impl FnOnce(
-                <Self as Imply<'a>>::Cert<A>,
-                Deduction<A, Self>,
-            ) -> <Self as Imply<'a>>::Cert<R>,
-        ) -> Prop::Cert<Prop::Imply<A, R>> {
-            f(Self::assume(), Deduction(PhantomData))
+            f: impl FnOnce(Cert<'a, Self, A>, Self) -> Cert<'a, Self, R>,
+        ) -> Cert<'a, Prop, Prop::Imply<A, R>> {
+            f(Self::assume(), Deduction(PhantomData)).cast()
         }
     }
 
@@ -66,12 +56,12 @@ mod sealed_deduction {
         type Imply<P: 'a, Q: 'a> = Prop::Imply<P, Q>;
         type Cert<P: Clone + 'a> = Prop::Cert<Prop::Imply<A, P>>;
         fn mp<P: Clone, Q: Clone>(
-            pq: Self::Cert<Self::Imply<P, Q>>,
-            p: Self::Cert<P>,
-        ) -> Self::Cert<Q> {
-            Prop::l2().apply(pq).apply(p)
+            pq: Cert<'a, Self, Self::Imply<P, Q>>,
+            p: Cert<'a, Self, P>,
+        ) -> Cert<'a, Self, Q> {
+            Prop::l2().apply(pq.cast()).apply(p.cast()).cast()
         }
-        fn def<P, Q>() -> Self::Cert<Self::Imply<P, Q>>
+        fn def<P, Q>() -> Cert<'a, Self, Self::Imply<P, Q>>
         where
             P: Into<Q> + Clone + 'a,
             Q: Clone + 'a,
@@ -80,10 +70,12 @@ mod sealed_deduction {
         }
     }
     impl<'a, A: Clone + 'a, Prop: PropLogic<'a>> PropLogic<'a> for Deduction<A, Prop> {
-        fn l1<P: Clone + 'a, Q>() -> Self::Cert<Self::Imply<P, Self::Imply<Q, P>>> {
+        fn l1<P: Clone + 'a, Q>() -> Cert<'a, Self, Self::Imply<P, Self::Imply<Q, P>>> {
             Self::upgrade(Prop::l1())
         }
-        fn l2<P: Clone + 'a, Q: 'a, R: 'a>() -> Self::Cert<
+        fn l2<P: Clone + 'a, Q: 'a, R: 'a>() -> Cert<
+            'a,
+            Self,
             Self::Imply<
                 Self::Imply<P, Self::Imply<Q, R>>,
                 Self::Imply<Self::Imply<P, Q>, Self::Imply<P, R>>,
@@ -95,27 +87,18 @@ mod sealed_deduction {
 }
 pub use sealed_deduction::Deduction;
 
-impl<'l, A: Clone, Logic: PropLogic<'l>> Deduction<A, Logic> {
-    pub fn mp<P: Clone, Q: Clone>(
-        &self,
-        pq: Logic::Cert<Logic::Imply<P, Q>>,
-        p: Logic::Cert<P>,
-    ) -> Logic::Cert<Q> {
-        Logic::mp(pq, p)
-    }
+impl<'l, A: Clone + 'l, Logic: PropLogic<'l>> Deduction<A, Logic> {
     pub fn nest<B: Clone, R: Clone>(
         &self,
         f: impl FnOnce(
-            Logic::Cert<Logic::Imply<B, B>>,
-            Deduction<B, Deduction<B, Logic>>,
-        ) -> Logic::Cert<Logic::Imply<B, R>>,
-    ) -> Logic::Cert<Logic::Imply<B, R>> {
+            Cert<'l, Deduction<B, Self>, B>,
+            Deduction<B, Self>,
+        ) -> Cert<'l, Deduction<B, Self>, R>,
+    ) -> Cert<'l, Self, Logic::Imply<B, R>> {
         Deduction::scope(f)
     }
-}
-impl<'l, A: Clone, Logic: PropLogic<'l>> Deduction<A, Deduction<A, Logic>> {
-    pub fn up<P: Clone>(&self, p: Logic::Cert<P>) -> <Deduction<A, Logic> as Imply<'l>>::Cert<P> {
-        Deduction::<A, Logic>::upgrade(p)
+    pub fn up<P: Clone>(&self, p: Cert<'l, Logic, P>) -> Cert<'l, Self, P> {
+        Deduction::upgrade(p)
     }
 }
 
@@ -124,7 +107,7 @@ impl<'l, A, Logic: Negation<'l>> Negation<'l> for Deduction<A, Logic> {
 }
 
 pub fn syllogism<'a, P, Q, R, Prop: PropLogic<'a>>()
--> Prop::Cert<Prop::Imply<Prop::Imply<P, Q>, Prop::Imply<Prop::Imply<Q, R>, Prop::Imply<P, R>>>>
+-> Cert<'a, Prop, Prop::Imply<Prop::Imply<P, Q>, Prop::Imply<Prop::Imply<Q, R>, Prop::Imply<P, R>>>>
 where
     P: Clone + 'a,
     Q: Clone + 'a,
@@ -136,7 +119,7 @@ where
             s2.nest(|p, s3| {
                 let pq = s3.up(pq);
                 let qr = s3.up(qr);
-                s3.mp(qr, s3.mp(pq, p))
+                qr.apply(pq.apply(p))
             })
         })
     })

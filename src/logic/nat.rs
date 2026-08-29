@@ -1,5 +1,5 @@
 use crate::logic::function::{Equality, Function, Injection};
-use crate::logic::prop::{And, Imply, Negation, View};
+use crate::logic::prop::{And, Cert, Imply, Negation, View};
 
 /// Type alias: "x is a natural number"
 /// Equivalent to: x ∈ Dom(SuccFn)
@@ -39,7 +39,9 @@ pub trait NaturalNumbers<'l>: Equality<'l> + Negation<'l> + And<'l> {
 
     /// Zero is defined existentially: ∃z. IsNat(z) ∧ IsZeroLike(z)
     /// "There exists a natural number such that no natural's successor equals it"
-    fn zero_exists() -> Self::Cert<
+    fn zero_exists() -> Cert<
+        'l,
+        Self,
         Self::Neg<
             &'l dyn for<'z> View<
                 'z,
@@ -53,7 +55,9 @@ pub trait NaturalNumbers<'l>: Equality<'l> + Negation<'l> + And<'l> {
     /// NOTE: P is a type parameter, not a quantified predicate.
     /// We're defining induction for each specific P separately.
     /// This is predicative and avoids Russell's paradox.
-    fn induction<P>() -> Self::Cert<
+    fn induction<P>() -> Cert<
+        'l,
+        Self,
         Self::Imply<
             // P(0) - predicate holds for zero
             &'l dyn for<'z> View<
@@ -90,7 +94,9 @@ pub trait NaturalNumbers<'l>: Equality<'l> + Negation<'l> + And<'l> {
         P: for<'n> View<'n> + 'l;
 
     /// Zero is unique: ∀x∀y. IsZero(x) ∧ IsZero(y) → x = y
-    fn zero_unique() -> Self::Cert<
+    fn zero_unique() -> Cert<
+        'l,
+        Self,
         &'l dyn for<'x> View<
             'x,
             Output = &'l dyn for<'y> View<

@@ -1,4 +1,4 @@
-use crate::logic::prop::{And, Iff, Imply, Negation, View};
+use crate::logic::prop::{And, Cert, Iff, Imply, Negation, View};
 
 pub trait Spec<'x, 'w, 'z> {
     type Output;
@@ -24,9 +24,12 @@ pub trait ZF<'l>: Negation<'l> + And<'l> + 'l {
     type In<'b: 'l, 'c: 'l>;
 
     // First-order Logic
-    fn instantiate<'x, V: for<'y> View<'y, Output: Clone>>() -> Self::Cert<<V as View<'x>>::Output>;
+    fn instantiate<'x, V: for<'y> View<'y, Output: Clone>>()
+    -> Cert<'l, Self, <V as View<'x>>::Output>;
 
-    fn extensionality() -> Self::Cert<
+    fn extensionality() -> Cert<
+        'l,
+        Self,
         &'l dyn for<'x> View<
             'x,
             Output = &'l dyn for<'y> View<
@@ -45,7 +48,9 @@ pub trait ZF<'l>: Negation<'l> + And<'l> + 'l {
         >,
     >;
 
-    fn regularity() -> Self::Cert<
+    fn regularity() -> Cert<
+        'l,
+        Self,
         &'l dyn for<'x> View<
             'x,
             Output = Self::Imply<

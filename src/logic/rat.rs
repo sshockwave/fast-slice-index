@@ -1,6 +1,6 @@
 use crate::logic::function::Equality;
 use crate::logic::group::{AbelianGroup, CommutativeMonoid, IsUnitLike};
-use crate::logic::prop::{And, Iff, Negation, Or, View};
+use crate::logic::prop::{And, Cert, Iff, Negation, Or, View};
 
 /// Type alias: "x is a rational"
 /// Equivalent to: x is in the additive group's carrier
@@ -90,7 +90,9 @@ pub trait Rationals<'l>: Equality<'l> + Negation<'l> + And<'l> + Or<'l> + 'l {
     /// Each of [`Rationals::Add`] and [`Rationals::Mul`] carries its own
     /// `El`, so nothing otherwise forces `+` and `×` to range over the same
     /// set.
-    fn same_carrier() -> Self::Cert<
+    fn same_carrier() -> Cert<
+        'l,
+        Self,
         &'l dyn for<'x> View<
             'x,
             Output = Iff<'l, Self, IsRat<'l, 'x, Self>, IsRatMul<'l, 'x, Self>>,
@@ -103,7 +105,9 @@ pub trait Rationals<'l>: Equality<'l> + Negation<'l> + And<'l> + Or<'l> + 'l {
     /// [`CommutativeMonoid`], which knows nothing of the other operation;
     /// together with `Mul`'s identity and [`Rationals::same_carrier`] it
     /// upgrades that identity to a full [`IsOne`].
-    fn nontrivial() -> Self::Cert<
+    fn nontrivial() -> Cert<
+        'l,
+        Self,
         &'l dyn for<'x> View<
             'x,
             Output = Self::Imply<IsOneLike<'l, 'x, Self>, Self::Neg<IsZeroLike<'l, 'x, Self>>>,
@@ -117,7 +121,9 @@ pub trait Rationals<'l>: Equality<'l> + Negation<'l> + And<'l> + Or<'l> + 'l {
     /// The `¬IsZeroLike` guard is what keeps this from being false at 0, and
     /// is exactly why [`Rationals::Mul`] is a monoid rather than an
     /// [`AbelianGroup`].
-    fn mul_inverse() -> Self::Cert<
+    fn mul_inverse() -> Cert<
+        'l,
+        Self,
         &'l dyn for<'x> View<
             'x,
             Output = Self::Imply<
@@ -150,7 +156,9 @@ pub trait Rationals<'l>: Equality<'l> + Negation<'l> + And<'l> + Or<'l> + 'l {
     ///
     /// Relationally: `s = y+z`, `a = x·y`, `b = x·z`, `t = a+b`, and then
     /// `x·s = t`. This is the axiom linking `+` to `×`.
-    fn distributive() -> Self::Cert<
+    fn distributive() -> Cert<
+        'l,
+        Self,
         &'l dyn for<'x> View<
             'x,
             Output = &'l dyn for<'y> View<
@@ -188,7 +196,9 @@ pub trait Rationals<'l>: Equality<'l> + Negation<'l> + And<'l> + Or<'l> + 'l {
     >;
 
     /// The order only relates rationals: ∀x ∀y. x < y → IsRat(x) ∧ IsRat(y)
-    fn lt_typed() -> Self::Cert<
+    fn lt_typed() -> Cert<
+        'l,
+        Self,
         &'l dyn for<'x> View<
             'x,
             Output = &'l dyn for<'y> View<
@@ -202,10 +212,12 @@ pub trait Rationals<'l>: Equality<'l> + Negation<'l> + And<'l> + Or<'l> + 'l {
     >;
 
     /// Irreflexive: ∀x. ¬(x < x)
-    fn lt_irrefl() -> Self::Cert<&'l dyn for<'x> View<'x, Output = Self::Neg<Self::Lt<'x, 'x>>>>;
+    fn lt_irrefl() -> Cert<'l, Self, &'l dyn for<'x> View<'x, Output = Self::Neg<Self::Lt<'x, 'x>>>>;
 
     /// Transitive: ∀x ∀y ∀z. x < y → y < z → x < z
-    fn lt_trans() -> Self::Cert<
+    fn lt_trans() -> Cert<
+        'l,
+        Self,
         &'l dyn for<'x> View<
             'x,
             Output = &'l dyn for<'y> View<
@@ -224,7 +236,9 @@ pub trait Rationals<'l>: Equality<'l> + Negation<'l> + And<'l> + Or<'l> + 'l {
     /// Trichotomy: ∀x ∀y. IsRat(x) → IsRat(y) → (x < y) ∨ (x = y ∨ y < x)
     ///
     /// Together with [`Rationals::lt_irrefl`] this makes the order total.
-    fn trichotomy() -> Self::Cert<
+    fn trichotomy() -> Cert<
+        'l,
+        Self,
         &'l dyn for<'x> View<
             'x,
             Output = &'l dyn for<'y> View<
@@ -243,7 +257,9 @@ pub trait Rationals<'l>: Equality<'l> + Negation<'l> + And<'l> + Or<'l> + 'l {
     /// Translation invariance: x < y → x + z < y + z
     ///
     /// Relationally: `u = x+z`, `v = y+z`, then `u < v`.
-    fn lt_add() -> Self::Cert<
+    fn lt_add() -> Cert<
+        'l,
+        Self,
         &'l dyn for<'x> View<
             'x,
             Output = &'l dyn for<'y> View<
@@ -272,7 +288,9 @@ pub trait Rationals<'l>: Equality<'l> + Negation<'l> + And<'l> + Or<'l> + 'l {
     ///
     /// "Positive" is stated as `IsZeroLike(n) ∧ n < w`: the order relates
     /// elements, so zero has to be quantified in rather than named.
-    fn lt_mul() -> Self::Cert<
+    fn lt_mul() -> Cert<
+        'l,
+        Self,
         &'l dyn for<'n> View<
             'n,
             Output = &'l dyn for<'w> View<
@@ -323,7 +341,9 @@ pub trait Rationals<'l>: Equality<'l> + Negation<'l> + And<'l> + Or<'l> + 'l {
     /// `P` is a type parameter, not a quantified predicate, so this is a
     /// schema instantiated per `P`. Same predicativity argument as
     /// [`crate::logic::nat::NaturalNumbers::induction`].
-    fn prime_field<P>() -> Self::Cert<
+    fn prime_field<P>() -> Cert<
+        'l,
+        Self,
         Self::Imply<
             // P(1)
             &'l dyn for<'o> View<

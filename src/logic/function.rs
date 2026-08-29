@@ -1,4 +1,4 @@
-use crate::logic::prop::{Negation, PropLogic, View};
+use crate::logic::prop::{Cert, Negation, PropLogic, View};
 
 /// Equality trait - axiomatizes equality relation
 pub trait Equality<'l>: PropLogic<'l>
@@ -9,10 +9,12 @@ where
     type Eq<'a: 'l, 'b: 'l>;
 
     /// Reflexivity: ∀x. x = x
-    fn eq_refl() -> Self::Cert<&'l dyn for<'x> View<'x, Output = Self::Eq<'x, 'x>>>;
+    fn eq_refl() -> Cert<'l, Self, &'l dyn for<'x> View<'x, Output = Self::Eq<'x, 'x>>>;
 
     /// Symmetry: ∀x ∀y. x = y → y = x
-    fn eq_symm() -> Self::Cert<
+    fn eq_symm() -> Cert<
+        'l,
+        Self,
         &'l dyn for<'x> View<
             'x,
             Output = &'l dyn for<'y> View<
@@ -23,7 +25,9 @@ where
     >;
 
     /// Transitivity: ∀x ∀y ∀z. x = y → y = z → x = z
-    fn eq_trans() -> Self::Cert<
+    fn eq_trans() -> Cert<
+        'l,
+        Self,
         &'l dyn for<'x> View<
             'x,
             Output = &'l dyn for<'y> View<
@@ -41,7 +45,9 @@ where
 
     /// Substitution (Leibniz's law): ∀x ∀y. x = y → (P(x) → P(y))
     /// For any predicate P
-    fn eq_subst<P>() -> Self::Cert<
+    fn eq_subst<P>() -> Cert<
+        'l,
+        Self,
         &'l dyn for<'x> View<
             'x,
             Output = &'l dyn for<'y> View<
@@ -81,7 +87,9 @@ where
 
     /// Total: ∀x. Dom(x) → ∃y. Codom(y) ∧ F(x, y)
     /// Every element in domain has an image
-    fn total() -> Self::Cert<
+    fn total() -> Cert<
+        'l,
+        Self,
         &'l dyn for<'x> View<
             'x,
             Output = Self::Imply<
@@ -99,7 +107,9 @@ where
 
     /// Functional (single-valued): ∀x ∀y ∀z. F(x,y) ∧ F(x,z) → y = z
     /// Each input maps to at most one output
-    fn functional() -> Self::Cert<
+    fn functional() -> Cert<
+        'l,
+        Self,
         &'l dyn for<'x> View<
             'x,
             Output = &'l dyn for<'y> View<
@@ -116,7 +126,9 @@ where
     >;
 
     /// Well-typed: ∀x ∀y. F(x,y) → Dom(x) ∧ Codom(y)
-    fn well_typed() -> Self::Cert<
+    fn well_typed() -> Cert<
+        'l,
+        Self,
         &'l dyn for<'x> View<
             'x,
             Output = &'l dyn for<'y> View<
@@ -135,7 +147,9 @@ where
 {
     /// Injective: ∀x ∀y ∀z. F(x,z) ∧ F(y,z) → x = y
     /// Different inputs map to different outputs
-    fn injective() -> Self::Cert<
+    fn injective() -> Cert<
+        'l,
+        Self,
         &'l dyn for<'x> View<
             'x,
             Output = &'l dyn for<'y> View<
