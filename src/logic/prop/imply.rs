@@ -1,11 +1,16 @@
+use super::PropLogic;
+
 /// This trait is sealed to hide the assumptions from the Rust type system.
-trait Infer<'a, P, Q> {
-    fn mp(&self, p: &P) -> Q;
-    fn clone_dyn(&self) -> Imply<'a, P, Q>
-    where
-        Q: 'a;
+mod sealed_imply {
+    pub trait Infer<'a, P, Q> {
+        fn mp(&self, p: &P) -> Q;
+        fn clone_dyn(&self) -> Imply<'a, P, Q>
+        where
+            Q: 'a;
+    }
+    pub struct Imply<'a, P: ?Sized, Q>(pub Box<dyn Infer<'a, P, Q> + 'a>);
 }
-pub struct Imply<'a, P: ?Sized, Q>(Box<dyn Infer<'a, P, Q> + 'a>);
+use self::sealed_imply::{Imply, Infer};
 
 impl<'a, P, Q> Imply<'a, P, Q> {
     fn new(infer: impl Infer<'a, P, Q> + 'a) -> Self {
@@ -16,55 +21,6 @@ impl<'a, P, Q: 'a> Clone for Imply<'a, P, Q> {
     fn clone(&self) -> Self {
         self.0.clone_dyn()
     }
-}
-
-pub trait TypeEq<P>: From<P> + Into<P> {}
-impl<T> TypeEq<T> for T {}
-
-pub trait Chain<'l, Prop: PropLogic<'l> + ?Sized, PQ: Clone + 'l> {
-    fn apply<P: Clone, Q: Clone>(self, p: Prop::Cert<P>) -> Prop::Cert<Q>
-    where
-        Prop::Cert<PQ>: TypeEq<Prop::Cert<Prop::Imply<P, Q>>>;
-    fn pipe<Q: Clone>(self, pq: Prop::Cert<Prop::Imply<PQ, Q>>) -> Prop::Cert<Q>;
-}
-
-/// Axiomatic propositional logic
-///
-/// This is a logic system where all theorems are derived from axioms using inference rules.
-/// Rust type system implies propositional logic,
-/// so we can prove this in [`PropLogicThm`] without any unsafe code.
-pub trait PropLogic<'a>: Sized {
-    /// Implication: P implies Q
-    type Imply<P: 'a, Q: 'a>: Clone + 'a;
-
-    /// Axiom L1: P → (Q → P)
-    /// If P is true, then Q implies P
-    fn l1<P: Clone + 'a, Q>() -> Self::Cert<Self::Imply<P, Self::Imply<Q, P>>>;
-
-    /// Axiom L2: (P → (Q → R)) → ((P → Q) → (P → R))
-    /// Distribution of implication
-    fn l2<P: Clone + 'a, Q: 'a, R: 'a>() -> Self::Cert<
-        Self::Imply<
-            Self::Imply<P, Self::Imply<Q, R>>,
-            Self::Imply<Self::Imply<P, Q>, Self::Imply<P, R>>,
-        >,
-    >;
-
-    type BaseCert<P: Clone + 'a>;
-    type Cert<P: Clone + 'a>: Clone + Chain<'a, Self, P>;
-
-    /// Modus Ponens: Given (P → Q) and P, derive Q
-    /// This is the only inference rule - all others are axioms
-    fn mp<P: Clone, Q: Clone + 'a>(
-        pq: Self::Cert<Self::Imply<P, Q>>,
-        p: Self::Cert<P>,
-    ) -> Self::Cert<Q>;
-
-    fn upgrade<P: Clone + 'a>(value: Self::BaseCert<P>) -> Self::Cert<P>;
-    fn def<P, Q>() -> Self::Cert<Self::Imply<P, Q>>
-    where
-        P: Into<Q> + Clone + 'a,
-        Q: Clone + 'a;
 }
 
 pub struct PropLogicThm;
