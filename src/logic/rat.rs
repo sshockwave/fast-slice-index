@@ -1,6 +1,6 @@
 use crate::logic::function::Equality;
 use crate::logic::group::{AbelianGroup, CommutativeMonoid, IsUnitLike};
-use crate::logic::prop::{And, Contraposition, Iff, Negation, Or, View};
+use crate::logic::prop::{And, Iff, Negation, Or, View};
 
 /// Type alias: "x is a rational"
 /// Equivalent to: x is in the additive group's carrier
@@ -69,7 +69,7 @@ pub type IsOne<'l, 'x, Q> = <Q as And<'l>>::And<
 /// encoding is strictly weaker than the existential it stands for, and the
 /// witnesses in [`AbelianGroup::inverse`] and [`Rationals::mul_inverse`] could
 /// not be extracted.
-pub trait Rationals<'l>: Equality<'l> + Contraposition<'l> + And<'l> + Or<'l> + 'l {
+pub trait Rationals<'l>: Equality<'l> + Negation<'l> + And<'l> + Or<'l> + 'l {
     /// Addition: an abelian group on all of ℚ
     ///
     /// [`AbelianGroup::inverse`] is the additive inverse axiom, and

@@ -5,14 +5,7 @@ mod imply;
 pub mod neg;
 mod thm;
 
-pub use self::{
-    imply::PropLogicThm,
-    neg::{
-        Contraposition, DoubleNegIntro, DoubleNegation, ExFalsoQuodlibet, PeirceLaw,
-        ProofRing as NegProofRing, consequentia_mirabilis, simplification, transposition,
-    },
-    thm::*,
-};
+pub use self::{imply::PropLogicThm, thm::*};
 use ::core::convert::Infallible;
 
 pub trait View<'x> {

@@ -1,5 +1,5 @@
 use crate::logic::function::{Equality, Function, Injection};
-use crate::logic::prop::{And, Contraposition, Imply, Negation, View};
+use crate::logic::prop::{And, Imply, Negation, View};
 
 /// Type alias: "x is a natural number"
 /// Equivalent to: x ∈ Dom(SuccFn)
@@ -31,7 +31,7 @@ pub type IsZero<'l, 'x, N> = <N as And<'l>>::And<IsNat<'l, 'x, N>, IsZeroLike<'l
 /// - SuccFn::Dom and SuccFn::Codom define what counts as a natural number
 /// - Zero is defined existentially: ∃z. ∀n∀s. Succ(n,s) → s≠z
 /// - Induction uses P as a type parameter (schema) to remain predicative
-pub trait NaturalNumbers<'l>: Equality<'l> + Contraposition<'l> + And<'l> {
+pub trait NaturalNumbers<'l>: Equality<'l> + Negation<'l> + And<'l> {
     /// Successor function: ℕ → ℕ
     /// An injection from natural numbers to natural numbers
     /// SuccFn::F<'x, 'y> means "y is the successor of x"
@@ -40,7 +40,7 @@ pub trait NaturalNumbers<'l>: Equality<'l> + Contraposition<'l> + And<'l> {
     /// Zero is defined existentially: ∃z. IsNat(z) ∧ IsZeroLike(z)
     /// "There exists a natural number such that no natural's successor equals it"
     fn zero_exists() -> Self::Cert<
-        <Self as Negation<'l>>::Neg<
+        Self::Neg<
             &'l dyn for<'z> View<
                 'z,
                 Output = Self::Imply<IsNat<'l, 'z, Self>, Self::Neg<IsZeroLike<'l, 'z, Self>>>,

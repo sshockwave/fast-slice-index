@@ -50,7 +50,7 @@
 //! instead of mixing the operation's `Imply` with the field's.
 
 use crate::logic::function::Equality;
-use crate::logic::prop::{And, Contraposition, Imply, Negation, PropLogic, View};
+use crate::logic::prop::{And, Imply, Negation, PropLogic, View};
 
 /// Type alias: "e is neutral for the operation"
 /// Equivalent to: ∀y. El(y) → e ∘ y = y
@@ -218,7 +218,7 @@ where
 pub trait AbelianGroup<'l, Eq>: CommutativeMonoid<'l, Eq>
 where
     Self: 'l,
-    Eq: Contraposition<'l> + Equality<'l> + And<'l>,
+    Eq: Negation<'l> + Equality<'l> + And<'l>,
 {
     /// Inverses: ∀x. El(x) → ∃y. El(y) ∧ (x ∘ y is neutral)
     fn inverse() -> Eq::Cert<

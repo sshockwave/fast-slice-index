@@ -1,4 +1,4 @@
-use crate::logic::prop::{And, Contraposition, Iff, Imply, Negation, View};
+use crate::logic::prop::{And, Iff, Imply, Negation, View};
 
 pub trait Spec<'x, 'w, 'z> {
     type Output;
@@ -20,7 +20,7 @@ pub type Subset<'l, 'x, 'y, P> = dyn for<'z> View<
         Output = <P as Imply<'l>>::Imply<<P as ZF<'l>>::In<'z, 'x>, <P as ZF<'l>>::In<'z, 'y>>,
     > + 'l;
 
-pub trait ZF<'l>: Contraposition<'l> + Sized + And<'l> + 'l {
+pub trait ZF<'l>: Negation<'l> + And<'l> + 'l {
     type In<'b: 'l, 'c: 'l>;
 
     // First-order Logic
