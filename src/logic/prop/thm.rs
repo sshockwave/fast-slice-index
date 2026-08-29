@@ -1,4 +1,4 @@
-use super::{Imply, PropLogic};
+use super::{Imply, Negation, PropLogic};
 
 use self::sealed_type_eq::TypeEq;
 mod sealed_type_eq {
@@ -39,11 +39,11 @@ mod sealed_deduction {
     /// Deduction theorem: If
     pub struct Deduction<A, Prop>(PhantomData<(A, Prop)>);
 
-    pub struct Cert<'a, A: 'a, P: 'a, Prop: PropLogic<'a>> {
+    pub struct Cert<'a, A: 'a, P: 'a, Prop: Imply<'a>> {
         witness: Prop::Cert<Prop::Imply<A, P>>,
         _marker: PhantomData<P>,
     }
-    impl<'a, A, P, Prop: PropLogic<'a>> Clone for Cert<'a, A, P, Prop> {
+    impl<'a, A, P, Prop: Imply<'a>> Clone for Cert<'a, A, P, Prop> {
         fn clone(&self) -> Self {
             Cert::new(self.witness.clone())
         }
@@ -57,7 +57,7 @@ mod sealed_deduction {
             Cert::new(reflexive::<_, Prop>())
         }
     }
-    impl<'a, A: 'a, P: 'a, Prop: PropLogic<'a>> Cert<'a, A, P, Prop> {
+    impl<'a, A: 'a, P: 'a, Prop: Imply<'a>> Cert<'a, A, P, Prop> {
         fn new(witness: Prop::Cert<Prop::Imply<A, P>>) -> Self {
             Cert {
                 witness,
@@ -67,6 +67,30 @@ mod sealed_deduction {
         pub fn finish(self) -> Prop::Cert<Prop::Imply<A, P>> {
             self.witness
         }
+        // // These are for less manual type annotations
+        // fn apply<R: Clone, Q: Clone>(
+        //     self,
+        //     r: <Deduction<A, Prop> as Imply<'a>>::Cert<R>,
+        // ) -> Cert<'a, A, Q, Prop>
+        // where
+        //     Prop::Cert<Prop::Imply<A, P>>: Into<Prop::Cert<Prop::Imply<A, Prop::Imply<R, Q>>>>,
+        //     P: Clone,
+        //     A: Clone,
+        //     Prop: PropLogic<'a>,
+        // {
+        //     Deduction::mp(Cert::new(self.witness.into()), r)
+        // }
+        // fn pipe<Q: Clone>(
+        //     self,
+        //     pq: <Deduction<A, Prop> as Imply<'a>>::Cert<Prop::Imply<P, Q>>,
+        // ) -> Cert<'a, A, Q, Prop>
+        // where
+        //     A: Clone,
+        //     P: Clone,
+        //     Prop: PropLogic<'a>,
+        // {
+        //     Deduction::mp(pq, self)
+        // }
     }
 
     impl<'a, A: Clone + 'a, Prop: PropLogic<'a>> Imply<'a> for Deduction<A, Prop> {
@@ -106,11 +130,15 @@ mod sealed_deduction {
 }
 pub use sealed_deduction::Deduction;
 impl<'l, A: Clone, Props: PropLogic<'l>> Deduction<A, Props> {
-    fn scope<R: Clone>(
+    pub fn scope<R: Clone>(
         f: impl FnOnce(<Self as Imply<'l>>::Cert<A>) -> <Self as Imply<'l>>::Cert<R>,
     ) -> Props::Cert<Props::Imply<A, R>> {
         f(Self::assume()).finish()
     }
+}
+
+impl<'l, A, Logic: Negation<'l>> Negation<'l> for Deduction<A, Logic> {
+    type Neg<P: 'l> = Logic::Neg<P>;
 }
 
 pub fn syllogism<'a, P, Q, R, Prop: PropLogic<'a>>()

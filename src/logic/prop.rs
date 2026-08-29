@@ -6,7 +6,6 @@ pub mod neg;
 mod thm;
 
 pub use self::{imply::PropLogicThm, thm::*};
-use ::core::convert::Infallible;
 
 pub trait View<'x> {
     type Output;
@@ -52,17 +51,17 @@ pub trait Negation<'l> {
 }
 
 pub trait And<'l>: PropLogic<'l> {
-    type And<P, Q>: Clone;
-    fn and_left<P, Q>() -> Self::Cert<Self::Imply<Self::And<P, Q>, P>>;
+    type And<P: 'l, Q: 'l>: Clone;
+    fn and_left<P: Clone, Q: Clone>() -> Self::Cert<Self::Imply<Self::And<P, Q>, P>>;
     fn and_right<P, Q>() -> Self::Cert<Self::Imply<Self::And<P, Q>, Q>>;
-    fn and_intro<P, Q>() -> Self::Cert<Self::Imply<P, Self::Imply<Q, Self::And<P, Q>>>>;
+    fn and_intro<P: Clone, Q: Clone>() -> Self::Cert<Self::Imply<P, Self::Imply<Q, Self::And<P, Q>>>>;
 }
 
 pub type Iff<'l, L, P, Q> =
     <L as And<'l>>::And<<L as Imply<'l>>::Imply<P, Q>, <L as Imply<'l>>::Imply<Q, P>>;
 
 pub trait Or<'l>: PropLogic<'l> {
-    type Or<P, Q>: Clone;
+    type Or<P: 'l, Q: 'l>: Clone;
     fn or_left<P, Q>() -> Self::Cert<Self::Imply<P, Self::Or<P, Q>>>;
     fn or_right<P, Q>() -> Self::Cert<Self::Imply<Q, Self::Or<P, Q>>>;
     fn or_elim<P, Q, R>() -> Self::Cert<
@@ -73,8 +72,10 @@ pub trait Or<'l>: PropLogic<'l> {
     >;
 }
 
-pub trait Intuitionistic<'l>: PropLogic<'l> + And<'l> + Or<'l> {
-    fn explosion<P>() -> Self::Cert<Self::Imply<Infallible, P>>;
+pub trait Intuitionistic<'l>: PropLogic<'l> + And<'l> + Or<'l> + Negation<'l> {
+    type False;
+    fn explosion<P>() -> Self::Cert<Self::Imply<Self::False, P>>;
+    fn neg_def<P>() -> Self::Cert<Iff<'l, Self, Self::Neg<P>, Self::Imply<P, Self::False>>>;
 }
 
 pub trait ForAllProof<'l, Logic: Imply<'l>, P, Q: for<'x> View<'x> + ?Sized> {
