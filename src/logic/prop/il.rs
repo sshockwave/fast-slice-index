@@ -10,7 +10,7 @@ impl<'a, Prop: PropLogic<'a>> Imply<'a> for IntuitionisticImpl<'a, Prop> {
         pq: Cert<'a, Self, Self::Imply<P, Q>>,
         p: Cert<'a, Self, P>,
     ) -> Cert<'a, Self, Q> {
-        pq.apply(p)
+        pq.mp(p)
     }
     fn def<P, Q>() -> Cert<'a, Self, Self::Imply<P, Q>>
     where

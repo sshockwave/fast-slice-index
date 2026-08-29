@@ -1,14 +1,14 @@
 use super::{Cert, Imply, Negation, PropLogic};
 
 impl<'l, PQ: Clone + 'l, Prop: Imply<'l> + ?Sized> Cert<'l, Prop, PQ> {
-    pub fn apply<P: Clone, Q: Clone>(self, p: Cert<'l, Prop, P>) -> Cert<'l, Prop, Q>
+    pub fn mp<P: Clone, Q: Clone>(self, p: Cert<'l, Prop, P>) -> Cert<'l, Prop, Q>
     where
         Self: Into<Cert<'l, Prop, Prop::Imply<P, Q>>>,
     {
         Prop::mp(self.into(), p)
     }
     pub fn pipe<Q: Clone>(self, pq: Cert<'l, Prop, Prop::Imply<PQ, Q>>) -> Cert<'l, Prop, Q> {
-        pq.apply(self)
+        pq.mp(self)
     }
     pub fn cast<Logic, R: Clone>(self) -> Cert<'l, Logic, R>
     where
@@ -22,7 +22,7 @@ pub fn reflexive<'a, P, Prop: PropLogic<'a>>() -> Cert<'a, Prop, Prop::Imply<P, 
 where
     P: Clone + 'a,
 {
-    Prop::l2().apply(Prop::l1()).apply(Prop::l1::<_, P>())
+    Prop::l2().mp(Prop::l1()).mp(Prop::l1::<_, P>())
 }
 
 mod sealed_deduction {
@@ -43,7 +43,7 @@ mod sealed_deduction {
             reflexive::<_, Prop>().cast()
         }
         pub fn upgrade<P: Clone + 'a>(value: Cert<'a, Prop, P>) -> Cert<'a, Self, P> {
-            Prop::l1().apply(value).cast()
+            Prop::l1().mp(value).cast()
         }
         pub fn scope<R: Clone>(
             f: impl FnOnce(Cert<'a, Self, A>) -> Cert<'a, Self, R>,
@@ -59,7 +59,7 @@ mod sealed_deduction {
             pq: Cert<'a, Self, Self::Imply<P, Q>>,
             p: Cert<'a, Self, P>,
         ) -> Cert<'a, Self, Q> {
-            Prop::l2().apply(pq.cast()).apply(p.cast()).cast()
+            Prop::l2().mp(pq.cast()).mp(p.cast()).cast()
         }
         fn def<P, Q>() -> Cert<'a, Self, Self::Imply<P, Q>>
         where
