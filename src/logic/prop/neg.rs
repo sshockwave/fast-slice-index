@@ -10,11 +10,11 @@ pub trait Contraposition<'a>: Imply<'a> + Negation<'a> {
 }
 
 pub trait DoubleNegElim<'a>: PropLogic<'a> + Negation<'a> {
-    fn l3<P: Clone + 'a>() -> Cert<'a, Self, Self::Imply<Self::Neg<Self::Neg<P>>, P>>;
+    fn double_neg_elim<P: Clone + 'a>() -> Cert<'a, Self, Self::Imply<Self::Neg<Self::Neg<P>>, P>>;
 }
 
 pub trait DoubleNegIntro<'a>: PropLogic<'a> + Negation<'a> {
-    fn l3<P: Clone + 'a>() -> Cert<'a, Self, Self::Imply<P, Self::Neg<Self::Neg<P>>>>;
+    fn double_neg_intro<P: Clone + 'a>() -> Cert<'a, Self, Self::Imply<P, Self::Neg<Self::Neg<P>>>>;
 }
 
 /// Peirce's law: ((P → Q) → P) → P
@@ -73,7 +73,7 @@ impl<'a, Prop> DoubleNegElim<'a> for ProofRing<Prop>
 where
     Prop: Contraposition<'a> + PropLogic<'a>,
 {
-    fn l3<P: Clone + 'a>() -> Cert<'a, Self, Self::Imply<Self::Neg<Self::Neg<P>>, P>> {
+    fn double_neg_elim<P: Clone + 'a>() -> Cert<'a, Self, Self::Imply<Self::Neg<Self::Neg<P>>, P>> {
         // https://math.stackexchange.com/questions/4634566/prove-that-contrapositive-rule-is-equivalent-to-the-rule-of-double-negation
         syllogism::<_, _, _, Prop>()
             .mp(Prop::l1())
@@ -87,10 +87,9 @@ where
 }
 
 impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> DoubleNegIntro<'a> for ProofRing<Prop> {
-    fn l3<P: Clone + 'a>() -> Cert<'a, Self, Self::Imply<P, Self::Neg<Self::Neg<P>>>> {
-        Prop::l3()
-            .mp(<ProofRing<Prop> as DoubleNegElim<'_>>::l3().cast())
-            .cast()
+    fn double_neg_intro<P: Clone + 'a>() -> Cert<'a, Self, Self::Imply<P, Self::Neg<Self::Neg<P>>>>
+    {
+        Prop::l3().cast().mp(Self::double_neg_elim())
     }
 }
 
@@ -103,7 +102,7 @@ impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> Reductio<'a> for ProofRing<Pr
         // (¬¬Q → ¬P) → (Q → ¬P)
         let pre = Prop::mp(
             syllogism::<_, _, _, Prop>(),
-            <ProofRing<Prop> as DoubleNegIntro<'_>>::l3::<Q>().cast(),
+            Self::double_neg_intro::<Q>().cast(),
         );
         syllogism::<_, _, _, Prop>()
             .mp(transposition::<P, Prop::Neg<Q>, Prop>())
@@ -113,17 +112,14 @@ impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> Reductio<'a> for ProofRing<Pr
 }
 
 pub trait ExFalsoQuodlibet<'a>: PropLogic<'a> + Negation<'a> {
-    fn l3<P: Clone + 'a, Q: Clone + 'a>()
+    fn ex_falso_quodlibet<P: Clone + 'a, Q: Clone + 'a>()
     -> Cert<'a, Self, Self::Imply<Self::Neg<P>, Self::Imply<P, Q>>>;
 }
 
 impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> ExFalsoQuodlibet<'a> for ProofRing<Prop> {
-    fn l3<P: Clone + 'a, Q: Clone + 'a>()
+    fn ex_falso_quodlibet<P: Clone + 'a, Q: Clone + 'a>()
     -> Cert<'a, Self, Self::Imply<Self::Neg<P>, Self::Imply<P, Q>>> {
-        syllogism::<_, _, _, Prop>()
-            .mp(Prop::l1())
-            .mp(Prop::l3())
-            .cast()
+        syllogism().mp(Prop::l1()).mp(Prop::l3()).cast()
     }
 }
 
@@ -134,8 +130,8 @@ where
     Q: Clone + 'a,
 {
     syllogism::<_, _, _, Prop>()
-        .mp(<ProofRing<Prop> as ExFalsoQuodlibet<'_>>::l3().cast())
-        .mp(<ProofRing<Prop> as DoubleNegIntro<'_>>::l3().cast())
+        .mp(ProofRing::<Prop>::ex_falso_quodlibet().cast())
+        .mp(ProofRing::<Prop>::double_neg_intro().cast())
         .pipe(Prop::l3())
 }
 
@@ -146,26 +142,18 @@ where
 pub fn transposition<'a, P: Clone + 'a, Q: Clone + 'a, Prop: Contraposition<'a> + PropLogic<'a>>()
 -> Cert<'a, Prop, Prop::Imply<Prop::Imply<P, Q>, Prop::Imply<Prop::Neg<Q>, Prop::Neg<P>>>> {
     // (P → Q) → (¬¬P → Q)
-    let pre = Prop::mp(
-        syllogism::<_, _, _, Prop>(),
-        <ProofRing<Prop> as DoubleNegElim<'_>>::l3::<P>().cast(),
-    );
+    let pre = syllogism().mp(ProofRing::<Prop>::double_neg_elim().cast());
     // (¬¬P → Q) → (¬¬P → ¬¬Q)
-    let post = Prop::mp(
-        Prop::l2(),
-        Prop::mp(
-            Prop::l1(),
-            <ProofRing<Prop> as DoubleNegIntro<'_>>::l3::<Q>().cast(),
-        ),
-    );
-    Prop::mp(
-        Prop::mp(
-            syllogism::<_, _, _, Prop>(),
-            // (P → Q) → (¬¬P → ¬¬Q)
-            Prop::mp(Prop::mp(syllogism::<_, _, _, Prop>(), pre), post),
-        ),
-        Prop::l3(),
-    )
+    let post = ProofRing::<Prop>::double_neg_intro()
+        .cast()
+        .pipe(Prop::l1())
+        .pipe(Prop::l2());
+    // (P → Q) → (¬¬P → ¬¬Q)
+    syllogism()
+        .mp(pre)
+        .mp(post)
+        .pipe(syllogism())
+        .mp(Prop::l3())
 }
 
 /// Consequentia mirabilis: (¬P → P) → P
@@ -177,11 +165,13 @@ pub fn consequentia_mirabilis<'a, P: Clone + 'a, Prop: Contraposition<'a> + Prop
 -> Cert<'a, Prop, Prop::Imply<Prop::Imply<Prop::Neg<P>, P>, P>> {
     // ¬P → (P → ¬(P → P)), distributed over the assumption ¬P → P,
     // yields ¬P → ¬(P → P).
-    let absurd = Prop::l2().mp(<ProofRing<Prop> as ExFalsoQuodlibet<'_>>::l3::<
-        P,
-        Prop::Neg<Prop::Imply<P, P>>,
-    >()
-    .cast());
+    let absurd = Prop::l2().mp(
+        <ProofRing<Prop> as ExFalsoQuodlibet<'_>>::ex_falso_quodlibet::<
+            P,
+            Prop::Neg<Prop::Imply<P, P>>,
+        >()
+        .cast(),
+    );
     // Transposing gives (P → P) → P, and P → P is a theorem.
     Prop::l2()
         .mp(syllogism().mp(absurd).mp(Prop::l3()))
@@ -192,11 +182,10 @@ impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> PeirceLaw<'a> for ProofRing<P
     fn peirce<P: Clone + 'a, Q: Clone + 'a>()
     -> Cert<'a, Self, Self::Imply<Self::Imply<Self::Imply<P, Q>, P>, P>> {
         // ¬P → (P → Q) composed with the antecedent (P → Q) → P gives ¬P → P.
-        let self_deny = syllogism().mp(<ProofRing<Prop> as ExFalsoQuodlibet<'_>>::l3().cast());
-        syllogism::<_, _, _, Prop>()
-            .mp(self_deny)
-            .mp(consequentia_mirabilis())
-            .cast()
+        syllogism()
+            .mp(<Self as ExFalsoQuodlibet<'_>>::ex_falso_quodlibet())
+            .pipe(syllogism())
+            .mp(consequentia_mirabilis::<_, Prop>().cast())
     }
 }
 
@@ -208,7 +197,8 @@ impl<'l, Logic: DoubleNegElim<'l> + Reductio<'l>> Contraposition<'l> for ProofRi
         let intro = <Logic as Reductio<'_>>::reductio::<Logic::Neg<P>, Q>();
         // Double negation under `Q →`, by L2 on Q → (¬¬P → P):
         // (Q → ¬¬P) → (Q → P)
-        let elim = Logic::l2().mp(Logic::l1().mp(<Logic as DoubleNegElim<'_>>::l3::<P>()));
+        let elim =
+            Logic::l2().mp(Logic::l1().mp(<Logic as DoubleNegElim<'_>>::double_neg_elim::<P>()));
         // Chaining the two gives (¬P → ¬Q) → (Q → P).
         syllogism::<_, _, _, Logic>().mp(intro).mp(elim).cast()
     }
@@ -232,7 +222,7 @@ impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> super::And<'l> for ProofRing
                 .mp(Prop::l1().mp(q))
                 // Transposing gives ¬¬P → ¬(Q → ¬P), and ¬¬P follows from P.
                 .pipe(transposition::<_, _, Prop>())
-                .mp(<ProofRing<Prop> as DoubleNegIntro<'_>>::l3()
+                .mp(<ProofRing<Prop> as DoubleNegIntro<'_>>::double_neg_intro()
                     .mp(p.cast())
                     .cast())
         }
@@ -247,14 +237,9 @@ impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> super::And<'l> for ProofRing
         // ¬P → (Q → ¬P) transposes to ¬(Q → ¬P) → ¬¬P, then double negation.
         transposition()
             .mp(Logic::l1::<Logic::Neg<P>, Q>())
-            .cast()
             .upgrade()
             .mp(Deduction::<_, Logic>::assume())
-            .pipe(
-                <ProofRing<Logic> as DoubleNegElim<'_>>::l3()
-                    .cast()
-                    .upgrade(),
-            )
+            .pipe(Self::double_neg_elim().cast().upgrade())
             .cast()
     }
     /// Right elimination: P ∧ Q → Q
@@ -277,7 +262,7 @@ impl<'l, A: Clone + 'l, Logic: Contraposition<'l> + PropLogic<'l>> Contrapositio
 impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> super::Or<'l> for ProofRing<Logic> {
     type Or<P: 'l, Q: 'l> = Logic::Imply<Logic::Neg<P>, Q>;
     fn or_left<P: Clone, Q: Clone>() -> Cert<'l, Self, Self::Imply<P, Self::Or<P, Q>>> {
-        <ProofRing<Logic> as DoubleNegIntro<'_>>::l3()
+        Self::double_neg_intro()
             .cast()
             .upgrade()
             .mp(Deduction::assume())
@@ -311,7 +296,7 @@ impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> super::Or<'l> for ProofRing<
             .mp(Deduction::assume()) // Assume ~R, Got ~~P
             .pipe(
                 // ~~P -> P
-                <Self as DoubleNegElim<'_>>::l3()
+                Self::double_neg_elim()
                     .upgrade()
                     .upgrade()
                     .upgrade()
@@ -333,7 +318,7 @@ impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> Intuitionistic<'l> for Proof
     type False = Self::And<(), Self::Neg<()>>;
     fn explosion<P: Clone>() -> Cert<'l, Self, Self::Imply<Self::False, P>> {
         let absurd = Deduction::assume();
-        <Self as ExFalsoQuodlibet<'l>>::l3()
+        Self::ex_falso_quodlibet()
             .upgrade()
             .mp(absurd.clone().pipe(Self::and_right().upgrade()))
             .mp(absurd.pipe(Self::and_left().upgrade()))
@@ -342,16 +327,16 @@ impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> Intuitionistic<'l> for Proof
     fn neg_def<P: Clone>()
     -> Cert<'l, Self, super::Iff<'l, Self, Self::Neg<P>, Self::Imply<P, Self::False>>> {
         let l2r: Cert<Self, Self::Imply<Self::Neg<P>, Self::Imply<P, Self::False>>> =
-            <Self as ExFalsoQuodlibet<'_>>::l3();
+            Self::ex_falso_quodlibet();
         let neg_false: Cert<Self, Self::Neg<Self::False>> =
-            reflexive().pipe(<Self as DoubleNegIntro<'_>>::l3());
+            reflexive().pipe(Self::double_neg_intro());
         let r2l = Self::l1()
-            .mp(<Self as DoubleNegIntro<'_>>::l3())
+            .mp(Self::double_neg_intro())
             .pipe(Self::l2())
             .pipe(syllogism())
             .mp(
                 syllogism()
-                    .mp(<Self as DoubleNegElim<'_>>::l3()) // ~~p -> p
+                    .mp(Self::double_neg_elim()) // ~~p -> p
                     .mp(Self::and_intro().mp(neg_false)) // p -> (~False & p) = ~(p -> ~~False)
                     .pipe(Logic::l3().cast()), // (p -> ~~False) -> ~p
             );
