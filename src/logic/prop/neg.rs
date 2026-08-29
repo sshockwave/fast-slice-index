@@ -178,14 +178,11 @@ impl<'l, Logic: PeirceLaw<'l> + Negation<'l>> Contraposition<'l> for ProofRing<'
     }
 }
 
-use self::sealed_connectives::{And, Or};
+use self::sealed_connectives::Or;
 mod sealed_connectives {
     use super::{Negation, PropLogic};
     pub struct Or<'a, P: 'a, Q: 'a, Prop: PropLogic<'a> + Negation<'a>>(
         pub(super) Prop::Cert<Prop::Imply<Prop::Neg<P>, Q>>,
-    );
-    pub struct And<'a, P: 'a, Q: 'a, Prop: PropLogic<'a> + Negation<'a>>(
-        pub(super) Prop::Cert<Prop::Neg<Prop::Imply<Q, Prop::Neg<P>>>>,
     );
 }
 
@@ -223,31 +220,25 @@ impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> super::And<'l> for ProofRing
     }
     /// Left elimination: P ∧ Q → P
     fn and_left<P: Clone, Q: Clone>() -> Self::Cert<Self::Imply<Self::And<P, Q>, P>> {
-        // Deduction::<_, Logic>::scope(|and| And::<_, _, Deduction<_, _>>(and).left())
-        let and = Deduction::<Self::And<P, Q>, Logic>::assume();
         // ¬P → (Q → ¬P) transposes to ¬(Q → ¬P) → ¬¬P, then double negation.
-        let a = transposition::<Logic::Neg<P>, Logic::Imply<Q, Logic::Neg<P>>, Logic>()
-            .apply(Logic::l1::<Logic::Neg<P>, Q>());
-        let b: <Deduction<_, Logic> as Imply<'l>>::Cert<Logic::Neg<Logic::Neg<P>>> =
-            Deduction::mp(Deduction::upgrade(a), and);
         Deduction::mp(
             Deduction::upgrade(<ProofRing<Logic> as DoubleNegation<'_>>::l3()),
-            b,
+            Deduction::mp(
+                Deduction::upgrade(
+                    transposition::<_, _, Logic>().apply(Logic::l1::<Logic::Neg<P>, Q>()),
+                ),
+                Deduction::<_, Logic>::assume(),
+            ),
         )
         .finish()
     }
-    fn and_right<P, Q>() -> Self::Cert<Self::Imply<Self::And<P, Q>, Q>> {
-        todo!()
-    }
-}
-
-impl<'a, P: 'a, Q: 'a, Prop: Contraposition<'a> + PropLogic<'a>> And<'a, P, Q, Prop> {
     /// Right elimination: P ∧ Q → Q
-    pub fn right(self) -> Prop::Cert<Q>
-    where
-        Q: Clone,
-    {
-        simplification::<_, _, Prop>().apply(self.0)
+    fn and_right<P, Q: Clone>() -> Self::Cert<Self::Imply<Self::And<P, Q>, Q>> {
+        Deduction::mp(
+            Deduction::upgrade(simplification::<_, _, Logic>()),
+            Deduction::<_, Logic>::assume(),
+        )
+        .finish()
     }
 }
 

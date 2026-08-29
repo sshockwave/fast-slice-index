@@ -51,7 +51,7 @@ pub trait Negation<'l> {
 pub trait And<'l>: PropLogic<'l> {
     type And<P: 'l, Q: 'l>: Clone;
     fn and_left<P: Clone, Q: Clone>() -> Self::Cert<Self::Imply<Self::And<P, Q>, P>>;
-    fn and_right<P, Q>() -> Self::Cert<Self::Imply<Self::And<P, Q>, Q>>;
+    fn and_right<P: Clone, Q: Clone>() -> Self::Cert<Self::Imply<Self::And<P, Q>, Q>>;
     fn and_intro<P: Clone, Q: Clone>() -> Self::Cert<Self::Imply<P, Self::Imply<Q, Self::And<P, Q>>>>;
 }
 
