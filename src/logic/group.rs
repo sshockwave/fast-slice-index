@@ -50,7 +50,7 @@
 //! instead of mixing the operation's `Imply` with the field's.
 
 use crate::logic::function::{Equality, View};
-use crate::logic::prop::{And, Contraposition, Neg, PropLogic};
+use crate::logic::prop::{And, Contraposition, Negation, PropLogic};
 
 /// Type alias: "e is neutral for the operation"
 /// Equivalent to: ∀y. El(y) → e ∘ y = y
@@ -84,14 +84,10 @@ pub type IsUnitLike<'l, 'e, M, Eq> = &'l dyn for<'y> View<
 /// ill-formed inside a concrete `for<'n> View<'n>` predicate, which would
 /// render schemas like [`crate::logic::rat::Rationals::prime_field`]
 /// uninstantiable.
-///
-/// `Eq: Contraposition<'l>` rather than just [`Equality`]: the existentials
-/// below use the classical encoding `∃x. A ∧ B ≡ ¬∀x. A → ¬B`, which is not
-/// intuitionistically valid.
 pub trait CommutativeMonoid<'l, Eq>
 where
     Self: 'l,
-    Eq: Contraposition<'l> + Equality<'l> + ?Sized,
+    Eq: PropLogic<'l> + Negation<'l> + Equality<'l> + ?Sized,
 {
     /// Carrier predicate: which elements the operation is defined on
     type El<'x>;
@@ -109,10 +105,10 @@ where
                     Self::El<'x>,
                     Eq::Imply<
                         Self::El<'y>,
-                        Neg<
+                        Eq::Neg<
                             &'l dyn for<'z> View<
                                 'z,
-                                Output = Eq::Imply<Self::El<'z>, Neg<Self::Op<'x, 'y, 'z>>>,
+                                Output = Eq::Imply<Self::El<'z>, Eq::Neg<Self::Op<'x, 'y, 'z>>>,
                             >,
                         >,
                     >,
@@ -205,10 +201,10 @@ where
 
     /// Identity exists: ∃e. El(e) ∧ IsUnitLike(e)
     fn identity_exists() -> Eq::Cert<
-        Neg<
+        Eq::Neg<
             &'l dyn for<'e> View<
                 'e,
-                Output = Eq::Imply<Self::El<'e>, Neg<IsUnitLike<'l, 'e, Self, Eq>>>,
+                Output = Eq::Imply<Self::El<'e>, Eq::Neg<IsUnitLike<'l, 'e, Self, Eq>>>,
             >,
         >,
     >;
@@ -230,12 +226,12 @@ where
             'x,
             Output = Eq::Imply<
                 Self::El<'x>,
-                Neg<
+                Eq::Neg<
                     &'l dyn for<'y> View<
                         'y,
                         Output = Eq::Imply<
                             Self::El<'y>,
-                            Neg<
+                            Eq::Neg<
                                 &'l dyn for<'z> View<
                                     'z,
                                     Output = Eq::Imply<

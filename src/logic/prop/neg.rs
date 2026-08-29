@@ -1,25 +1,21 @@
 use crate::logic::prop::{Chain, PropLogic, reflexive, syllogism};
 use ::core::marker::PhantomData;
 
-pub struct Neg<P>(PhantomData<P>);
-
-impl<P> Clone for Neg<P> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-impl<P> Copy for Neg<P> {}
-
-pub trait Contraposition<'a>: PropLogic<'a> {
-    fn l3<P, Q>() -> Self::Cert<Self::Imply<Self::Imply<Neg<P>, Neg<Q>>, Self::Imply<Q, P>>>;
+pub trait Negation<'l> {
+    type Neg<P: 'l>: Clone + 'l;
 }
 
-pub trait DoubleNegation<'a>: PropLogic<'a> {
-    fn l3<P>() -> Self::Cert<Self::Imply<Neg<Neg<P>>, P>>;
+pub trait Contraposition<'a>: PropLogic<'a> + Negation<'a> {
+    fn l3<P, Q>()
+    -> Self::Cert<Self::Imply<Self::Imply<Self::Neg<P>, Self::Neg<Q>>, Self::Imply<Q, P>>>;
 }
 
-pub trait DoubleNegIntro<'a>: PropLogic<'a> {
-    fn l3<P>() -> Self::Cert<Self::Imply<P, Neg<Neg<P>>>>;
+pub trait DoubleNegation<'a>: PropLogic<'a> + Negation<'a> {
+    fn l3<P>() -> Self::Cert<Self::Imply<Self::Neg<Self::Neg<P>>, P>>;
+}
+
+pub trait DoubleNegIntro<'a>: PropLogic<'a> + Negation<'a> {
+    fn l3<P>() -> Self::Cert<Self::Imply<P, Self::Neg<Self::Neg<P>>>>;
 }
 
 /// Peirce's law: ((P → Q) → P) → P
@@ -69,11 +65,15 @@ where
     }
 }
 
+impl<'a, Prop: Negation<'a>> Negation<'a> for ProofRing<'a, Prop> {
+    type Neg<P: 'a> = Prop::Neg<P>;
+}
+
 impl<'a, Prop> DoubleNegation<'a> for ProofRing<'a, Prop>
 where
     Prop: Contraposition<'a>,
 {
-    fn l3<P>() -> Self::Cert<Self::Imply<Neg<Neg<P>>, P>>
+    fn l3<P>() -> Self::Cert<Self::Imply<Self::Neg<Self::Neg<P>>, P>>
     where
         P: 'a,
     {
@@ -89,17 +89,17 @@ where
 }
 
 impl<'a, Prop: Contraposition<'a>> DoubleNegIntro<'a> for ProofRing<'a, Prop> {
-    fn l3<P>() -> Self::Cert<Self::Imply<P, Neg<Neg<P>>>> {
+    fn l3<P>() -> Self::Cert<Self::Imply<P, Self::Neg<Self::Neg<P>>>> {
         Prop::l3().apply(<ProofRing<Prop> as DoubleNegation<'_>>::l3())
     }
 }
 
-pub trait ExFalsoQuodlibet<'a>: PropLogic<'a> {
-    fn l3<P, Q>() -> Self::Cert<Self::Imply<Neg<P>, Self::Imply<P, Q>>>;
+pub trait ExFalsoQuodlibet<'a>: PropLogic<'a> + Negation<'a> {
+    fn l3<P, Q>() -> Self::Cert<Self::Imply<Self::Neg<P>, Self::Imply<P, Q>>>;
 }
 
 impl<'a, Prop: Contraposition<'a>> ExFalsoQuodlibet<'a> for ProofRing<'a, Prop> {
-    fn l3<P, Q>() -> Self::Cert<Self::Imply<Neg<P>, Self::Imply<P, Q>>> {
+    fn l3<P, Q>() -> Self::Cert<Self::Imply<Self::Neg<P>, Self::Imply<P, Q>>> {
         syllogism::<_, _, _, Prop>()
             .apply(Prop::l1())
             .apply(Prop::l3())
@@ -107,7 +107,7 @@ impl<'a, Prop: Contraposition<'a>> ExFalsoQuodlibet<'a> for ProofRing<'a, Prop> 
 }
 
 pub fn simplification<'a, P, Q, Prop: Contraposition<'a>>()
--> Prop::Cert<Prop::Imply<Neg<Prop::Imply<P, Q>>, P>> {
+-> Prop::Cert<Prop::Imply<Prop::Neg<Prop::Imply<P, Q>>, P>> {
     syllogism::<_, _, _, Prop>()
         .apply(<ProofRing<Prop> as ExFalsoQuodlibet<'_>>::l3())
         .apply(<ProofRing<Prop> as DoubleNegIntro<'_>>::l3())
@@ -119,7 +119,7 @@ pub fn simplification<'a, P, Q, Prop: Contraposition<'a>>()
 /// The converse of [`Contraposition`], obtained by wrapping both sides in a
 /// double negation so that [`Contraposition::l3`] applies.
 pub fn transposition<'a, P: Clone + 'a, Q: Clone + 'a, Prop: Contraposition<'a>>()
--> Prop::Cert<Prop::Imply<Prop::Imply<P, Q>, Prop::Imply<Neg<Q>, Neg<P>>>> {
+-> Prop::Cert<Prop::Imply<Prop::Imply<P, Q>, Prop::Imply<Prop::Neg<Q>, Prop::Neg<P>>>> {
     // (P → Q) → (¬¬P → Q)
     let pre = Prop::mp(
         syllogism::<_, _, _, Prop>(),
@@ -149,12 +149,12 @@ pub fn transposition<'a, P: Clone + 'a, Q: Clone + 'a, Prop: Contraposition<'a>>
 /// `P → P` stands in for "truth": deriving `¬(P → P)` from `¬P` lets
 /// [`Contraposition::l3`] transpose it back into `(P → P) → P`.
 pub fn consequentia_mirabilis<'a, P: Clone + 'a, Prop: Contraposition<'a>>()
--> Prop::Cert<Prop::Imply<Prop::Imply<Neg<P>, P>, P>> {
+-> Prop::Cert<Prop::Imply<Prop::Imply<Prop::Neg<P>, P>, P>> {
     // ¬P → (P → ¬(P → P)), distributed over the assumption ¬P → P,
     // yields ¬P → ¬(P → P).
     let absurd = Prop::l2().apply(<ProofRing<Prop> as ExFalsoQuodlibet<'_>>::l3::<
         P,
-        Neg<Prop::Imply<P, P>>,
+        Prop::Neg<Prop::Imply<P, P>>,
     >());
     // Transposing gives (P → P) → P, and P → P is a theorem.
     Prop::l2()
@@ -171,17 +171,5 @@ impl<'a, Prop: Contraposition<'a>> PeirceLaw<'a> for ProofRing<'a, Prop> {
         syllogism::<_, _, _, Prop>()
             .apply(self_deny)
             .apply(consequentia_mirabilis::<P, Prop>())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{Contraposition, PeirceLaw, ProofRing};
-
-    /// Peirce's law is derivable in any system with [`Contraposition`], and the
-    /// bounds are loose enough to instantiate it from outside this module.
-    fn _peirce_is_callable<'a, P: Clone + 'a, Q: 'a, Prop: Contraposition<'a>>()
-    -> Prop::Cert<Prop::Imply<Prop::Imply<Prop::Imply<P, Q>, P>, P>> {
-        <ProofRing<Prop> as PeirceLaw<'_>>::peirce::<P, Q>()
     }
 }

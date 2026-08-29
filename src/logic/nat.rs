@@ -1,5 +1,5 @@
 use crate::logic::function::{Equality, Function, Injection, View};
-use crate::logic::prop::{And, Neg, PropLogic};
+use crate::logic::prop::{And, Contraposition, Negation, PropLogic};
 
 /// Type alias: "x is a natural number"
 /// Equivalent to: x ∈ Dom(SuccFn)
@@ -14,7 +14,7 @@ pub type IsZeroLike<'l, 'x, N> = &'l dyn for<'p> View<
         's,
         Output = <N as PropLogic<'l>>::Imply<
             <<N as NaturalNumbers<'l>>::SuccFn as Function<'l, N>>::F<'p, 's>,
-            Neg<<N as Equality<'l>>::Eq<'s, 'x>>,
+            <N as Negation<'l>>::Neg<<N as Equality<'l>>::Eq<'s, 'x>>,
         >,
     >,
 >;
@@ -31,10 +31,7 @@ pub type IsZero<'l, 'x, N> = And<'l, IsNat<'l, 'x, N>, IsZeroLike<'l, 'x, N>, N>
 /// - SuccFn::Dom and SuccFn::Codom define what counts as a natural number
 /// - Zero is defined existentially: ∃z. ∀n∀s. Succ(n,s) → s≠z
 /// - Induction uses P as a type parameter (schema) to remain predicative
-pub trait NaturalNumbers<'l>: Equality<'l>
-where
-    Self: 'l,
-{
+pub trait NaturalNumbers<'l>: Equality<'l> + Contraposition<'l> {
     /// Successor function: ℕ → ℕ
     /// An injection from natural numbers to natural numbers
     /// SuccFn::F<'x, 'y> means "y is the successor of x"
@@ -43,10 +40,10 @@ where
     /// Zero is defined existentially: ∃z. IsNat(z) ∧ IsZeroLike(z)
     /// "There exists a natural number such that no natural's successor equals it"
     fn zero_exists() -> Self::Cert<
-        Neg<
+        <Self as Negation<'l>>::Neg<
             &'l dyn for<'z> View<
                 'z,
-                Output = Self::Imply<IsNat<'l, 'z, Self>, Neg<IsZeroLike<'l, 'z, Self>>>,
+                Output = Self::Imply<IsNat<'l, 'z, Self>, Self::Neg<IsZeroLike<'l, 'z, Self>>>,
             >,
         >,
     >;
@@ -61,10 +58,7 @@ where
             // P(0) - predicate holds for zero
             &'l dyn for<'z> View<
                 'z,
-                Output = Self::Imply<
-                    IsNat<'l, 'z, Self>,
-                    Self::Imply<IsZeroLike<'l, 'z, Self>, <P as View<'z>>::Output>,
-                >,
+                Output = Self::Imply<IsNat<'l, 'z, Self>, Self::Neg<IsZeroLike<'l, 'z, Self>>>,
             >,
             Self::Imply<
                 // ∀n. P(n) → P(succ(n))

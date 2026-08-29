@@ -1,4 +1,4 @@
-use crate::logic::prop::{Neg, PropLogic};
+use crate::logic::prop::{Negation, PropLogic};
 
 pub trait View<'x> {
     type Output;
@@ -71,7 +71,7 @@ where
 pub trait Function<'l, Eq>: PropLogic<'l>
 where
     Self: 'l,
-    Eq: Equality<'l> + ?Sized,
+    Eq: Equality<'l> + Negation<'l> + ?Sized,
 {
     /// The function's graph: F<'x, 'y> means "F maps x to y"
     /// This is an associated type, not a quantified predicate
@@ -91,10 +91,10 @@ where
             Output = Self::Imply<
                 Self::Dom<'x>,
                 // ∃y. Codom(y) ∧ F(x,y)
-                Neg<
+                Eq::Neg<
                     &'l dyn for<'y> View<
                         'y,
-                        Output = Self::Imply<Self::Codom<'y>, Neg<Self::F<'x, 'y>>>,
+                        Output = Self::Imply<Self::Codom<'y>, Eq::Neg<Self::F<'x, 'y>>>,
                     >,
                 >,
             >,
@@ -135,7 +135,7 @@ where
 pub trait Injection<'l, Eq>: Function<'l, Eq>
 where
     Self: 'l,
-    Eq: Equality<'l> + ?Sized,
+    Eq: Equality<'l> + Negation<'l>,
 {
     /// Injective: ∀x ∀y ∀z. F(x,z) ∧ F(y,z) → x = y
     /// Different inputs map to different outputs

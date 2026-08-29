@@ -6,7 +6,7 @@ mod neg;
 pub use self::{
     imply::{Chain, PropLogic, PropLogicThm},
     neg::{
-        Contraposition, DoubleNegIntro, DoubleNegation, ExFalsoQuodlibet, Neg, PeirceLaw,
+        Contraposition, DoubleNegIntro, DoubleNegation, ExFalsoQuodlibet, Negation, PeirceLaw,
         ProofRing as NegProofRing, consequentia_mirabilis, simplification, transposition,
     },
 };
@@ -129,9 +129,11 @@ where
     })
 }
 
-pub struct Or<'a, P: 'a, Q: 'a, Prop: PropLogic<'a> + ?Sized>(Prop::Cert<Prop::Imply<Neg<P>, Q>>);
-pub struct And<'a, P: 'a, Q: 'a, Prop: PropLogic<'a> + ?Sized>(
-    Prop::Cert<Neg<Prop::Imply<Q, Neg<P>>>>,
+pub struct Or<'a, P: 'a, Q: 'a, Prop: PropLogic<'a> + Negation<'a>>(
+    Prop::Cert<Prop::Imply<Prop::Neg<P>, Q>>,
+);
+pub struct And<'a, P: 'a, Q: 'a, Prop: PropLogic<'a> + Negation<'a>>(
+    Prop::Cert<Prop::Neg<Prop::Imply<Q, Prop::Neg<P>>>>,
 );
 
 impl<'a, P: 'a, Q: 'a, Prop: Contraposition<'a>> And<'a, P, Q, Prop> {
@@ -159,7 +161,7 @@ impl<'a, P: 'a, Q: 'a, Prop: Contraposition<'a>> And<'a, P, Q, Prop> {
     {
         // ¬P → (Q → ¬P) transposes to ¬(Q → ¬P) → ¬¬P, then double negation.
         transposition::<_, _, Prop>()
-            .apply(Prop::l1::<Neg<P>, Q>())
+            .apply(Prop::l1::<Prop::Neg<P>, Q>())
             .apply(self.0)
             .pipe(<NegProofRing<Prop> as DoubleNegation<'_>>::l3())
     }
@@ -191,10 +193,10 @@ impl<'a, P: 'a, Q: 'a, Prop: Contraposition<'a>> Or<'a, P, Q, Prop> {
     {
         Self(Prop::l1().apply(q))
     }
-    pub fn p_to_q(self) -> Prop::Cert<Prop::Imply<Neg<P>, Q>> {
+    pub fn p_to_q(self) -> Prop::Cert<Prop::Imply<Prop::Neg<P>, Q>> {
         self.0
     }
-    pub fn q_to_p(self) -> Prop::Cert<Prop::Imply<Neg<Q>, P>>
+    pub fn q_to_p(self) -> Prop::Cert<Prop::Imply<Prop::Neg<Q>, P>>
     where
         P: Clone,
     {
@@ -206,6 +208,6 @@ impl<'a, P: 'a, Q: 'a, Prop: Contraposition<'a>> Or<'a, P, Q, Prop> {
     }
 }
 
-pub struct Iff<'a, P: 'a, Q: 'a, Prop: PropLogic<'a> + ?Sized>(
+pub struct Iff<'a, P: 'a, Q: 'a, Prop: Contraposition<'a>>(
     And<'a, Prop::Imply<P, Q>, Prop::Imply<Q, P>, Prop>,
 );

@@ -33,7 +33,7 @@ pub trait Chain<'l, Prop: PropLogic<'l> + ?Sized, PQ: Clone + 'l> {
 /// This is a logic system where all theorems are derived from axioms using inference rules.
 /// Rust type system implies propositional logic,
 /// so we can prove this in [`PropLogicThm`] without any unsafe code.
-pub trait PropLogic<'a> {
+pub trait PropLogic<'a>: Sized {
     /// Implication: P implies Q
     type Imply<P: 'a, Q: 'a>: Clone + 'a;
 

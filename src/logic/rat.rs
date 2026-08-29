@@ -1,6 +1,6 @@
 use crate::logic::function::{Equality, View};
 use crate::logic::group::{AbelianGroup, CommutativeMonoid, IsUnitLike};
-use crate::logic::prop::{And, Contraposition, Iff, Neg, Or};
+use crate::logic::prop::{And, Contraposition, Iff, Negation, Or};
 
 /// Type alias: "x is a rational"
 /// Equivalent to: x is in the additive group's carrier
@@ -39,8 +39,12 @@ pub type IsOneLike<'l, 'x, Q> = IsUnitLike<'l, 'x, <Q as Rationals<'l>>::Mul, Q>
 /// The `Neg<IsZeroLike>` conjunct is the field's nontriviality condition
 /// (1 ≠ 0), which rules out the one-element degenerate "field"; it is
 /// discharged by [`Rationals::nontrivial`].
-pub type IsOne<'l, 'x, Q> =
-    And<'l, IsRat<'l, 'x, Q>, And<'l, IsOneLike<'l, 'x, Q>, Neg<IsZeroLike<'l, 'x, Q>>, Q>, Q>;
+pub type IsOne<'l, 'x, Q> = And<
+    'l,
+    IsRat<'l, 'x, Q>,
+    And<'l, IsOneLike<'l, 'x, Q>, <Q as Negation<'l>>::Neg<IsZeroLike<'l, 'x, Q>>, Q>,
+    Q,
+>;
 
 /// Rational numbers as the prime ordered field
 ///
@@ -67,10 +71,7 @@ pub type IsOne<'l, 'x, Q> =
 /// encoding is strictly weaker than the existential it stands for, and the
 /// witnesses in [`AbelianGroup::inverse`] and [`Rationals::mul_inverse`] could
 /// not be extracted.
-pub trait Rationals<'l>: Equality<'l> + Contraposition<'l>
-where
-    Self: 'l,
-{
+pub trait Rationals<'l>: Equality<'l> + Contraposition<'l> + 'l {
     /// Addition: an abelian group on all of ℚ
     ///
     /// [`AbelianGroup::inverse`] is the additive inverse axiom, and
@@ -107,7 +108,7 @@ where
     fn nontrivial() -> Self::Cert<
         &'l dyn for<'x> View<
             'x,
-            Output = Self::Imply<IsOneLike<'l, 'x, Self>, Neg<IsZeroLike<'l, 'x, Self>>>,
+            Output = Self::Imply<IsOneLike<'l, 'x, Self>, Self::Neg<IsZeroLike<'l, 'x, Self>>>,
         >,
     >;
 
@@ -124,13 +125,13 @@ where
             Output = Self::Imply<
                 IsRat<'l, 'x, Self>,
                 Self::Imply<
-                    Neg<IsZeroLike<'l, 'x, Self>>,
-                    Neg<
+                    Self::Neg<IsZeroLike<'l, 'x, Self>>,
+                    Self::Neg<
                         &'l dyn for<'y> View<
                             'y,
                             Output = Self::Imply<
                                 IsRat<'l, 'y, Self>,
-                                Neg<
+                                Self::Neg<
                                     &'l dyn for<'z> View<
                                         'z,
                                         Output = Self::Imply<
@@ -203,7 +204,7 @@ where
     >;
 
     /// Irreflexive: ∀x. ¬(x < x)
-    fn lt_irrefl() -> Self::Cert<&'l dyn for<'x> View<'x, Output = Neg<Self::Lt<'x, 'x>>>>;
+    fn lt_irrefl() -> Self::Cert<&'l dyn for<'x> View<'x, Output = Self::Neg<Self::Lt<'x, 'x>>>>;
 
     /// Transitive: ∀x ∀y ∀z. x < y → y < z → x < z
     fn lt_trans() -> Self::Cert<
@@ -388,7 +389,7 @@ where
                                     Output = Self::Imply<
                                         <P as View<'x>>::Output,
                                         Self::Imply<
-                                            Neg<IsZeroLike<'l, 'x, Self>>,
+                                            Self::Neg<IsZeroLike<'l, 'x, Self>>,
                                             Self::Imply<
                                                 Prod<'l, 'x, 'y, 'z, Self>,
                                                 Self::Imply<

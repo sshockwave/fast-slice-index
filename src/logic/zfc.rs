@@ -1,4 +1,4 @@
-use crate::logic::prop::{And, Contraposition, Iff, Neg, PropLogic};
+use crate::logic::prop::{And, Contraposition, Iff, Negation, PropLogic};
 use ::core::marker::PhantomData;
 
 pub trait View<'x> {
@@ -9,13 +9,14 @@ pub trait Spec<'x, 'w, 'z> {
     type Output;
 }
 
-pub type Empty<'l, 'x, P> = dyn for<'y> View<'y, Output = Neg<<P as ZF<'l>>::In<'y, 'x>>> + 'l;
+pub type Empty<'l, 'x, P> =
+    dyn for<'y> View<'y, Output = <P as Negation<'l>>::Neg<<P as ZF<'l>>::In<'y, 'x>>> + 'l;
 
 pub type Disjoint<'l, 'x, 'y, P> = dyn for<'z> View<
         'z,
         Output = <P as PropLogic<'l>>::Imply<
             <P as ZF<'l>>::In<'z, 'x>,
-            Neg<<P as ZF<'l>>::In<'z, 'y>>,
+            <P as Negation<'l>>::Neg<<P as ZF<'l>>::In<'z, 'y>>,
         >,
     > + 'l;
 
@@ -24,7 +25,7 @@ pub type Subset<'l, 'x, 'y, P> = dyn for<'z> View<
         Output = <P as PropLogic<'l>>::Imply<<P as ZF<'l>>::In<'z, 'x>, <P as ZF<'l>>::In<'z, 'y>>,
     > + 'l;
 
-pub trait ZF<'l>: Contraposition<'l> + 'l {
+pub trait ZF<'l>: Contraposition<'l> + Sized + 'l {
     type In<'b: 'l, 'c: 'l>;
 
     // First-order Logic
@@ -55,8 +56,8 @@ pub trait ZF<'l>: Contraposition<'l> + 'l {
             Output = Self::Imply<
                 dyn for<'y> View<
                         'y,
-                        Output = Neg<
-                            Self::Imply<Disjoint<'y, 'x, 'y, Self>, Neg<Self::In<'y, 'x>>>,
+                        Output = Self::Neg<
+                            Self::Imply<Disjoint<'y, 'x, 'y, Self>, Self::Neg<Self::In<'y, 'x>>>,
                         >,
                     > + 'l,
                 // We can't find a disjoint member, the set must be empty.
@@ -69,10 +70,10 @@ pub trait ZF<'l>: Contraposition<'l> + 'l {
             'z,
             Output = dyn for<'w> View<
                 'w,
-                Output = Neg<
+                Output = Self::Neg<
                     dyn for<'y> View<
                             'y,
-                            Output = Neg<
+                            Output = Self::Neg<
                                 dyn for<'x> View<
                                         'x,
                                         Output = Iff<
@@ -81,9 +82,9 @@ pub trait ZF<'l>: Contraposition<'l> + 'l {
                                             <S as Spec<'x, 'w, 'z>>::Output,
                                             Self,
                                         >,
-                                    >,
+                                    > + 'l,
                             >,
-                        >,
+                        > + 'l,
                 >,
             > + 'l,
         >;
@@ -92,21 +93,21 @@ pub trait ZF<'l>: Contraposition<'l> + 'l {
             'x,
             Output = dyn for<'y> View<
                 'y,
-                Output = Neg<
+                Output = Self::Neg<
                     dyn for<'z> View<
                             'z,
-                            Output = Self::Imply<Self::In<'x, 'z>, Neg<Self::In<'y, 'z>>>,
-                        >,
+                            Output = Self::Imply<Self::In<'x, 'z>, Self::Neg<Self::In<'y, 'z>>>,
+                        > + 'l,
                 >,
             > + 'l,
         > + 'l;
 
     fn union() -> dyn for<'f> View<
             'f,
-            Output = Neg<
+            Output = Self::Neg<
                 dyn for<'a> View<
                         'a,
-                        Output = Neg<
+                        Output = Self::Neg<
                             dyn for<'y> View<
                                     'y,
                                     Output = dyn for<'x> View<
@@ -116,9 +117,9 @@ pub trait ZF<'l>: Contraposition<'l> + 'l {
                                             Self::In<'x, 'a>,
                                         >,
                                     > + 'l,
-                                >,
+                                > + 'l,
                         >,
-                    >,
+                    > + 'l,
             >,
         >;
 
@@ -127,19 +128,19 @@ pub trait ZF<'l>: Contraposition<'l> + 'l {
 
     fn power_set() -> dyn for<'x> View<
             'x,
-            Output = Neg<
+            Output = Self::Neg<
                 dyn for<'y> View<
                         'y,
-                        Output = Neg<
+                        Output = Self::Neg<
                             dyn for<'z> View<
                                     'z,
                                     Output = Self::Imply<
                                         Subset<'l, 'z, 'x, Self>,
                                         Self::In<'z, 'y>,
                                     >,
-                                >,
+                                > + 'l,
                         >,
-                    >,
+                    > + 'l,
             >,
         >;
 }
