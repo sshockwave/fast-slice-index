@@ -1,4 +1,7 @@
-use crate::logic::prop::{And, Contraposition, Iff, Imply, Negation};
+use crate::logic::prop::{
+    Contraposition, Imply, Negation,
+    neg::{And, Iff},
+};
 
 pub trait View<'x> {
     type Output;

@@ -181,3 +181,86 @@ impl<'l, Prop: PeirceLaw<'l>> Contraposition<'l> for IntuitionisticImpl<'l, Prop
         todo!()
     }
 }
+
+pub struct Or<'a, P: 'a, Q: 'a, Prop: PropLogic<'a> + Negation<'a>>(
+    Prop::Cert<Prop::Imply<Prop::Neg<P>, Q>>,
+);
+pub struct And<'a, P: 'a, Q: 'a, Prop: PropLogic<'a> + Negation<'a>>(
+    Prop::Cert<Prop::Neg<Prop::Imply<Q, Prop::Neg<P>>>>,
+);
+
+impl<'a, P: 'a, Q: 'a, Prop: Contraposition<'a>> And<'a, P, Q, Prop> {
+    pub fn intro(p: Prop::Cert<P>, q: Prop::Cert<Q>) -> Self
+    where
+        P: Clone,
+        Q: Clone,
+    {
+        Self(
+            // From Q, derive (Q → ¬P) → ¬P by modus ponens on the assumption.
+            Prop::l2()
+                .apply(reflexive::<_, Prop>())
+                .apply(Prop::l1().apply(q))
+                // Transposing gives ¬¬P → ¬(Q → ¬P), and ¬¬P follows from P.
+                .pipe(transposition::<_, _, Prop>())
+                .apply(<ProofRing<Prop> as DoubleNegIntro<'_>>::l3().apply(p)),
+        )
+    }
+
+    /// Left elimination: P ∧ Q → P
+    pub fn left(self) -> Prop::Cert<P>
+    where
+        P: Clone,
+        Q: Clone,
+    {
+        // ¬P → (Q → ¬P) transposes to ¬(Q → ¬P) → ¬¬P, then double negation.
+        transposition::<_, _, Prop>()
+            .apply(Prop::l1::<Prop::Neg<P>, Q>())
+            .apply(self.0)
+            .pipe(<ProofRing<Prop> as DoubleNegation<'_>>::l3())
+    }
+
+    /// Right elimination: P ∧ Q → Q
+    pub fn right(self) -> Prop::Cert<Q>
+    where
+        Q: Clone,
+    {
+        simplification::<_, _, Prop>().apply(self.0)
+    }
+}
+
+impl<'a, P: 'a, Q: 'a, Prop: Contraposition<'a>> Or<'a, P, Q, Prop> {
+    pub fn intro_left(p: Prop::Cert<P>) -> Self
+    where
+        P: Clone,
+    {
+        Self(
+            <ProofRing<Prop> as DoubleNegIntro<'_>>::l3()
+                .apply(p)
+                .pipe(Prop::l1())
+                .pipe(Prop::l3()),
+        )
+    }
+    pub fn intro_right(q: Prop::Cert<Q>) -> Self
+    where
+        Q: Clone,
+    {
+        Self(Prop::l1().apply(q))
+    }
+    pub fn p_to_q(self) -> Prop::Cert<Prop::Imply<Prop::Neg<P>, Q>> {
+        self.0
+    }
+    pub fn q_to_p(self) -> Prop::Cert<Prop::Imply<Prop::Neg<Q>, P>>
+    where
+        P: Clone,
+    {
+        Prop::l1()
+            .apply(<ProofRing<Prop> as DoubleNegIntro<'_>>::l3())
+            .pipe(Prop::l2())
+            .apply(self.0)
+            .pipe(Prop::l3())
+    }
+}
+
+pub struct Iff<'a, P: 'a, Q: 'a, Prop: Contraposition<'a>>(
+    And<'a, Prop::Imply<P, Q>, Prop::Imply<Q, P>, Prop>,
+);

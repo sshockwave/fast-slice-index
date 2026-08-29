@@ -50,7 +50,7 @@
 //! instead of mixing the operation's `Imply` with the field's.
 
 use crate::logic::function::{Equality, View};
-use crate::logic::prop::{And, Contraposition, Imply, Negation, PropLogic};
+use crate::logic::prop::{Contraposition, Imply, Negation, PropLogic, neg::And};
 
 /// Type alias: "e is neutral for the operation"
 /// Equivalent to: ∀y. El(y) → e ∘ y = y

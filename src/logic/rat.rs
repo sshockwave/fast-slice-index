@@ -1,6 +1,6 @@
 use crate::logic::function::{Equality, View};
 use crate::logic::group::{AbelianGroup, CommutativeMonoid, IsUnitLike};
-use crate::logic::prop::{And, Contraposition, Iff, Negation, Or};
+use crate::logic::prop::{Contraposition, Negation, neg::And, neg::Iff, neg::Or};
 
 /// Type alias: "x is a rational"
 /// Equivalent to: x is in the additive group's carrier
