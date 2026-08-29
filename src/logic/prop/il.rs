@@ -1,4 +1,4 @@
-use super::{Cert, Imply, Negation, PropLogic, exchange};
+use super::{Cert, Imply, Negation, PropLogic, Reductio, exchange};
 use ::core::{convert::Infallible, marker::PhantomData};
 
 pub struct IntuitionisticImpl<'l, Prop>(PhantomData<(&'l (), Prop)>);
@@ -40,26 +40,12 @@ impl<'l, Prop: PropLogic<'l>> Negation<'l> for IntuitionisticImpl<'l, Prop> {
     type Neg<P: 'l> = Prop::Imply<P, Infallible>;
 }
 
-/// Reductio ad absurdum: (P → ¬Q) → (Q → ¬P)
-///
-/// The negation-*introduction* rule. [`DoubleNegation`], [`ExFalsoQuodlibet`]
-/// and [`DoubleNegIntro`] all either consume a `Neg` or re-wrap an existing
-/// one, so none of them can produce the `¬¬P` that [`Contraposition`] needs:
-/// interpreting `Neg<_>` as a constant falsehood satisfies all three and
-/// refutes contraposition. This rule closes that gap, and unlike
-/// [`Contraposition`] it adds no classical strength -- it holds for the
-/// intuitionistic reading `¬P := P → ⊥`.
-pub trait Reductio<'a>: PropLogic<'a> + Negation<'a> {
-    fn l3<P: Clone + 'a, Q: Clone + 'a>()
-    -> Cert<'a, Self, Self::Imply<Self::Imply<P, Self::Neg<Q>>, Self::Imply<Q, Self::Neg<P>>>>;
-}
-
 /// `Reductio` needs no classical axiom: under `¬P := P → ⊥` it is just
 /// [`exchange`] of antecedents, provable from L1/L2 alone. This is what
 /// separates it from [`super::neg::Contraposition`], whose classical content
 /// cannot be recovered here.
 impl<'l, Prop: PropLogic<'l>> Reductio<'l> for IntuitionisticImpl<'l, Prop> {
-    fn l3<P: Clone + 'l, Q: Clone + 'l>()
+    fn reductio<P: Clone + 'l, Q: Clone + 'l>()
     -> Cert<'l, Self, Self::Imply<Self::Imply<P, Self::Neg<Q>>, Self::Imply<Q, Self::Neg<P>>>> {
         exchange::<P, Q, Infallible, Prop>().cast()
     }

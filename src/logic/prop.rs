@@ -69,6 +69,25 @@ pub trait Negation<'l> {
     type Neg<P: 'l>: Clone + 'l;
 }
 
+/// Reductio ad absurdum: (P → ¬Q) → (Q → ¬P)
+///
+/// The negation-*introduction* rule. [`DoubleNegElim`], [`ExFalsoQuodlibet`]
+/// and [`DoubleNegIntro`] all either consume a `Neg` or re-wrap an existing
+/// one, so none of them can produce the `¬¬P` that [`Contraposition`] needs:
+/// interpreting `Neg<_>` as a constant falsehood satisfies all three and
+/// refutes contraposition. This rule closes that gap, and unlike
+/// [`Contraposition`] it adds no classical strength -- it holds for the
+/// intuitionistic reading `¬P := P → ⊥`.
+///
+/// [`DoubleNegElim`]: neg::DoubleNegElim
+/// [`ExFalsoQuodlibet`]: neg::ExFalsoQuodlibet
+/// [`DoubleNegIntro`]: neg::DoubleNegIntro
+/// [`Contraposition`]: neg::Contraposition
+pub trait Reductio<'a>: PropLogic<'a> + Negation<'a> {
+    fn reductio<P: Clone + 'a, Q: Clone + 'a>()
+    -> Cert<'a, Self, Self::Imply<Self::Imply<P, Self::Neg<Q>>, Self::Imply<Q, Self::Neg<P>>>>;
+}
+
 pub trait And<'l>: PropLogic<'l> {
     type And<P: 'l, Q: 'l>: Clone;
     fn and_left<P: Clone, Q: Clone>() -> Cert<'l, Self, Self::Imply<Self::And<P, Q>, P>>;

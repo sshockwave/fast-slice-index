@@ -1,6 +1,6 @@
 use crate::logic::prop::{
-    And, Cert, Deduction, DeductionUpgrade, Imply, Intuitionistic, Negation, PropLogic,
-    il::Reductio, reflexive, syllogism,
+    And, Cert, Deduction, DeductionUpgrade, Imply, Intuitionistic, Negation, PropLogic, Reductio,
+    reflexive, syllogism,
 };
 use ::core::marker::PhantomData;
 
@@ -9,7 +9,7 @@ pub trait Contraposition<'a>: Imply<'a> + Negation<'a> {
     -> Cert<'a, Self, Self::Imply<Self::Imply<Self::Neg<P>, Self::Neg<Q>>, Self::Imply<Q, P>>>;
 }
 
-pub trait DoubleNegation<'a>: PropLogic<'a> + Negation<'a> {
+pub trait DoubleNegElim<'a>: PropLogic<'a> + Negation<'a> {
     fn l3<P: Clone + 'a>() -> Cert<'a, Self, Self::Imply<Self::Neg<Self::Neg<P>>, P>>;
 }
 
@@ -69,7 +69,7 @@ impl<'a, Prop: Negation<'a>> Negation<'a> for ProofRing<'a, Prop> {
     type Neg<P: 'a> = Prop::Neg<P>;
 }
 
-impl<'a, Prop> DoubleNegation<'a> for ProofRing<'a, Prop>
+impl<'a, Prop> DoubleNegElim<'a> for ProofRing<'a, Prop>
 where
     Prop: Contraposition<'a> + PropLogic<'a>,
 {
@@ -89,7 +89,7 @@ where
 impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> DoubleNegIntro<'a> for ProofRing<'a, Prop> {
     fn l3<P: Clone + 'a>() -> Cert<'a, Self, Self::Imply<P, Self::Neg<Self::Neg<P>>>> {
         Prop::l3()
-            .mp(<ProofRing<Prop> as DoubleNegation<'_>>::l3().cast())
+            .mp(<ProofRing<Prop> as DoubleNegElim<'_>>::l3().cast())
             .cast()
     }
 }
@@ -98,7 +98,7 @@ impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> DoubleNegIntro<'a> for ProofR
 /// logics that already have the classical axiom: transposing `P → ¬Q` gives
 /// `¬¬Q → ¬P`, and `Q → ¬¬Q` feeds it.
 impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> Reductio<'a> for ProofRing<'a, Prop> {
-    fn l3<P: Clone + 'a, Q: Clone + 'a>()
+    fn reductio<P: Clone + 'a, Q: Clone + 'a>()
     -> Cert<'a, Self, Self::Imply<Self::Imply<P, Self::Neg<Q>>, Self::Imply<Q, Self::Neg<P>>>> {
         // (¬¬Q → ¬P) → (Q → ¬P)
         let pre = Prop::mp(
@@ -148,7 +148,7 @@ pub fn transposition<'a, P: Clone + 'a, Q: Clone + 'a, Prop: Contraposition<'a> 
     // (P → Q) → (¬¬P → Q)
     let pre = Prop::mp(
         syllogism::<_, _, _, Prop>(),
-        <ProofRing<Prop> as DoubleNegation<'_>>::l3::<P>().cast(),
+        <ProofRing<Prop> as DoubleNegElim<'_>>::l3::<P>().cast(),
     );
     // (¬¬P → Q) → (¬¬P → ¬¬Q)
     let post = Prop::mp(
@@ -200,15 +200,15 @@ impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> PeirceLaw<'a> for ProofRing<'
     }
 }
 
-impl<'l, Logic: DoubleNegation<'l> + Reductio<'l>> Contraposition<'l> for ProofRing<'l, Logic> {
+impl<'l, Logic: DoubleNegElim<'l> + Reductio<'l>> Contraposition<'l> for ProofRing<'l, Logic> {
     fn l3<P: Clone + 'l, Q: Clone + 'l>()
     -> Cert<'l, Self, Self::Imply<Self::Imply<Self::Neg<P>, Self::Neg<Q>>, Self::Imply<Q, P>>> {
         // Reductio at (¬P, Q) introduces the outer negation:
         // (¬P → ¬Q) → (Q → ¬¬P)
-        let intro = <Logic as Reductio<'_>>::l3::<Logic::Neg<P>, Q>();
+        let intro = <Logic as Reductio<'_>>::reductio::<Logic::Neg<P>, Q>();
         // Double negation under `Q →`, by L2 on Q → (¬¬P → P):
         // (Q → ¬¬P) → (Q → P)
-        let elim = Logic::l2().mp(Logic::l1().mp(<Logic as DoubleNegation<'_>>::l3::<P>()));
+        let elim = Logic::l2().mp(Logic::l1().mp(<Logic as DoubleNegElim<'_>>::l3::<P>()));
         // Chaining the two gives (¬P → ¬Q) → (Q → P).
         syllogism::<_, _, _, Logic>().mp(intro).mp(elim).cast()
     }
@@ -251,7 +251,7 @@ impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> super::And<'l> for ProofRing
             .upgrade()
             .mp(Deduction::<_, Logic>::assume())
             .pipe(
-                <ProofRing<Logic> as DoubleNegation<'_>>::l3()
+                <ProofRing<Logic> as DoubleNegElim<'_>>::l3()
                     .cast()
                     .upgrade(),
             )
@@ -311,7 +311,7 @@ impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> super::Or<'l> for ProofRing<
             .mp(Deduction::assume()) // Assume ~R, Got ~~P
             .pipe(
                 // ~~P -> P
-                <Self as DoubleNegation<'_>>::l3()
+                <Self as DoubleNegElim<'_>>::l3()
                     .upgrade()
                     .upgrade()
                     .upgrade()
@@ -351,7 +351,7 @@ impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> Intuitionistic<'l> for Proof
             .pipe(syllogism())
             .mp(
                 syllogism()
-                    .mp(<Self as DoubleNegation<'_>>::l3()) // ~~p -> p
+                    .mp(<Self as DoubleNegElim<'_>>::l3()) // ~~p -> p
                     .mp(Self::and_intro().mp(neg_false)) // p -> (~False & p) = ~(p -> ~~False)
                     .pipe(Logic::l3().cast()), // (p -> ~~False) -> ~p
             );
@@ -366,10 +366,10 @@ const _: () = {
     const fn need_contraposition<'l, C: Contraposition<'l>>() {}
     const fn need_reductio<'l, R: Reductio<'l>>() {}
 
-    /// `DoubleNegation + Reductio` alone yields `Contraposition`: the bound
+    /// `DoubleNegElim + Reductio` alone yields `Contraposition`: the bound
     /// mentions neither the classical axiom nor any concrete logic, so nothing
     /// smuggles it in.
-    const fn cp_from_dne_and_reductio<'l, L: DoubleNegation<'l> + Reductio<'l>>() {
+    const fn cp_from_dne_and_reductio<'l, L: DoubleNegElim<'l> + Reductio<'l>>() {
         need_contraposition::<ProofRing<'l, L>>();
     }
 

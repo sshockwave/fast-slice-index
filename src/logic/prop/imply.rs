@@ -26,7 +26,7 @@ impl<'a, P, Q: 'a> Clone for Imply<'a, P, Q> {
 pub struct PropLogicThm;
 
 mod sealed_prop_logic {
-    use super::{Cert, Implication, Imply, Infer, PropLogic, PropLogicThm};
+    use super::{Cert, Imply, Infer, PropLogic, PropLogicThm};
 
     type L1<'a, P, Q> = Imply<'a, P, Imply<'a, Q, P>>;
     type L2<'a, P, Q, R> =
@@ -110,34 +110,34 @@ mod sealed_prop_logic {
             Cert::new(Imply::new(L2Proof))
         }
     }
-    impl<'a> Implication<'a> for PropLogicThm {
-        type Imply<P: 'a, Q: 'a> = Imply<'a, P, Q>;
-        type Cert<P: Clone + 'a> = P;
-        fn mp<P: Clone + 'a, Q: Clone + 'a>(
-            pq: Cert<'a, Self, Imply<'a, P, Q>>,
-            p: Cert<'a, Self, P>,
-        ) -> Cert<'a, Self, Q> {
-            Cert::new(pq.into_inner().0.mp(&p.into_inner()).into())
-        }
-        fn def<P, Q>() -> Cert<'a, Self, Self::Imply<P, Q>>
+}
+impl<'a> Implication<'a> for PropLogicThm {
+    type Imply<P: 'a, Q: 'a> = Imply<'a, P, Q>;
+    type Cert<P: Clone + 'a> = P;
+    fn mp<P: Clone + 'a, Q: Clone + 'a>(
+        pq: Cert<'a, Self, Imply<'a, P, Q>>,
+        p: Cert<'a, Self, P>,
+    ) -> Cert<'a, Self, Q> {
+        Cert::new(pq.into_inner().0.mp(&p.into_inner()).into())
+    }
+    fn def<P, Q>() -> Cert<'a, Self, Self::Imply<P, Q>>
+    where
+        P: Into<Q> + Clone + 'a,
+        Q: Clone + 'a,
+    {
+        struct DefProof;
+        impl<'a, P, Q> Infer<'a, P, Q> for DefProof
         where
-            P: Into<Q> + Clone + 'a,
-            Q: Clone + 'a,
+            P: Into<Q> + Clone,
+            Q: Clone,
         {
-            struct DefProof;
-            impl<'a, P, Q> Infer<'a, P, Q> for DefProof
-            where
-                P: Into<Q> + Clone,
-                Q: Clone,
-            {
-                fn mp(&self, p: &P) -> Q {
-                    p.clone().into()
-                }
-                fn clone_dyn(&self) -> Imply<'a, P, Q> {
-                    Imply::new(DefProof)
-                }
+            fn mp(&self, p: &P) -> Q {
+                p.clone().into()
             }
-            Cert::new(Imply::new(DefProof).into())
+            fn clone_dyn(&self) -> Imply<'a, P, Q> {
+                Imply::new(DefProof)
+            }
         }
+        Cert::new(Imply::new(DefProof).into())
     }
 }
