@@ -1,5 +1,6 @@
 use crate::logic::prop::{
-    Cert, Deduction, Imply, Intuitionistic, Negation, PropLogic, reflexive, syllogism,
+    Cert, Deduction, DeductionUpgrade, Imply, Intuitionistic, Negation, PropLogic, reflexive,
+    syllogism,
 };
 use ::core::marker::PhantomData;
 
@@ -160,19 +161,18 @@ pub fn consequentia_mirabilis<'a, P: Clone + 'a, Prop: Contraposition<'a> + Prop
     );
     // Transposing gives (P → P) → P, and P → P is a theorem.
     Prop::l2()
-        .apply(syllogism::<_, _, _, Prop>().apply(absurd).apply(Prop::l3()))
-        .apply(Prop::l1().apply(reflexive::<_, Prop>()))
+        .apply(syllogism().apply(absurd).apply(Prop::l3()))
+        .apply(Prop::l1().apply(reflexive()))
 }
 
 impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> PeirceLaw<'a> for ProofRing<'a, Prop> {
     fn peirce<P: Clone + 'a, Q: 'a>()
     -> Cert<'a, Self, Self::Imply<Self::Imply<Self::Imply<P, Q>, P>, P>> {
         // ¬P → (P → Q) composed with the antecedent (P → Q) → P gives ¬P → P.
-        let self_deny = syllogism::<_, _, _, Prop>()
-            .apply(<ProofRing<Prop> as ExFalsoQuodlibet<'_>>::l3::<P, Q>().cast());
+        let self_deny = syllogism().apply(<ProofRing<Prop> as ExFalsoQuodlibet<'_>>::l3().cast());
         syllogism::<_, _, _, Prop>()
             .apply(self_deny)
-            .apply(consequentia_mirabilis::<P, Prop>())
+            .apply(consequentia_mirabilis())
             .cast()
     }
 }
@@ -212,7 +212,7 @@ impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> super::And<'l> for ProofRing
         {
             // From Q, derive (Q → ¬P) → ¬P by modus ponens on the assumption.
             Prop::l2()
-                .apply(reflexive::<_, Prop>())
+                .apply(reflexive())
                 .apply(Prop::l1().apply(q))
                 // Transposing gives ¬¬P → ¬(Q → ¬P), and ¬¬P follows from P.
                 .pipe(transposition::<_, _, Prop>())
@@ -222,28 +222,32 @@ impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> super::And<'l> for ProofRing
                         .cast(),
                 )
         }
-        Deduction::<_, Logic>::scope(|p, s1| {
-            s1.nest(|q, s2| intro::<_, _, Deduction<_, Deduction<_, Logic>>>(s2.up(p), q))
-        })
+        intro(
+            Deduction::<_, Logic>::assume().upgrade(),
+            Deduction::assume(),
+        )
         .cast()
     }
     /// Left elimination: P ∧ Q → P
     fn and_left<P: Clone, Q: Clone>() -> Cert<'l, Self, Self::Imply<Self::And<P, Q>, P>> {
         // ¬P → (Q → ¬P) transposes to ¬(Q → ¬P) → ¬¬P, then double negation.
-        Deduction::<_, Logic>::scope(|and, s| {
-            s.up(<ProofRing<Logic> as DoubleNegation<'_>>::l3().cast())
-                .apply(
-                    s.up(transposition::<_, _, Logic>()
-                        .apply(Logic::l1::<Logic::Neg<P>, Q>())
-                        .cast())
-                        .apply(and),
-                )
-        })
-        .cast()
+        transposition()
+            .apply(Logic::l1::<Logic::Neg<P>, Q>())
+            .cast()
+            .upgrade()
+            .apply(Deduction::<_, Logic>::assume())
+            .pipe(
+                <ProofRing<Logic> as DoubleNegation<'_>>::l3()
+                    .cast()
+                    .upgrade(),
+            )
+            .cast()
     }
     /// Right elimination: P ∧ Q → Q
     fn and_right<P, Q: Clone>() -> Cert<'l, Self, Self::Imply<Self::And<P, Q>, Q>> {
-        Deduction::<_, Logic>::scope(|and, s| s.up(simplification::<_, _, Logic>()).apply(and))
+        simplification()
+            .upgrade()
+            .apply(Deduction::<_, Logic>::assume())
             .cast()
     }
 }

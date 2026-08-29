@@ -8,7 +8,7 @@ impl<'l, PQ: Clone + 'l, Prop: Imply<'l> + ?Sized> Cert<'l, Prop, PQ> {
         Prop::mp(self.into(), p)
     }
     pub fn pipe<Q: Clone>(self, pq: Cert<'l, Prop, Prop::Imply<PQ, Q>>) -> Cert<'l, Prop, Q> {
-        Prop::mp(pq, self)
+        pq.apply(self)
     }
     pub fn cast<Logic, R: Clone>(self) -> Cert<'l, Logic, R>
     where
@@ -46,9 +46,9 @@ mod sealed_deduction {
             Prop::l1().apply(value).cast()
         }
         pub fn scope<R: Clone>(
-            f: impl FnOnce(Cert<'a, Self, A>, Self) -> Cert<'a, Self, R>,
+            f: impl FnOnce(Cert<'a, Self, A>) -> Cert<'a, Self, R>,
         ) -> Cert<'a, Prop, Prop::Imply<A, R>> {
-            f(Self::assume(), Deduction(PhantomData)).cast()
+            f(Self::assume()).cast()
         }
     }
 
@@ -87,18 +87,23 @@ mod sealed_deduction {
 }
 pub use sealed_deduction::Deduction;
 
-impl<'l, A: Clone + 'l, Logic: PropLogic<'l>> Deduction<A, Logic> {
-    pub fn nest<B: Clone, R: Clone>(
-        &self,
-        f: impl FnOnce(
-            Cert<'l, Deduction<B, Self>, B>,
-            Deduction<B, Self>,
-        ) -> Cert<'l, Deduction<B, Self>, R>,
-    ) -> Cert<'l, Self, Logic::Imply<B, R>> {
-        Deduction::scope(f)
+pub trait DeductionUpgrade<'l, A: Clone + 'l, P: Clone, Prop: PropLogic<'l>> {
+    fn upgrade(self) -> Cert<'l, Deduction<A, Prop>, P>;
+    fn qed<Prop2: PropLogic<'l>>(self) -> Cert<'l, Prop2, Prop2::Imply<A, P>>
+    where
+        Cert<'l, Prop, P>: Into<Cert<'l, Deduction<A, Prop2>, P>>;
+}
+impl<'l, A: Clone + 'l, P: Clone, Prop: PropLogic<'l>> DeductionUpgrade<'l, A, P, Prop>
+    for Cert<'l, Prop, P>
+{
+    fn upgrade(self) -> Cert<'l, Deduction<A, Prop>, P> {
+        Deduction::upgrade(self)
     }
-    pub fn up<P: Clone>(&self, p: Cert<'l, Logic, P>) -> Cert<'l, Self, P> {
-        Deduction::upgrade(p)
+    fn qed<Prop2: PropLogic<'l>>(self) -> Cert<'l, Prop2, Prop2::Imply<A, P>>
+    where
+        Cert<'l, Prop, P>: Into<Cert<'l, Deduction<A, Prop2>, P>>,
+    {
+        self.into().cast()
     }
 }
 
@@ -113,14 +118,10 @@ where
     Q: Clone + 'a,
     R: Clone + 'a,
 {
-    Deduction::<_, Prop>::scope(|pq, s1| {
-        s1.nest(|qr, s2| {
-            let pq = s2.up(pq);
-            s2.nest(|p, s3| {
-                let pq = s3.up(pq);
-                let qr = s3.up(qr);
-                qr.apply(pq.apply(p))
-            })
-        })
-    })
+    Deduction::assume()
+        .pipe(Deduction::assume().upgrade().upgrade())
+        .pipe(Deduction::assume().upgrade())
+        .qed()
+        .qed()
+        .qed()
 }
