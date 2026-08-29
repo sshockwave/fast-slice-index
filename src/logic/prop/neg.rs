@@ -1,4 +1,4 @@
-use crate::logic::prop::{Chain, PropLogic, reflexive, syllogism};
+use crate::logic::prop::{Chain, PropLogic, il::IntuitionisticImpl, reflexive, syllogism};
 use ::core::marker::PhantomData;
 
 pub trait Negation<'l> {
@@ -171,5 +171,12 @@ impl<'a, Prop: Contraposition<'a>> PeirceLaw<'a> for ProofRing<'a, Prop> {
         syllogism::<_, _, _, Prop>()
             .apply(self_deny)
             .apply(consequentia_mirabilis::<P, Prop>())
+    }
+}
+
+impl<'l, Prop: PeirceLaw<'l>> Contraposition<'l> for IntuitionisticImpl<'l, Prop> {
+    fn l3<P, Q>()
+    -> Self::Cert<Self::Imply<Self::Imply<Self::Neg<P>, Self::Neg<Q>>, Self::Imply<Q, P>>> {
+        todo!()
     }
 }
