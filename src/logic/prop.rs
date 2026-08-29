@@ -82,9 +82,9 @@ pub type Iff<'l, L, P, Q> =
 
 pub trait Or<'l>: PropLogic<'l> {
     type Or<P: 'l, Q: 'l>: Clone;
-    fn or_left<P, Q>() -> Cert<'l, Self, Self::Imply<P, Self::Or<P, Q>>>;
-    fn or_right<P, Q>() -> Cert<'l, Self, Self::Imply<Q, Self::Or<P, Q>>>;
-    fn or_elim<P, Q, R>() -> Cert<
+    fn or_left<P: Clone, Q: Clone>() -> Cert<'l, Self, Self::Imply<P, Self::Or<P, Q>>>;
+    fn or_right<P: Clone, Q: Clone>() -> Cert<'l, Self, Self::Imply<Q, Self::Or<P, Q>>>;
+    fn or_elim<P: Clone, Q: Clone, R: Clone>() -> Cert<
         'l,
         Self,
         Self::Imply<
@@ -96,8 +96,9 @@ pub trait Or<'l>: PropLogic<'l> {
 
 pub trait Intuitionistic<'l>: PropLogic<'l> + And<'l> + Or<'l> + Negation<'l> {
     type False;
-    fn explosion<P>() -> Cert<'l, Self, Self::Imply<Self::False, P>>;
-    fn neg_def<P>() -> Cert<'l, Self, Iff<'l, Self, Self::Neg<P>, Self::Imply<P, Self::False>>>;
+    fn explosion<P: Clone>() -> Cert<'l, Self, Self::Imply<Self::False, P>>;
+    fn neg_def<P: Clone>()
+    -> Cert<'l, Self, Iff<'l, Self, Self::Neg<P>, Self::Imply<P, Self::False>>>;
 }
 
 pub trait ForAllProof<'l, Logic: Imply<'l>, P, Q: for<'x> View<'x> + ?Sized> {

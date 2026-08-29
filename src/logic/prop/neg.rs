@@ -1,6 +1,6 @@
 use crate::logic::prop::{
-    Cert, Deduction, DeductionUpgrade, Imply, Intuitionistic, Negation, PropLogic, il::Reductio,
-    reflexive, syllogism,
+    And, Cert, Deduction, DeductionUpgrade, Imply, Intuitionistic, Negation, PropLogic,
+    il::Reductio, reflexive, syllogism,
 };
 use ::core::marker::PhantomData;
 
@@ -214,20 +214,6 @@ impl<'l, Logic: DoubleNegation<'l> + Reductio<'l>> Contraposition<'l> for ProofR
     }
 }
 
-use self::sealed_connectives::Or;
-mod sealed_connectives {
-    use super::{Cert, Negation, PropLogic};
-    pub struct Or<'a, P: 'a, Q: 'a, Prop: PropLogic<'a> + Negation<'a>>(
-        pub(super) Cert<'a, Prop, Prop::Imply<Prop::Neg<P>, Q>>,
-    );
-}
-
-impl<'a, P: 'a, Q: 'a, Prop: PropLogic<'a> + Negation<'a>> Clone for Or<'a, P, Q, Prop> {
-    fn clone(&self) -> Self {
-        Self(self.0.clone())
-    }
-}
-
 impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> super::And<'l> for ProofRing<'l, Logic> {
     type And<P: 'l, Q: 'l> = Logic::Neg<Self::Imply<Q, Logic::Neg<P>>>;
     fn and_intro<P: Clone, Q: Clone>()
@@ -280,44 +266,6 @@ impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> super::And<'l> for ProofRing
     }
 }
 
-impl<'a, P: 'a, Q: 'a, Prop: Contraposition<'a> + PropLogic<'a>> Or<'a, P, Q, Prop> {
-    pub fn intro_left(p: Cert<'a, Prop, P>) -> Self
-    where
-        P: Clone,
-        Q: Clone,
-    {
-        Self(
-            <ProofRing<Prop> as DoubleNegIntro<'_>>::l3()
-                .cast()
-                .mp(p)
-                .pipe(Prop::l1())
-                .pipe(Prop::l3())
-                .cast(),
-        )
-    }
-    pub fn intro_right(q: Cert<'a, Prop, Q>) -> Self
-    where
-        Q: Clone,
-    {
-        Self(Prop::l1().mp(q))
-    }
-    pub fn p_to_q(self) -> Cert<'a, Prop, Prop::Imply<Prop::Neg<P>, Q>> {
-        self.0
-    }
-    pub fn q_to_p(self) -> Cert<'a, Prop, Prop::Imply<Prop::Neg<Q>, P>>
-    where
-        P: Clone,
-        Q: Clone,
-    {
-        <ProofRing<Prop> as DoubleNegIntro<'_>>::l3()
-            .cast()
-            .pipe(Prop::l1())
-            .pipe(Prop::l2())
-            .mp(self.0)
-            .pipe(Prop::l3())
-    }
-}
-
 impl<'l, A: Clone + 'l, Logic: Contraposition<'l> + PropLogic<'l>> Contraposition<'l>
     for Deduction<A, Logic>
 {
@@ -327,14 +275,20 @@ impl<'l, A: Clone + 'l, Logic: Contraposition<'l> + PropLogic<'l>> Contrapositio
     }
 }
 impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> super::Or<'l> for ProofRing<'l, Logic> {
-    type Or<P: 'l, Q: 'l> = Or<'l, P, Q, Logic>;
-    fn or_left<P, Q>() -> Cert<'l, Self, Self::Imply<P, Self::Or<P, Q>>> {
-        todo!()
+    type Or<P: 'l, Q: 'l> = Logic::Imply<Logic::Neg<P>, Q>;
+    fn or_left<P: Clone, Q: Clone>() -> Cert<'l, Self, Self::Imply<P, Self::Or<P, Q>>> {
+        <ProofRing<Logic> as DoubleNegIntro<'_>>::l3()
+            .cast()
+            .upgrade()
+            .mp(Deduction::assume())
+            .pipe(Logic::l1().upgrade())
+            .pipe(Logic::l3().upgrade())
+            .cast()
     }
-    fn or_right<P, Q>() -> Cert<'l, Self, Self::Imply<Q, Self::Or<P, Q>>> {
-        todo!()
+    fn or_right<P, Q: Clone>() -> Cert<'l, Self, Self::Imply<Q, Self::Or<P, Q>>> {
+        Logic::l1().upgrade().mp(Deduction::assume()).cast()
     }
-    fn or_elim<P, Q, R>() -> Cert<
+    fn or_elim<P: Clone, Q: Clone, R: Clone>() -> Cert<
         'l,
         Self,
         Self::Imply<
@@ -342,17 +296,66 @@ impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> super::Or<'l> for ProofRing<
             Self::Imply<Self::Imply<Q, R>, Self::Imply<Self::Or<P, Q>, R>>,
         >,
     > {
-        todo!()
+        syllogism()
+            .mp(Deduction::assume()) // ~P -> Q
+            .mp(Deduction::assume().upgrade()) // Q -> R
+            .pipe(
+                // (~P -> R) -> (~R -> ~~P)
+                transposition::<_, _, Logic>()
+                    .cast()
+                    .upgrade()
+                    .upgrade()
+                    .upgrade(),
+            )
+            .upgrade()
+            .mp(Deduction::assume()) // Assume ~R, Got ~~P
+            .pipe(
+                // ~~P -> P
+                <Self as DoubleNegation<'_>>::l3()
+                    .upgrade()
+                    .upgrade()
+                    .upgrade()
+                    .upgrade(),
+            )
+            .pipe(Deduction::assume().upgrade().upgrade().upgrade()) // P -> R
+            .qed() // ~R -> R
+            .pipe(
+                consequentia_mirabilis::<_, Logic>()
+                    .cast()
+                    .upgrade()
+                    .upgrade()
+                    .upgrade(),
+            )
+            .cast()
     }
 }
 impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> Intuitionistic<'l> for ProofRing<'l, Logic> {
     type False = Self::And<(), Self::Neg<()>>;
-    fn explosion<P>() -> Cert<'l, Self, Self::Imply<Self::False, P>> {
-        todo!()
+    fn explosion<P: Clone>() -> Cert<'l, Self, Self::Imply<Self::False, P>> {
+        let absurd = Deduction::assume();
+        <Self as ExFalsoQuodlibet<'l>>::l3()
+            .upgrade()
+            .mp(absurd.clone().pipe(Self::and_right().upgrade()))
+            .mp(absurd.pipe(Self::and_left().upgrade()))
+            .qed()
     }
-    fn neg_def<P>()
+    fn neg_def<P: Clone>()
     -> Cert<'l, Self, super::Iff<'l, Self, Self::Neg<P>, Self::Imply<P, Self::False>>> {
-        todo!()
+        let l2r: Cert<Self, Self::Imply<Self::Neg<P>, Self::Imply<P, Self::False>>> =
+            <Self as ExFalsoQuodlibet<'_>>::l3();
+        let neg_false: Cert<Self, Self::Neg<Self::False>> =
+            reflexive().pipe(<Self as DoubleNegIntro<'_>>::l3());
+        let r2l = Self::l1()
+            .mp(<Self as DoubleNegIntro<'_>>::l3())
+            .pipe(Self::l2())
+            .pipe(syllogism())
+            .mp(
+                syllogism()
+                    .mp(<Self as DoubleNegation<'_>>::l3()) // ~~p -> p
+                    .mp(Self::and_intro().mp(neg_false)) // p -> (~False & p) = ~(p -> ~~False)
+                    .pipe(Logic::l3().cast()), // (p -> ~~False) -> ~p
+            );
+        Self::and_intro().mp(l2r).mp(r2l)
     }
 }
 
