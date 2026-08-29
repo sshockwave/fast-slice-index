@@ -125,3 +125,19 @@ where
         .qed()
         .qed()
 }
+
+/// Exchange of antecedents: (P → (Q → R)) → (Q → (P → R))
+pub fn exchange<'a, P, Q, R, Prop: PropLogic<'a>>()
+-> Cert<'a, Prop, Prop::Imply<Prop::Imply<P, Prop::Imply<Q, R>>, Prop::Imply<Q, Prop::Imply<P, R>>>>
+where
+    P: Clone + 'a,
+    Q: Clone + 'a,
+    R: Clone + 'a,
+{
+    Deduction::assume()
+        .pipe(Deduction::assume().upgrade().upgrade())
+        .mp(Deduction::assume().upgrade())
+        .qed()
+        .qed()
+        .qed()
+}

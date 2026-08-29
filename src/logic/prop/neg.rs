@@ -1,20 +1,20 @@
 use crate::logic::prop::{
-    Cert, Deduction, DeductionUpgrade, Imply, Intuitionistic, Negation, PropLogic, reflexive,
-    syllogism,
+    Cert, Deduction, DeductionUpgrade, Imply, Intuitionistic, Negation, PropLogic, il::Reductio,
+    reflexive, syllogism,
 };
 use ::core::marker::PhantomData;
 
 pub trait Contraposition<'a>: Imply<'a> + Negation<'a> {
-    fn l3<P, Q>()
+    fn l3<P: Clone + 'a, Q: Clone + 'a>()
     -> Cert<'a, Self, Self::Imply<Self::Imply<Self::Neg<P>, Self::Neg<Q>>, Self::Imply<Q, P>>>;
 }
 
 pub trait DoubleNegation<'a>: PropLogic<'a> + Negation<'a> {
-    fn l3<P>() -> Cert<'a, Self, Self::Imply<Self::Neg<Self::Neg<P>>, P>>;
+    fn l3<P: Clone + 'a>() -> Cert<'a, Self, Self::Imply<Self::Neg<Self::Neg<P>>, P>>;
 }
 
 pub trait DoubleNegIntro<'a>: PropLogic<'a> + Negation<'a> {
-    fn l3<P>() -> Cert<'a, Self, Self::Imply<P, Self::Neg<Self::Neg<P>>>>;
+    fn l3<P: Clone + 'a>() -> Cert<'a, Self, Self::Imply<P, Self::Neg<Self::Neg<P>>>>;
 }
 
 /// Peirce's law: ((P → Q) → P) → P
@@ -22,7 +22,7 @@ pub trait DoubleNegIntro<'a>: PropLogic<'a> + Negation<'a> {
 /// The characteristic classical axiom: it is equivalent to [`Contraposition`]
 /// over the intuitionistic base `L1`/`L2`, so it is derivable here.
 pub trait PeirceLaw<'a>: PropLogic<'a> {
-    fn peirce<P: Clone + 'a, Q: 'a>()
+    fn peirce<P: Clone + 'a, Q: Clone + 'a>()
     -> Cert<'a, Self, Self::Imply<Self::Imply<Self::Imply<P, Q>, P>, P>>;
 }
 
@@ -73,10 +73,7 @@ impl<'a, Prop> DoubleNegation<'a> for ProofRing<'a, Prop>
 where
     Prop: Contraposition<'a> + PropLogic<'a>,
 {
-    fn l3<P>() -> Cert<'a, Self, Self::Imply<Self::Neg<Self::Neg<P>>, P>>
-    where
-        P: 'a,
-    {
+    fn l3<P: Clone + 'a>() -> Cert<'a, Self, Self::Imply<Self::Neg<Self::Neg<P>>, P>> {
         // https://math.stackexchange.com/questions/4634566/prove-that-contrapositive-rule-is-equivalent-to-the-rule-of-double-negation
         syllogism::<_, _, _, Prop>()
             .mp(Prop::l1())
@@ -90,19 +87,39 @@ where
 }
 
 impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> DoubleNegIntro<'a> for ProofRing<'a, Prop> {
-    fn l3<P>() -> Cert<'a, Self, Self::Imply<P, Self::Neg<Self::Neg<P>>>> {
+    fn l3<P: Clone + 'a>() -> Cert<'a, Self, Self::Imply<P, Self::Neg<Self::Neg<P>>>> {
         Prop::l3()
             .mp(<ProofRing<Prop> as DoubleNegation<'_>>::l3().cast())
             .cast()
     }
 }
 
+/// [`Contraposition`] proves [`Reductio`], so requiring it costs nothing for
+/// logics that already have the classical axiom: transposing `P → ¬Q` gives
+/// `¬¬Q → ¬P`, and `Q → ¬¬Q` feeds it.
+impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> Reductio<'a> for ProofRing<'a, Prop> {
+    fn l3<P: Clone + 'a, Q: Clone + 'a>()
+    -> Cert<'a, Self, Self::Imply<Self::Imply<P, Self::Neg<Q>>, Self::Imply<Q, Self::Neg<P>>>> {
+        // (¬¬Q → ¬P) → (Q → ¬P)
+        let pre = Prop::mp(
+            syllogism::<_, _, _, Prop>(),
+            <ProofRing<Prop> as DoubleNegIntro<'_>>::l3::<Q>().cast(),
+        );
+        syllogism::<_, _, _, Prop>()
+            .mp(transposition::<P, Prop::Neg<Q>, Prop>())
+            .mp(pre)
+            .cast()
+    }
+}
+
 pub trait ExFalsoQuodlibet<'a>: PropLogic<'a> + Negation<'a> {
-    fn l3<P, Q>() -> Cert<'a, Self, Self::Imply<Self::Neg<P>, Self::Imply<P, Q>>>;
+    fn l3<P: Clone + 'a, Q: Clone + 'a>()
+    -> Cert<'a, Self, Self::Imply<Self::Neg<P>, Self::Imply<P, Q>>>;
 }
 
 impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> ExFalsoQuodlibet<'a> for ProofRing<'a, Prop> {
-    fn l3<P, Q>() -> Cert<'a, Self, Self::Imply<Self::Neg<P>, Self::Imply<P, Q>>> {
+    fn l3<P: Clone + 'a, Q: Clone + 'a>()
+    -> Cert<'a, Self, Self::Imply<Self::Neg<P>, Self::Imply<P, Q>>> {
         syllogism::<_, _, _, Prop>()
             .mp(Prop::l1())
             .mp(Prop::l3())
@@ -111,7 +128,11 @@ impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> ExFalsoQuodlibet<'a> for Proo
 }
 
 pub fn simplification<'a, P, Q, Prop: Contraposition<'a> + PropLogic<'a>>()
--> Cert<'a, Prop, Prop::Imply<Prop::Neg<Prop::Imply<P, Q>>, P>> {
+-> Cert<'a, Prop, Prop::Imply<Prop::Neg<Prop::Imply<P, Q>>, P>>
+where
+    P: Clone + 'a,
+    Q: Clone + 'a,
+{
     syllogism::<_, _, _, Prop>()
         .mp(<ProofRing<Prop> as ExFalsoQuodlibet<'_>>::l3().cast())
         .mp(<ProofRing<Prop> as DoubleNegIntro<'_>>::l3().cast())
@@ -168,7 +189,7 @@ pub fn consequentia_mirabilis<'a, P: Clone + 'a, Prop: Contraposition<'a> + Prop
 }
 
 impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> PeirceLaw<'a> for ProofRing<'a, Prop> {
-    fn peirce<P: Clone + 'a, Q: 'a>()
+    fn peirce<P: Clone + 'a, Q: Clone + 'a>()
     -> Cert<'a, Self, Self::Imply<Self::Imply<Self::Imply<P, Q>, P>, P>> {
         // ¬P → (P → Q) composed with the antecedent (P → Q) → P gives ¬P → P.
         let self_deny = syllogism().mp(<ProofRing<Prop> as ExFalsoQuodlibet<'_>>::l3().cast());
@@ -179,10 +200,17 @@ impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> PeirceLaw<'a> for ProofRing<'
     }
 }
 
-impl<'l, Logic: PeirceLaw<'l> + Negation<'l>> Contraposition<'l> for ProofRing<'l, Logic> {
-    fn l3<P, Q>()
+impl<'l, Logic: DoubleNegation<'l> + Reductio<'l>> Contraposition<'l> for ProofRing<'l, Logic> {
+    fn l3<P: Clone + 'l, Q: Clone + 'l>()
     -> Cert<'l, Self, Self::Imply<Self::Imply<Self::Neg<P>, Self::Neg<Q>>, Self::Imply<Q, P>>> {
-        todo!()
+        // Reductio at (¬P, Q) introduces the outer negation:
+        // (¬P → ¬Q) → (Q → ¬¬P)
+        let intro = <Logic as Reductio<'_>>::l3::<Logic::Neg<P>, Q>();
+        // Double negation under `Q →`, by L2 on Q → (¬¬P → P):
+        // (Q → ¬¬P) → (Q → P)
+        let elim = Logic::l2().mp(Logic::l1().mp(<Logic as DoubleNegation<'_>>::l3::<P>()));
+        // Chaining the two gives (¬P → ¬Q) → (Q → P).
+        syllogism::<_, _, _, Logic>().mp(intro).mp(elim).cast()
     }
 }
 
@@ -256,6 +284,7 @@ impl<'a, P: 'a, Q: 'a, Prop: Contraposition<'a> + PropLogic<'a>> Or<'a, P, Q, Pr
     pub fn intro_left(p: Cert<'a, Prop, P>) -> Self
     where
         P: Clone,
+        Q: Clone,
     {
         Self(
             <ProofRing<Prop> as DoubleNegIntro<'_>>::l3()
@@ -278,6 +307,7 @@ impl<'a, P: 'a, Q: 'a, Prop: Contraposition<'a> + PropLogic<'a>> Or<'a, P, Q, Pr
     pub fn q_to_p(self) -> Cert<'a, Prop, Prop::Imply<Prop::Neg<Q>, P>>
     where
         P: Clone,
+        Q: Clone,
     {
         <ProofRing<Prop> as DoubleNegIntro<'_>>::l3()
             .cast()
@@ -291,7 +321,7 @@ impl<'a, P: 'a, Q: 'a, Prop: Contraposition<'a> + PropLogic<'a>> Or<'a, P, Q, Pr
 impl<'l, A: Clone + 'l, Logic: Contraposition<'l> + PropLogic<'l>> Contraposition<'l>
     for Deduction<A, Logic>
 {
-    fn l3<P, Q>()
+    fn l3<P: Clone + 'l, Q: Clone + 'l>()
     -> Cert<'l, Self, Self::Imply<Self::Imply<Self::Neg<P>, Self::Neg<Q>>, Self::Imply<Q, P>>> {
         Self::upgrade(Logic::l3())
     }
@@ -325,3 +355,29 @@ impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> Intuitionistic<'l> for Proof
         todo!()
     }
 }
+
+/// Static witnesses: these compile only if the derivations above really apply
+/// at the stated bounds. `cargo check` is the proof checker.
+#[expect(dead_code, reason = "typecheck-only proof assertions")]
+const _: () = {
+    const fn need_contraposition<'l, C: Contraposition<'l>>() {}
+    const fn need_reductio<'l, R: Reductio<'l>>() {}
+
+    /// `DoubleNegation + Reductio` alone yields `Contraposition`: the bound
+    /// mentions neither the classical axiom nor any concrete logic, so nothing
+    /// smuggles it in.
+    const fn cp_from_dne_and_reductio<'l, L: DoubleNegation<'l> + Reductio<'l>>() {
+        need_contraposition::<ProofRing<'l, L>>();
+    }
+
+    /// `Reductio` itself needs no classical axiom -- it holds for `¬P := P → ⊥`
+    /// over plain L1/L2, so it is strictly weaker than `Contraposition`.
+    const fn reductio_is_intuitionistic<'l, L: PropLogic<'l>>() {
+        need_reductio::<crate::logic::prop::il::IntuitionisticImpl<'l, L>>();
+    }
+
+    // No in-crate instantiation is possible: no concrete logic asserts the
+    // classical axiom yet. The generic bodies are themselves the proof -- they
+    // typecheck exactly when the impls apply at the stated bounds.
+    let _ = reductio_is_intuitionistic::<crate::logic::prop::PropLogicThm> as fn();
+};
