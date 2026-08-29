@@ -36,53 +36,40 @@ mod sealed_deduction {
     use super::{Chain, Imply, PropLogic, reflexive};
     use ::core::marker::PhantomData;
 
-    /// Deduction theorem: If
+    /// Deduction theorem: If we can derive Q from P, then we can derive P → Q.
     pub struct Deduction<A, Prop>(PhantomData<(A, Prop)>);
-
-    pub struct Cert<'a, A: 'a, P: 'a, Prop: Imply<'a>> {
-        witness: Prop::Cert<Prop::Imply<A, P>>,
-        _marker: PhantomData<P>,
-    }
-    impl<'a, A, P, Prop: Imply<'a>> Clone for Cert<'a, A, P, Prop> {
+    impl<A, Prop> Clone for Deduction<A, Prop> {
         fn clone(&self) -> Self {
-            Cert::new(self.witness.clone())
+            *self
         }
     }
+    impl<A, Prop> Copy for Deduction<A, Prop> {}
 
-    impl<'a, A, Prop: PropLogic<'a>> Deduction<A, Prop> {
-        pub fn assume() -> <Self as Imply<'a>>::Cert<A>
-        where
-            A: Clone,
-        {
-            Cert::new(reflexive::<_, Prop>())
+    impl<'a, A: Clone, Prop: PropLogic<'a>> Deduction<A, Prop> {
+        pub fn assume() -> <Self as Imply<'a>>::Cert<A> {
+            reflexive::<_, Prop>()
         }
-        pub fn upgrade<P: Clone + 'a>(value: Prop::Cert<P>) -> <Self as Imply<'a>>::Cert<P>
-        where
-            A: Clone,
-        {
-            Cert::new(Prop::l1().apply(value))
+        pub fn upgrade<P: Clone + 'a>(value: Prop::Cert<P>) -> <Self as Imply<'a>>::Cert<P> {
+            Prop::l1().apply(value)
         }
-    }
-    impl<'a, A: 'a, P: 'a, Prop: Imply<'a>> Cert<'a, A, P, Prop> {
-        fn new(witness: Prop::Cert<Prop::Imply<A, P>>) -> Self {
-            Cert {
-                witness,
-                _marker: PhantomData,
-            }
-        }
-        pub fn finish(self) -> Prop::Cert<Prop::Imply<A, P>> {
-            self.witness
+        pub fn scope<R: Clone>(
+            f: impl FnOnce(
+                <Self as Imply<'a>>::Cert<A>,
+                Deduction<A, Self>,
+            ) -> <Self as Imply<'a>>::Cert<R>,
+        ) -> Prop::Cert<Prop::Imply<A, R>> {
+            f(Self::assume(), Deduction(PhantomData))
         }
     }
 
     impl<'a, A: Clone + 'a, Prop: PropLogic<'a>> Imply<'a> for Deduction<A, Prop> {
         type Imply<P: 'a, Q: 'a> = Prop::Imply<P, Q>;
-        type Cert<P: Clone + 'a> = Cert<'a, A, P, Prop>;
+        type Cert<P: Clone + 'a> = Prop::Cert<Prop::Imply<A, P>>;
         fn mp<P: Clone, Q: Clone>(
             pq: Self::Cert<Self::Imply<P, Q>>,
             p: Self::Cert<P>,
         ) -> Self::Cert<Q> {
-            Cert::new(Prop::l2().apply(pq.witness).apply(p.witness))
+            Prop::l2().apply(pq).apply(p)
         }
         fn def<P, Q>() -> Self::Cert<Self::Imply<P, Q>>
         where
@@ -107,11 +94,28 @@ mod sealed_deduction {
     }
 }
 pub use sealed_deduction::Deduction;
-impl<'l, A: Clone, Props: PropLogic<'l>> Deduction<A, Props> {
-    pub fn scope<R: Clone>(
-        f: impl FnOnce(<Self as Imply<'l>>::Cert<A>) -> <Self as Imply<'l>>::Cert<R>,
-    ) -> Props::Cert<Props::Imply<A, R>> {
-        f(Self::assume()).finish()
+
+impl<'l, A: Clone, Logic: PropLogic<'l>> Deduction<A, Logic> {
+    pub fn mp<P: Clone, Q: Clone>(
+        &self,
+        pq: Logic::Cert<Logic::Imply<P, Q>>,
+        p: Logic::Cert<P>,
+    ) -> Logic::Cert<Q> {
+        Logic::mp(pq, p)
+    }
+    pub fn nest<B: Clone, R: Clone>(
+        &self,
+        f: impl FnOnce(
+            Logic::Cert<Logic::Imply<B, B>>,
+            Deduction<B, Deduction<B, Logic>>,
+        ) -> Logic::Cert<Logic::Imply<B, R>>,
+    ) -> Logic::Cert<Logic::Imply<B, R>> {
+        Deduction::scope(f)
+    }
+}
+impl<'l, A: Clone, Logic: PropLogic<'l>> Deduction<A, Deduction<A, Logic>> {
+    pub fn up<P: Clone>(&self, p: Logic::Cert<P>) -> <Deduction<A, Logic> as Imply<'l>>::Cert<P> {
+        Deduction::<A, Logic>::upgrade(p)
     }
 }
 
@@ -126,12 +130,13 @@ where
     Q: Clone + 'a,
     R: Clone + 'a,
 {
-    Deduction::<_, Prop>::scope(|pq| {
-        Deduction::<_, Deduction<_, _>>::scope(|qr| {
-            Deduction::<_, Deduction<_, _>>::scope(|p| {
-                let pq = Deduction::upgrade(Deduction::upgrade(pq));
-                let qr = Deduction::upgrade(qr);
-                Deduction::mp(qr, Deduction::mp(pq, p))
+    Deduction::<_, Prop>::scope(|pq, s1| {
+        s1.nest(|qr, s2| {
+            let pq = s2.up(pq);
+            s2.nest(|p, s3| {
+                let pq = s3.up(pq);
+                let qr = s3.up(qr);
+                s3.mp(qr, s3.mp(pq, p))
             })
         })
     })

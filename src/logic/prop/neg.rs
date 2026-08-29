@@ -212,33 +212,26 @@ impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> super::And<'l> for ProofRing
                 .pipe(transposition::<_, _, Prop>())
                 .apply(<ProofRing<Prop> as DoubleNegIntro<'_>>::l3().apply(p))
         }
-        Deduction::<_, Logic>::scope(|p| {
-            Deduction::<_, Deduction<_, _>>::scope(|q| {
-                intro::<_, _, Deduction<_, _>>(Deduction::upgrade(p), q)
-            })
+        Deduction::<_, Logic>::scope(|p, s1| {
+            s1.nest(|q, s2| intro::<_, _, Deduction<_, Deduction<_, Logic>>>(s2.up(p), q))
         })
     }
     /// Left elimination: P ∧ Q → P
     fn and_left<P: Clone, Q: Clone>() -> Self::Cert<Self::Imply<Self::And<P, Q>, P>> {
         // ¬P → (Q → ¬P) transposes to ¬(Q → ¬P) → ¬¬P, then double negation.
-        Deduction::mp(
-            Deduction::upgrade(<ProofRing<Logic> as DoubleNegation<'_>>::l3()),
-            Deduction::mp(
-                Deduction::upgrade(
-                    transposition::<_, _, Logic>().apply(Logic::l1::<Logic::Neg<P>, Q>()),
+        Deduction::<_, Logic>::scope(|and, s| {
+            s.mp(
+                s.up(<ProofRing<Logic> as DoubleNegation<'_>>::l3()),
+                s.mp(
+                    s.up(transposition::<_, _, Logic>().apply(Logic::l1::<Logic::Neg<P>, Q>())),
+                    and,
                 ),
-                Deduction::<_, Logic>::assume(),
-            ),
-        )
-        .finish()
+            )
+        })
     }
     /// Right elimination: P ∧ Q → Q
     fn and_right<P, Q: Clone>() -> Self::Cert<Self::Imply<Self::And<P, Q>, Q>> {
-        Deduction::mp(
-            Deduction::upgrade(simplification::<_, _, Logic>()),
-            Deduction::<_, Logic>::assume(),
-        )
-        .finish()
+        Deduction::<_, Logic>::scope(|and, s| s.mp(s.up(simplification::<_, _, Logic>()), and))
     }
 }
 
