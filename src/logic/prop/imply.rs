@@ -112,16 +112,12 @@ mod sealed_prop_logic {
     }
     impl<'a> Implication<'a> for PropLogicThm {
         type Imply<P: 'a, Q: 'a> = Imply<'a, P, Q>;
-        type BaseCert<P: Clone + 'a> = P;
         type Cert<P: Clone + 'a> = P;
         fn mp<P: Clone + 'a, Q: Clone + 'a>(
             pq: Self::Cert<Imply<'a, P, Q>>,
             p: Self::Cert<P>,
         ) -> Self::Cert<Q> {
             pq.0.mp(&p).into()
-        }
-        fn upgrade<P: Clone + 'a>(value: Self::BaseCert<P>) -> Self::Cert<P> {
-            value.into()
         }
         fn def<P, Q>() -> Self::Cert<Self::Imply<P, Q>>
         where

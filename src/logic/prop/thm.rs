@@ -56,6 +56,12 @@ mod sealed_deduction {
         {
             Cert::new(reflexive::<_, Prop>())
         }
+        pub fn upgrade<P: Clone + 'a>(value: Prop::Cert<P>) -> <Self as Imply<'a>>::Cert<P>
+        where
+            A: Clone,
+        {
+            Cert::new(Prop::l1().apply(value))
+        }
     }
     impl<'a, A: 'a, P: 'a, Prop: Imply<'a>> Cert<'a, A, P, Prop> {
         fn new(witness: Prop::Cert<Prop::Imply<A, P>>) -> Self {
@@ -67,44 +73,16 @@ mod sealed_deduction {
         pub fn finish(self) -> Prop::Cert<Prop::Imply<A, P>> {
             self.witness
         }
-        // // These are for less manual type annotations
-        // fn apply<R: Clone, Q: Clone>(
-        //     self,
-        //     r: <Deduction<A, Prop> as Imply<'a>>::Cert<R>,
-        // ) -> Cert<'a, A, Q, Prop>
-        // where
-        //     Prop::Cert<Prop::Imply<A, P>>: Into<Prop::Cert<Prop::Imply<A, Prop::Imply<R, Q>>>>,
-        //     P: Clone,
-        //     A: Clone,
-        //     Prop: PropLogic<'a>,
-        // {
-        //     Deduction::mp(Cert::new(self.witness.into()), r)
-        // }
-        // fn pipe<Q: Clone>(
-        //     self,
-        //     pq: <Deduction<A, Prop> as Imply<'a>>::Cert<Prop::Imply<P, Q>>,
-        // ) -> Cert<'a, A, Q, Prop>
-        // where
-        //     A: Clone,
-        //     P: Clone,
-        //     Prop: PropLogic<'a>,
-        // {
-        //     Deduction::mp(pq, self)
-        // }
     }
 
     impl<'a, A: Clone + 'a, Prop: PropLogic<'a>> Imply<'a> for Deduction<A, Prop> {
         type Imply<P: 'a, Q: 'a> = Prop::Imply<P, Q>;
-        type BaseCert<P: Clone + 'a> = Prop::Cert<P>;
         type Cert<P: Clone + 'a> = Cert<'a, A, P, Prop>;
         fn mp<P: Clone, Q: Clone>(
             pq: Self::Cert<Self::Imply<P, Q>>,
             p: Self::Cert<P>,
         ) -> Self::Cert<Q> {
             Cert::new(Prop::l2().apply(pq.witness).apply(p.witness))
-        }
-        fn upgrade<P: Clone + 'a>(value: Self::BaseCert<P>) -> Self::Cert<P> {
-            Cert::new(Prop::l1().apply(value))
         }
         fn def<P, Q>() -> Self::Cert<Self::Imply<P, Q>>
         where

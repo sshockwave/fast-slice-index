@@ -29,7 +29,6 @@ pub trait PropLogic<'a>: Imply<'a> {
 pub trait Imply<'a>: Sized {
     /// Implication: P implies Q
     type Imply<P: 'a, Q: 'a>: Clone + 'a;
-    type BaseCert<P: Clone + 'a>;
     type Cert<P: Clone + 'a>: Clone + Chain<'a, Self, P>;
 
     /// Modus Ponens: Given (P → Q) and P, derive Q
@@ -39,7 +38,6 @@ pub trait Imply<'a>: Sized {
         p: Self::Cert<P>,
     ) -> Self::Cert<Q>;
 
-    fn upgrade<P: Clone + 'a>(value: Self::BaseCert<P>) -> Self::Cert<P>;
     fn def<P, Q>() -> Self::Cert<Self::Imply<P, Q>>
     where
         P: Into<Q> + Clone + 'a,

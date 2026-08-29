@@ -5,16 +5,12 @@ pub struct IntuitionisticImpl<'l, Prop>(PhantomData<(&'l (), Prop)>);
 
 impl<'a, Prop: PropLogic<'a>> Imply<'a> for IntuitionisticImpl<'a, Prop> {
     type Imply<P: 'a, Q: 'a> = Prop::Imply<P, Q>;
-    type BaseCert<P: Clone + 'a> = Prop::Cert<P>;
     type Cert<P: Clone + 'a> = Prop::Cert<P>;
     fn mp<P: Clone, Q: Clone + 'a>(
         pq: Self::Cert<Self::Imply<P, Q>>,
         p: Self::Cert<P>,
     ) -> Self::Cert<Q> {
         Prop::mp(pq, p)
-    }
-    fn upgrade<P: Clone + 'a>(value: Self::BaseCert<P>) -> Self::Cert<P> {
-        value
     }
     fn def<P, Q>() -> Self::Cert<Self::Imply<P, Q>>
     where
