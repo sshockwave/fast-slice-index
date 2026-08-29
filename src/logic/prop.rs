@@ -119,17 +119,21 @@ pub trait Intuitionistic<'l>: PropLogic<'l> + And<'l> + Or<'l> + Negation<'l> {
     -> Cert<'l, Self, Iff<'l, Self, Self::Neg<P>, Self::Imply<P, Self::False>>>;
 }
 
-pub trait ForAllProof<'l, Logic: Imply<'l>, P, Q: for<'x> View<'x> + ?Sized> {
-    fn prove<'x>(self) -> Logic::Imply<P, <Q as View<'x>>::Output>;
+pub trait ForAllProof<'l, Logic: Imply<'l>, P, Q: for<'x> View<'x> + ?Sized>: Clone + 'l {
+    fn prove<'x>(self) -> Cert<'l, Logic, Logic::Imply<P, <Q as View<'x>>::Output>>;
 }
 pub trait ExistsProof<'l, Logic: Imply<'l>, P: for<'x> View<'x> + ?Sized, Q> {
-    fn prove<'x>(self) -> Logic::Imply<<P as View<'x>>::Output, Q>;
+    fn prove<'x>(self) -> Cert<'l, Logic, Logic::Imply<<P as View<'x>>::Output, Q>>;
 }
 
 pub trait FirstOrder<'l>: Imply<'l> + 'l {
     type ForAll<P: for<'x> View<'x> + ?Sized>: Clone;
     type Exists<P: for<'x> View<'x> + ?Sized>: Clone;
-    fn forall_gen<P, Q: for<'x> View<'x> + ?Sized, S: ForAllProof<'l, Self, P, Q>>(
+    fn forall_gen<
+        P: Clone,
+        Q: for<'x> View<'x, Output: Clone> + ?Sized,
+        S: ForAllProof<'l, Self, P, Q>,
+    >(
         proof: S,
     ) -> Cert<'l, Self, Self::Imply<P, Self::ForAll<Q>>>;
     fn exists_gen<P: for<'x> View<'x> + ?Sized, Q, S: ExistsProof<'l, Self, P, Q>>(

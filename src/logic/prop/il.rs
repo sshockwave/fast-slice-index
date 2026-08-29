@@ -1,27 +1,28 @@
-use crate::logic::prop::reflexive;
-
-use super::{And, Cert, Imply, Intuitionistic, Negation, Or, PropLogic, Reductio, exchange};
+use super::{
+    And, Cert, ExistsProof, FirstOrder, ForAllProof, Imply as Implication, Intuitionistic,
+    Negation, Or, PropLogic, Reductio, View, exchange, reflexive,
+};
 use ::core::{convert::Infallible, marker::PhantomData};
 
 /// This trait is sealed to hide the assumptions from the Rust type system.
 mod sealed_imply {
     pub trait Infer<'a, P, Q> {
         fn mp(&self, p: &P) -> Q;
-        fn clone_dyn(&self) -> Implication<'a, P, Q>
+        fn clone_dyn(&self) -> Imply<'a, P, Q>
         where
             Q: 'a;
     }
     /// We have to use `dyn` until https://github.com/rust-lang/rfcs/issues/2999 is resolved.
-    pub struct Implication<'a, P: ?Sized, Q>(pub Box<dyn Infer<'a, P, Q> + 'a>);
+    pub struct Imply<'a, P: ?Sized, Q>(pub Box<dyn Infer<'a, P, Q> + 'a>);
 }
-use self::sealed_imply::{Implication, Infer};
+use self::sealed_imply::{Imply, Infer};
 
-impl<'a, P, Q> Implication<'a, P, Q> {
+impl<'a, P, Q> Imply<'a, P, Q> {
     fn new(infer: impl Infer<'a, P, Q> + 'a) -> Self {
         Self(Box::new(infer))
     }
 }
-impl<'a, P, Q: 'a> Clone for Implication<'a, P, Q> {
+impl<'a, P, Q: 'a> Clone for Imply<'a, P, Q> {
     fn clone(&self) -> Self {
         self.0.clone_dyn()
     }
@@ -30,7 +31,7 @@ impl<'a, P, Q: 'a> Clone for Implication<'a, P, Q> {
 pub struct PropLogicThm;
 
 mod sealed_prop_logic {
-    use super::{Cert, Implication as Imply, Infer, PropLogic, PropLogicThm};
+    use super::{Cert, Imply, Infer, PropLogic, PropLogicThm};
 
     type L1<'a, P, Q> = Imply<'a, P, Imply<'a, Q, P>>;
     type L2<'a, P, Q, R> =
@@ -115,11 +116,11 @@ mod sealed_prop_logic {
         }
     }
 }
-impl<'a> Imply<'a> for PropLogicThm {
-    type Imply<P: 'a, Q: 'a> = Implication<'a, P, Q>;
+impl<'a> Implication<'a> for PropLogicThm {
+    type Imply<P: 'a, Q: 'a> = Imply<'a, P, Q>;
     type Cert<P: Clone + 'a> = P;
     fn mp<P: Clone + 'a, Q: Clone + 'a>(
-        pq: Cert<'a, Self, Implication<'a, P, Q>>,
+        pq: Cert<'a, Self, Imply<'a, P, Q>>,
         p: Cert<'a, Self, P>,
     ) -> Cert<'a, Self, Q> {
         Cert::new(pq.into_inner().0.mp(&p.into_inner()).into())
@@ -138,17 +139,17 @@ impl<'a> Imply<'a> for PropLogicThm {
             fn mp(&self, p: &P) -> Q {
                 p.clone().into()
             }
-            fn clone_dyn(&self) -> Implication<'a, P, Q> {
-                Implication::new(DefProof)
+            fn clone_dyn(&self) -> Imply<'a, P, Q> {
+                Imply::new(DefProof)
             }
         }
-        Cert::new(Implication::new(DefProof).into())
+        Cert::new(Imply::new(DefProof).into())
     }
 }
 
 pub struct IntuitionisticImpl<Prop>(PhantomData<Prop>);
 
-impl<'a, Prop: PropLogic<'a>> Imply<'a> for IntuitionisticImpl<Prop> {
+impl<'a, Prop: PropLogic<'a>> Implication<'a> for IntuitionisticImpl<Prop> {
     type Imply<P: 'a, Q: 'a> = Prop::Imply<P, Q>;
     type Cert<P: Clone + 'a> = Prop::Cert<P>;
     fn mp<P: Clone, Q: Clone + 'a>(
@@ -201,12 +202,12 @@ impl<'l> And<'l> for IntuitionisticImpl<PropLogicThm> {
     fn and_intro<P: Clone, Q: Clone>()
     -> Cert<'l, Self, Self::Imply<P, Self::Imply<Q, Self::And<P, Q>>>> {
         struct Store1;
-        impl<'l, P: Clone + 'l, Q: Clone> Infer<'l, P, Implication<'l, Q, (P, Q)>> for Store1 {
-            fn mp(&self, p: &P) -> Implication<'l, Q, (P, Q)> {
-                Implication::new(Store2(p.clone()))
+        impl<'l, P: Clone + 'l, Q: Clone> Infer<'l, P, Imply<'l, Q, (P, Q)>> for Store1 {
+            fn mp(&self, p: &P) -> Imply<'l, Q, (P, Q)> {
+                Imply::new(Store2(p.clone()))
             }
-            fn clone_dyn(&self) -> Implication<'l, P, Implication<'l, Q, (P, Q)>> {
-                Implication::new(Store1)
+            fn clone_dyn(&self) -> Imply<'l, P, Imply<'l, Q, (P, Q)>> {
+                Imply::new(Store1)
             }
         }
         struct Store2<P>(P);
@@ -214,14 +215,14 @@ impl<'l> And<'l> for IntuitionisticImpl<PropLogicThm> {
             fn mp(&self, q: &Q) -> (P, Q) {
                 (self.0.clone(), q.clone())
             }
-            fn clone_dyn(&self) -> Implication<'l, Q, (P, Q)>
+            fn clone_dyn(&self) -> Imply<'l, Q, (P, Q)>
             where
                 (P, Q): 'l,
             {
-                Implication::new(Store2(self.0.clone()))
+                Imply::new(Store2(self.0.clone()))
             }
         }
-        Cert::new(Implication::new(Store1))
+        Cert::new(Imply::new(Store1))
     }
     fn and_left<P: Clone, Q: Clone>() -> Cert<'l, Self, Self::Imply<Self::And<P, Q>, P>> {
         struct Proof;
@@ -229,14 +230,14 @@ impl<'l> And<'l> for IntuitionisticImpl<PropLogicThm> {
             fn mp(&self, pq: &(P, Q)) -> P {
                 pq.0.clone()
             }
-            fn clone_dyn(&self) -> Implication<'l, (P, Q), P>
+            fn clone_dyn(&self) -> Imply<'l, (P, Q), P>
             where
                 P: 'l,
             {
-                Implication::new(Proof)
+                Imply::new(Proof)
             }
         }
-        Cert::new(Implication::new(Proof))
+        Cert::new(Imply::new(Proof))
     }
     fn and_right<P: Clone, Q: Clone>() -> Cert<'l, Self, Self::Imply<Self::And<P, Q>, Q>> {
         struct Proof;
@@ -244,14 +245,14 @@ impl<'l> And<'l> for IntuitionisticImpl<PropLogicThm> {
             fn mp(&self, pq: &(P, Q)) -> Q {
                 pq.1.clone()
             }
-            fn clone_dyn(&self) -> Implication<'l, (P, Q), Q>
+            fn clone_dyn(&self) -> Imply<'l, (P, Q), Q>
             where
                 Q: 'l,
             {
-                Implication::new(Proof)
+                Imply::new(Proof)
             }
         }
-        Cert::new(Implication::new(Proof))
+        Cert::new(Imply::new(Proof))
     }
 }
 
@@ -283,17 +284,102 @@ impl<'l> Intuitionistic<'l> for IntuitionisticImpl<PropLogicThm> {
             fn mp(&self, p: &Infallible) -> P {
                 match *p {}
             }
-            fn clone_dyn(&self) -> Implication<'l, Infallible, P>
+            fn clone_dyn(&self) -> Imply<'l, Infallible, P>
             where
                 P: 'l,
             {
-                Implication::new(Proof)
+                Imply::new(Proof)
             }
         }
-        Cert::new(Implication::new(Proof))
+        Cert::new(Imply::new(Proof))
     }
     fn neg_def<P: Clone>()
     -> Cert<'l, Self, super::Iff<'l, Self, Self::Neg<P>, Self::Imply<P, Self::False>>> {
         Self::and_intro().mp(reflexive()).mp(reflexive())
+    }
+}
+
+use sealed_forall::{ForAll, ViewGet};
+mod sealed_forall {
+    use super::View;
+    use ::core::marker::PhantomData;
+
+    pub trait ViewGet<'l, V: for<'x> View<'x> + ?Sized> {
+        fn get<'x: 'l>(&self) -> <V as View<'x>>::Output;
+        fn clone_dyn(&self) -> ForAll<'l, V>;
+    }
+
+    pub struct ForAll<'l, V: ?Sized>(pub PhantomData<&'l ()>, pub Box<dyn ViewGet<'l, V> + 'l>);
+
+    impl<'l, V: for<'x> View<'x> + ?Sized> Clone for ForAll<'l, V> {
+        fn clone(&self) -> Self {
+            self.1.clone_dyn()
+        }
+    }
+}
+
+impl<'l> FirstOrder<'l> for IntuitionisticImpl<PropLogicThm> {
+    type ForAll<V: for<'x> View<'x> + ?Sized> = ForAll<'l, V>;
+    type Exists<P: for<'x> View<'x> + ?Sized> = ();
+    fn forall_gen<
+        P: Clone,
+        Q: for<'x> View<'x, Output: Clone> + ?Sized,
+        S: ForAllProof<'l, Self, P, Q> + Clone + 'l,
+    >(
+        proof: S,
+    ) -> Cert<'l, Self, Self::Imply<P, Self::ForAll<Q>>> {
+        type Logic = IntuitionisticImpl<PropLogicThm>;
+        struct Deriver<P, S, Q: ?Sized>(PhantomData<Q>, P, S);
+        impl<'x, P, S, Q: for<'y> View<'y> + ?Sized> View<'x> for Deriver<P, S, Q> {
+            type Output = <Q as View<'x>>::Output;
+        }
+        impl<'l, P: Clone + 'l, S: ForAllProof<'l, Logic, P, Q>, Q: ?Sized + for<'x> View<'x> + 'l>
+            ViewGet<'l, Q> for Deriver<P, S, Q>
+        where
+            for<'x> <Q as View<'x>>::Output: Clone,
+        {
+            fn get<'x: 'l>(&self) -> <Q as View<'x>>::Output {
+                self.2.clone().prove().into_inner().0.mp(&self.1)
+            }
+            fn clone_dyn(&self) -> ForAll<'l, Q> {
+                ForAll(
+                    PhantomData,
+                    Box::new(Deriver(PhantomData, self.1.clone(), self.2.clone())),
+                )
+            }
+        }
+        struct Proof<S, Q: ?Sized>(PhantomData<Q>, S);
+        impl<'l, P: Clone + 'l, Q: ?Sized + for<'x> View<'x> + 'l, S: ForAllProof<'l, Logic, P, Q>>
+            Infer<'l, P, ForAll<'l, Q>> for Proof<S, Q>
+        where
+            for<'x> <Q as View<'x>>::Output: Clone,
+        {
+            fn mp(&self, p: &P) -> ForAll<'l, Q> {
+                ForAll(
+                    PhantomData,
+                    Box::new(Deriver(PhantomData, p.clone(), self.1.clone())),
+                )
+            }
+            fn clone_dyn(&self) -> Imply<'l, P, ForAll<'l, Q>>
+            where
+                ForAll<'l, Q>: 'l,
+            {
+                Imply::new(Proof::<_, _>(PhantomData, self.1.clone()))
+            }
+        }
+        Cert::new(Imply::new(Proof::<_, _>(PhantomData, proof)))
+    }
+    fn exists_elim<'t, P: for<'x> View<'x> + ?Sized, Q>()
+    -> Cert<'l, Self, Self::Imply<<P as View<'t>>::Output, Self::Exists<P>>> {
+        todo!()
+    }
+    fn exists_gen<P: for<'x> View<'x> + ?Sized, Q, S: ExistsProof<'l, Self, P, Q>>(
+        proof: S,
+    ) -> Cert<'l, Self, Self::Imply<Self::Exists<P>, Q>> {
+        todo!()
+    }
+    fn forall_elim<'t, P: for<'x> View<'x> + ?Sized>()
+    -> Cert<'l, Self, Self::Imply<Self::ForAll<P>, <P as View<'t>>::Output>> {
+        todo!()
     }
 }
