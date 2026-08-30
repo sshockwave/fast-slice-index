@@ -7,6 +7,7 @@ use syn::{
     Type, UnOp,
     parse::{Parse, ParseStream},
     parse_quote,
+    punctuated::Punctuated,
 };
 
 /// Parse the `pred!` macro syntax: `pred!('l, pattern)`
@@ -310,5 +311,72 @@ fn expand_pred_expr2(lifetime: &Lifetime, expr: &Expr) -> syn::Result<Option<Typ
 #[proc_macro]
 pub fn pred(input: TokenStream) -> TokenStream {
     let PredInput { expr } = syn::parse_macro_input!(input as PredInput);
+    TokenStream::from(quote! { #expr })
+}
+
+fn paren(expr: Expr) -> Expr {
+    Expr::Paren(ExprParen {
+        expr: Box::new(expr),
+        attrs: Default::default(),
+        paren_token: Default::default(),
+    })
+}
+
+fn punctuated_paren<P>(punctuated: Punctuated<Expr, P>) -> Punctuated<Expr, P> {
+    let mut result = Punctuated::new();
+    for pair in punctuated.into_pairs() {
+        use syn::punctuated::Pair;
+        match pair {
+            Pair::Punctuated(token, delim) => {
+                result.push_value(paren(token));
+                result.push_punct(delim);
+            }
+            Pair::End(token) => {
+                result.push_value(paren(token));
+            }
+        }
+    }
+    result
+}
+
+fn recur_paren(expr: Expr) -> Expr {
+    use syn::*;
+    match expr {
+        Expr::MethodCall(ExprMethodCall {
+            attrs,
+            receiver,
+            dot_token,
+            method,
+            turbofish,
+            paren_token,
+            args,
+        }) => paren(Expr::MethodCall(ExprMethodCall {
+            attrs,
+            receiver: Box::new(recur_paren(*receiver)),
+            dot_token,
+            method,
+            turbofish,
+            paren_token,
+            args: punctuated_paren(args),
+        })),
+        Expr::Binary(ExprBinary {
+            attrs,
+            op,
+            left,
+            right,
+        }) => paren(Expr::Binary(ExprBinary {
+            attrs,
+            op,
+            left: Box::new(recur_paren(*left)),
+            right: Box::new(recur_paren(*right)),
+        })),
+        _ => parse_quote!((#expr)),
+    }
+}
+
+#[proc_macro]
+pub fn parenthesize(intput: TokenStream) -> TokenStream {
+    let expr = syn::parse_macro_input!(intput as Expr);
+    let expr = recur_paren(expr);
     TokenStream::from(quote! { #expr })
 }

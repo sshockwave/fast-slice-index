@@ -45,6 +45,56 @@ pub type IsOne<'l, 'x, Q> = <Q as And<'l>>::And<
     <Q as And<'l>>::And<IsOneLike<'l, 'x, Q>, <Q as Negation<'l>>::Neg<IsZeroLike<'l, 'x, Q>>>,
 >;
 
+macro_rules! expr {
+    (Cert::<$l:lifetime>, $($P:tt)*) => {
+        Cert<$l, Self, expr!($l, $($P)*)>
+    };
+    ($l:lifetime, ForAll::<$x:lifetime, $($y:lifetime),+$(,)?>( $($P:tt)+ )) => {
+        expr!($l, ForAll::<$x>(ForAll::<$($y),+>( $($P)+ )))
+    };
+    ($l:lifetime, ForAll::<$x:lifetime$(,)?>( $($P:tt)+ )) => {
+        <Self as $crate::logic::prop::FirstOrder<$l>>::ForAll<
+            dyn for<$x> $crate::logic::prop::View<
+                $x,
+                Output = expr!($l, $($P)+)
+            > + $l,
+        >
+    };
+    ($l:lifetime, !($($P:tt)*)) => {
+        <Self as Negation<$l>>::Neg<expr!($l, $($P)*)>
+    };
+    ($l:lifetime, ($($P:tt)*).iff($($Q:tt)*)) => {
+        $crate::logic::prop::Iff<$l, Self, expr!($l, $($P)*), expr!($l, $($Q)*)>
+    };
+    ($l:lifetime, ($($P:tt)*).imply($($Q:tt)*)) => {
+        <Self as $crate::logic::prop::Imply<$l>>::Imply<
+            expr!($l, ($($P)*)),
+            expr!($l, ($($Q)*)),
+        >
+    };
+    ($l:lifetime, ($($P:tt)*) && ($($Q:tt)*)) => {
+        <Self as $crate::logic::prop::And<$l>>::And<
+            expr!($l, $($P)*),
+            expr!($l, $($Q)*),
+        >
+    };
+    ($l:lifetime, ($($P:tt)*) || ($($Q:tt)*)) => {
+        <Self as $crate::logic::prop::Or<$l>>::Or<
+            expr!($l, ($($P)*)),
+            expr!($l, ($($Q)*)),
+        >
+    };
+    ($l:lifetime, e!($x:lifetime < $y:lifetime)) => {
+        Self::Lt::<$x, $y>
+    };
+    ($l:lifetime, ($($P:tt)*)) => {
+        expr!($l, $($P)*)
+    };
+    ($l:lifetime, $P:ty) => {
+        $P
+    };
+}
+
 /// Rational numbers as the prime ordered field
 ///
 /// Design:
@@ -93,9 +143,9 @@ pub trait Rationals<'l>:
     /// Each of [`Rationals::Add`] and [`Rationals::Mul`] carries its own
     /// `El`, so nothing otherwise forces `+` and `×` to range over the same
     /// set.
-    fn same_carrier() -> thm!(
-        'l: {},
-        ForAll::<'x>(IsRat::<'l, 'x, Self>.iff(IsRatMul::<'l, 'x, Self>))
+    fn same_carrier() -> expr!(
+        Cert::<'l>,
+        ForAll::<'x>((IsRat::<'l, 'x, Self>).iff(IsRatMul::<'l, 'x, Self>))
     );
 
     /// Nontriviality: ∀x. IsOneLike(x) → ¬IsZeroLike(x), i.e. 1 ≠ 0
@@ -104,9 +154,9 @@ pub trait Rationals<'l>:
     /// [`CommutativeMonoid`], which knows nothing of the other operation;
     /// together with `Mul`'s identity and [`Rationals::same_carrier`] it
     /// upgrades that identity to a full [`IsOne`].
-    fn nontrivial() -> thm!(
-        'l: {},
-        ForAll::<'x>(IsOneLike::<'l, 'x, Self>.imply(!IsZeroLike::<'l, 'x, Self>))
+    fn nontrivial() -> expr!(
+        Cert::<'l>,
+        ForAll::<'x>((IsOneLike::<'l, 'x, Self>).imply(!(IsZeroLike::<'l, 'x, Self>)))
     );
 
     /// Multiplicative inverse: every *nonzero* rational has a reciprocal
@@ -144,20 +194,10 @@ pub trait Rationals<'l>:
     );
 
     /// The order only relates rationals: ∀x ∀y. x < y → IsRat(x) ∧ IsRat(y)
-    fn lt_typed() -> Cert<
-        'l,
-        Self,
-        &'l dyn for<'x> View<
-            'x,
-            Output = &'l dyn for<'y> View<
-                'y,
-                Output = Self::Imply<
-                    Self::Lt<'x, 'y>,
-                    <Self as And<'l>>::And<IsRat<'l, 'x, Self>, IsRat<'l, 'y, Self>>,
-                >,
-            >,
-        >,
-    >;
+    fn lt_typed() -> expr!(
+        Cert::<'l>,
+        ForAll::<'x, 'y>((e!('x < 'y)).imply((IsRat::<'l, 'x, Self>) && (IsRat::<'l, 'y, Self>)))
+    );
 
     /// Irreflexive: ∀x. ¬(x < x)
     fn lt_irrefl() -> Cert<'l, Self, &'l dyn for<'x> View<'x, Output = Self::Neg<Self::Lt<'x, 'x>>>>;

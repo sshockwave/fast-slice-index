@@ -1,5 +1,5 @@
 // Re-export pred procedural macro from the logic-macros crate
-pub(crate) use ::logic_macros::pred;
+pub(crate) use ::logic_macros::{parenthesize, pred};
 
 // Keep thm as a declarative macro that calls pred
 macro_rules! thm {
