@@ -50,8 +50,8 @@
 //! instead of mixing the operation's `Imply` with the field's.
 
 use crate::logic::function::Equality;
-use crate::logic::macros::{pred, thm};
 use crate::logic::prop::{And, FirstOrder};
+use crate::macros::{pred, thm};
 
 macro_rules! expr {
     ($x:lifetime == $y:lifetime) => {

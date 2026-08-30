@@ -1,7 +1,5 @@
 mod axiom;
 pub mod function;
-pub mod group;
-mod macros;
 pub mod nat;
 pub mod prop;
 pub mod rat;

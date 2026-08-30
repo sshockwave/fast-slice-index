@@ -1,7 +1,7 @@
+use crate::algebra::group::{AbelianGroup, BinOp, CommutativeMonoid, IsUnitLike};
 use crate::logic::function::Equality;
-use crate::logic::group::{AbelianGroup, BinOp, CommutativeMonoid, IsUnitLike};
-use crate::logic::macros::thm;
 use crate::logic::prop::{And, Cert, FirstOrder, Negation, Or, View};
+use crate::macros::thm;
 
 /// Type alias: "x is a rational"
 /// Equivalent to: x is in the additive group's carrier
@@ -418,7 +418,6 @@ pub trait Rationals<'l>:
 #[cfg(test)]
 mod tests {
     use super::{IsOne, IsRat, IsZero, Prod, Rationals, Sum, View};
-    use crate::logic::group::{AbelianGroup, CommutativeMonoid};
 
     /// The field-specific axioms are reachable from outside this module, and
     /// the `IsZero` / `IsOne` / `Sum` / `Prod` aliases all resolve against a
@@ -440,7 +439,7 @@ mod tests {
     /// single-valuedness, closure, commutativity, associativity and the
     /// neutral element are stated once each and reused by both operations.
     fn _group_axioms_cover_both<'l, Q: Rationals<'l>>() {
-        use crate::logic::group::*;
+        use crate::algebra::group::*;
         let _ = <Q::Add as Total<'l, Q>>::total();
         let _ = <Q::Add as BinOp<'l, Q>>::single_valued();
         let _ = <Q::Add as Closed<'l, Q>>::closed();
