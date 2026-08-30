@@ -56,13 +56,6 @@ impl<'a, Prop: Imply<'a>> Imply<'a> for ProofRing<Prop> {
     ) -> Cert<'a, Self, Q> {
         Prop::mp(pq.cast(), p.cast()).cast()
     }
-    fn def<P, Q>() -> Cert<'a, Self, Self::Imply<P, Q>>
-    where
-        P: Into<Q> + Clone + 'a,
-        Q: Clone + 'a,
-    {
-        Prop::def().cast()
-    }
 }
 
 impl<'a, Prop: Negation<'a>> Negation<'a> for ProofRing<Prop> {

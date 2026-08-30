@@ -33,6 +33,9 @@ mod sealed_deduction {
     pub struct Deduction<A, Prop>(PhantomData<(A, Prop)>);
     impl<A, Prop> Clone for Deduction<A, Prop> {
         fn clone(&self) -> Self {
+            struct A<P> {
+                inner: P,
+            }
             *self
         }
     }
@@ -60,13 +63,6 @@ mod sealed_deduction {
             p: Cert<'a, Self, P>,
         ) -> Cert<'a, Self, Q> {
             Prop::l2().mp(pq.cast()).mp(p.cast()).cast()
-        }
-        fn def<P, Q>() -> Cert<'a, Self, Self::Imply<P, Q>>
-        where
-            P: Into<Q> + Clone + 'a,
-            Q: Clone + 'a,
-        {
-            Self::upgrade(Prop::def())
         }
     }
     impl<'a, A: Clone + 'a, Prop: PropLogic<'a>> PropLogic<'a> for Deduction<A, Prop> {

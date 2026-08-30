@@ -126,26 +126,6 @@ impl<'a> Implication<'a> for PropLogicThm {
     ) -> Cert<'a, Self, Q> {
         Cert::new(pq.into_inner().0.mp(p.into_inner()).into())
     }
-    fn def<P, Q>() -> Cert<'a, Self, Self::Imply<P, Q>>
-    where
-        P: Into<Q> + Clone + 'a,
-        Q: Clone + 'a,
-    {
-        struct DefProof;
-        impl<'a, P, Q> Infer<'a, P, Q> for DefProof
-        where
-            P: Into<Q> + Clone,
-            Q: Clone,
-        {
-            fn mp(&self, p: P) -> Q {
-                p.into()
-            }
-            fn clone_dyn(&self) -> Imply<'a, P, Q> {
-                Imply::new(DefProof)
-            }
-        }
-        Cert::new(Imply::new(DefProof).into())
-    }
 }
 
 pub struct IntuitionisticImpl<Prop>(PhantomData<Prop>);
@@ -158,13 +138,6 @@ impl<'a, Prop: PropLogic<'a>> Implication<'a> for IntuitionisticImpl<Prop> {
         p: Cert<'a, Self, P>,
     ) -> Cert<'a, Self, Q> {
         pq.mp(p)
-    }
-    fn def<P, Q>() -> Cert<'a, Self, Self::Imply<P, Q>>
-    where
-        P: Into<Q> + Clone + 'a,
-        Q: Clone + 'a,
-    {
-        Prop::def().cast()
     }
 }
 impl<'a, Prop: PropLogic<'a>> PropLogic<'a> for IntuitionisticImpl<Prop> {

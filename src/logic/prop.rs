@@ -57,11 +57,6 @@ pub trait Imply<'a>: Sized {
         pq: Cert<'a, Self, Self::Imply<P, Q>>,
         p: Cert<'a, Self, P>,
     ) -> Cert<'a, Self, Q>;
-
-    fn def<P, Q>() -> Cert<'a, Self, Self::Imply<P, Q>>
-    where
-        P: Into<Q> + Clone + 'a,
-        Q: Clone + 'a;
 }
 
 pub trait Negation<'l> {

@@ -23,10 +23,6 @@ pub type Subset<'l, 'x, 'y, P> = dyn for<'z> View<
 pub trait ZF<'l>: Negation<'l> + And<'l> + 'l {
     type In<'b: 'l, 'c: 'l>;
 
-    // First-order Logic
-    fn instantiate<'x, V: for<'y> View<'y, Output: Clone>>()
-    -> Cert<'l, Self, <V as View<'x>>::Output>;
-
     fn extensionality() -> Cert<
         'l,
         Self,

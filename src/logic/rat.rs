@@ -1,6 +1,7 @@
 use crate::logic::function::Equality;
 use crate::logic::group::{AbelianGroup, CommutativeMonoid, IsUnitLike};
-use crate::logic::prop::{And, Cert, Iff, Negation, Or, View};
+use crate::logic::macros::thm;
+use crate::logic::prop::{And, Cert, FirstOrder, Negation, Or, View};
 
 /// Type alias: "x is a rational"
 /// Equivalent to: x is in the additive group's carrier
@@ -69,7 +70,9 @@ pub type IsOne<'l, 'x, Q> = <Q as And<'l>>::And<
 /// encoding is strictly weaker than the existential it stands for, and the
 /// witnesses in [`AbelianGroup::inverse`] and [`Rationals::mul_inverse`] could
 /// not be extracted.
-pub trait Rationals<'l>: Equality<'l> + Negation<'l> + And<'l> + Or<'l> + 'l {
+pub trait Rationals<'l>:
+    Equality<'l> + Negation<'l> + And<'l> + Or<'l> + FirstOrder<'l> + 'l
+{
     /// Addition: an abelian group on all of ℚ
     ///
     /// [`AbelianGroup::inverse`] is the additive inverse axiom, and
@@ -90,14 +93,10 @@ pub trait Rationals<'l>: Equality<'l> + Negation<'l> + And<'l> + Or<'l> + 'l {
     /// Each of [`Rationals::Add`] and [`Rationals::Mul`] carries its own
     /// `El`, so nothing otherwise forces `+` and `×` to range over the same
     /// set.
-    fn same_carrier() -> Cert<
-        'l,
-        Self,
-        &'l dyn for<'x> View<
-            'x,
-            Output = Iff<'l, Self, IsRat<'l, 'x, Self>, IsRatMul<'l, 'x, Self>>,
-        >,
-    >;
+    fn same_carrier() -> thm!(
+        'l: {},
+        ForAll::<'x>((IsRat::<'l, 'x, Self>).iff(IsRatMul::<'l, 'x, Self>))
+    );
 
     /// Nontriviality: ∀x. IsOneLike(x) → ¬IsZeroLike(x), i.e. 1 ≠ 0
     ///
@@ -105,14 +104,10 @@ pub trait Rationals<'l>: Equality<'l> + Negation<'l> + And<'l> + Or<'l> + 'l {
     /// [`CommutativeMonoid`], which knows nothing of the other operation;
     /// together with `Mul`'s identity and [`Rationals::same_carrier`] it
     /// upgrades that identity to a full [`IsOne`].
-    fn nontrivial() -> Cert<
-        'l,
-        Self,
-        &'l dyn for<'x> View<
-            'x,
-            Output = Self::Imply<IsOneLike<'l, 'x, Self>, Self::Neg<IsZeroLike<'l, 'x, Self>>>,
-        >,
-    >;
+    fn nontrivial() -> thm!(
+        'l: {},
+        ForAll::<'x>((IsOneLike::<'l, 'x, Self>).imply(!IsZeroLike::<'l, 'x, Self>))
+    );
 
     /// Multiplicative inverse: every *nonzero* rational has a reciprocal
     ///
@@ -121,79 +116,32 @@ pub trait Rationals<'l>: Equality<'l> + Negation<'l> + And<'l> + Or<'l> + 'l {
     /// The `¬IsZeroLike` guard is what keeps this from being false at 0, and
     /// is exactly why [`Rationals::Mul`] is a monoid rather than an
     /// [`AbelianGroup`].
-    fn mul_inverse() -> Cert<
-        'l,
-        Self,
-        &'l dyn for<'x> View<
-            'x,
-            Output = Self::Imply<
-                IsRat<'l, 'x, Self>,
-                Self::Imply<
-                    Self::Neg<IsZeroLike<'l, 'x, Self>>,
-                    Self::Neg<
-                        &'l dyn for<'y> View<
-                            'y,
-                            Output = Self::Imply<
-                                IsRat<'l, 'y, Self>,
-                                Self::Neg<
-                                    &'l dyn for<'z> View<
-                                        'z,
-                                        Output = Self::Imply<
-                                            Prod<'l, 'x, 'y, 'z, Self>,
-                                            IsOneLike<'l, 'z, Self>,
-                                        >,
-                                    >,
-                                >,
-                            >,
-                        >,
-                    >,
-                >,
-            >,
-        >,
-    >;
+    fn mul_inverse() -> thm!(
+        'l: {},
+        ForAll::<'x>(
+            (IsRat::<'l, 'x, Self>).imply((!IsZeroLike::<'l, 'x, Self>).imply(!ForAll::<'y>(
+                (IsRat::<'l, 'y, Self>).imply(!ForAll::<'z>(
+                    (Prod::<'l, 'x, 'y, 'z, Self>).imply(IsOneLike::<'l, 'z, Self>)
+                ))
+            )))
+        )
+    );
 
     /// Distributivity: x · (y + z) = x · y + x · z
     ///
     /// Relationally: `s = y+z`, `a = x·y`, `b = x·z`, `t = a+b`, and then
     /// `x·s = t`. This is the axiom linking `+` to `×`.
-    fn distributive() -> Cert<
-        'l,
-        Self,
-        &'l dyn for<'x> View<
-            'x,
-            Output = &'l dyn for<'y> View<
-                'y,
-                Output = &'l dyn for<'z> View<
-                    'z,
-                    Output = &'l dyn for<'s> View<
-                        's,
-                        Output = &'l dyn for<'a> View<
-                            'a,
-                            Output = &'l dyn for<'b> View<
-                                'b,
-                                Output = &'l dyn for<'t> View<
-                                    't,
-                                    Output = Self::Imply<
-                                        Sum<'l, 'y, 'z, 's, Self>,
-                                        Self::Imply<
-                                            Prod<'l, 'x, 'y, 'a, Self>,
-                                            Self::Imply<
-                                                Prod<'l, 'x, 'z, 'b, Self>,
-                                                Self::Imply<
-                                                    Sum<'l, 'a, 'b, 't, Self>,
-                                                    Prod<'l, 'x, 's, 't, Self>,
-                                                >,
-                                            >,
-                                        >,
-                                    >,
-                                >,
-                            >,
-                        >,
-                    >,
-                >,
-            >,
-        >,
-    >;
+    fn distributive() -> thm!(
+        'l: {},
+        ForAll::<'x, 'y, 'z, 's, 'a, 'b, 't>(
+            (Sum::<'l, 'y, 'z, 's, Self>).imply(
+                (Prod::<'l, 'x, 'y, 'a, Self>).imply(
+                    (Prod::<'l, 'x, 'z, 'b, Self>)
+                        .imply((Sum::<'l, 'a, 'b, 't, Self>).imply(Prod::<'l, 'x, 's, 't, Self>))
+                )
+            )
+        )
+    );
 
     /// The order only relates rationals: ∀x ∀y. x < y → IsRat(x) ∧ IsRat(y)
     fn lt_typed() -> Cert<
