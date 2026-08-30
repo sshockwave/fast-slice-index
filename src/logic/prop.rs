@@ -143,8 +143,10 @@ pub trait FirstOrder<'l>: Imply<'l> + 'l {
     -> Cert<'l, Self, Self::Imply<Self::ForAll<P>, <P as View<'t>>::Output>>
     where
         <P as View<'t>>::Output: Clone;
-    fn exists_elim<'t, P: for<'x> View<'x> + ?Sized, Q>()
-    -> Cert<'l, Self, Self::Imply<<P as View<'t>>::Output, Self::Exists<P>>>;
+    fn exists_elim<'t: 'l, P: for<'x> View<'x> + ?Sized, Q>()
+    -> Cert<'l, Self, Self::Imply<<P as View<'t>>::Output, Self::Exists<P>>>
+    where
+        <P as View<'t>>::Output: Clone;
 }
 
 pub trait ViewT {

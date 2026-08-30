@@ -328,12 +328,12 @@ mod sealed_exists {
     }
     pub trait ExistsSupply<'l, V: for<'x> View<'x> + ?Sized> {
         fn get<'o, 'm>(&self, f: Box<dyn GetHandler<'l, 'o, V> + 'm>) -> IsSome<'o>;
-        fn clone_dyn(&self) -> Box<dyn ExistsSupply<'l, V>>;
+        fn clone_dyn(&self) -> Exists<'l, V>;
     }
-    pub struct Exists<'l, V: ?Sized>(pub Box<dyn ExistsSupply<'l, V>>);
+    pub struct Exists<'l, V: ?Sized>(pub Box<dyn ExistsSupply<'l, V> + 'l>);
     impl<V: for<'x> View<'x> + ?Sized> Clone for Exists<'_, V> {
         fn clone(&self) -> Self {
-            Self(self.0.clone_dyn())
+            self.0.clone_dyn()
         }
     }
 }
@@ -456,8 +456,40 @@ impl<'l> FirstOrder<'l> for Logic {
         }
         Cert::new(Imply::new(Store(PhantomData, proof)))
     }
-    fn exists_elim<'t, P: for<'x> View<'x> + ?Sized, Q>()
-    -> Cert<'l, Self, Self::Imply<<P as View<'t>>::Output, Self::Exists<P>>> {
-        todo!()
+    fn exists_elim<'t: 'l, P: for<'x> View<'x> + ?Sized, Q>()
+    -> Cert<'l, Self, Self::Imply<<P as View<'t>>::Output, Self::Exists<P>>>
+    where
+        <P as View<'t>>::Output: Clone,
+    {
+        struct Witness<P>(P);
+        impl<'l, 't: 'l, P: for<'x> View<'x> + ?Sized> ExistsSupply<'l, P>
+            for Witness<<P as View<'t>>::Output>
+        where
+            <P as View<'t>>::Output: Clone + 'l,
+        {
+            fn get<'o, 'm>(&self, mut f: Box<dyn GetHandler<'l, 'o, P> + 'm>) -> IsSome<'o> {
+                f.handle(self.0.clone())
+            }
+            fn clone_dyn(&self) -> Exists<'l, P> {
+                Exists(Box::new(Witness(self.0.clone())))
+            }
+        }
+        struct Proof;
+        impl<'l, 't: 'l, P: for<'x> View<'x> + ?Sized + 'l>
+            Infer<'l, <P as View<'t>>::Output, Exists<'l, P>> for Proof
+        where
+            <P as View<'t>>::Output: Clone,
+        {
+            fn mp(&self, p: <P as View<'t>>::Output) -> Exists<'l, P> {
+                Exists(Box::new(Witness(p)))
+            }
+            fn clone_dyn(&self) -> Imply<'l, <P as View<'t>>::Output, Exists<'l, P>>
+            where
+                Exists<'l, P>: 'l,
+            {
+                Imply::new(Proof)
+            }
+        }
+        Cert::new(Imply::new(Proof))
     }
 }
