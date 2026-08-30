@@ -37,10 +37,10 @@
 //! [`AbelianGroup`] is [`CommutativeMonoid`] plus inverses, because ℚ needs
 //! exactly that asymmetry: `+` is an abelian group on all of ℚ, but `×` is
 //! only a commutative *monoid* there. Multiplication has to stay total — `x·0`
-//! is a rational — while [`Group::inverse`](AbelianGroup::inverse) is false at
+//! is a rational — while [`Group::inverse`](InverseExists::inverse) is false at
 //! 0. Restricting `×`'s carrier to ℚ∖{0} to recover a group would make
 //! `Op<'x, 'n, 'z>` unprovable for zero `n`, since
-//! [`CommutativeMonoid::closed`] forces both arguments into the carrier. So
+//! [`Closed::closed`] forces both arguments into the carrier. So
 //! multiplicative inverses stay a *guarded* field axiom, and this module
 //! supplies the part that really is shared.
 //!
@@ -50,164 +50,156 @@
 //! instead of mixing the operation's `Imply` with the field's.
 
 use crate::logic::function::Equality;
-use crate::logic::prop::{And, Imply, Negation, PropLogic, View};
+use crate::logic::macros::{pred, thm};
+use crate::logic::prop::{And, FirstOrder};
+
+macro_rules! expr {
+    ($x:lifetime == $y:lifetime) => {
+        Logic::Eq::<$x, $y>
+    };
+    ($x:lifetime * $y:lifetime == $z:lifetime) => {
+        <Self as BinOp<'l, Logic>>::Op::<$x, $y, $z>
+    };
+    ($x:lifetime == 1) => {
+        IsUnitLike::<'l, $x, Self, Logic>
+    };
+}
+
+pub trait BinOp<'l, Logic>
+where
+    Logic: FirstOrder<'l> + Equality<'l>,
+{
+    /// The operation's graph: `Op<'x, 'y, 'z>` means "x ∘ y = z"
+    type Op<'x, 'y, 'z>;
+
+    /// Carrier predicate: which elements the operation is defined on
+    type El<'x>;
+
+    /// Functional (single-valued): ∀x ∀y ∀z ∀w. x ∘ y = z → x ∘ y = w → z = w
+    fn single_valued() -> thm!(
+        'l: { Logic },
+        ForAll::<'x, 'y>(
+            Call::<'z> = Self::Op::<'x, 'y>,
+            Call::<'w> = Self::Op::<'x, 'y>,
+            expr!('z == 'w)
+        )
+    );
+}
 
 /// Type alias: "e is neutral for the operation"
 /// Equivalent to: ∀y. El(y) → e ∘ y = y
 ///
 /// Note: doesn't require e to be in the carrier.
-/// [`CommutativeMonoid::identity_exists`] adds that conjunct, mirroring how
+/// [`IdentityExists::identity_exists`] adds that conjunct, mirroring how
 /// `nat` splits `IsZeroLike` from `IsZero`.
-pub type IsUnitLike<'l, 'e, M, Eq> = &'l dyn for<'y> View<
-    'y,
-    Output = <Eq as Imply<'l>>::Imply<
-        <M as CommutativeMonoid<'l, Eq>>::El<'y>,
-        &'l dyn for<'z> View<
-            'z,
-            Output = <Eq as Imply<'l>>::Imply<
-                <M as CommutativeMonoid<'l, Eq>>::Op<'e, 'y, 'z>,
-                <Eq as Equality<'l>>::Eq<'z, 'y>,
-            >,
-        >,
-    >,
->;
+pub type IsUnitLike<'l, 'e, M, Eq> = pred!(
+    'l: { Eq },
+    Call::<'y> = <M as BinOp<'l, Eq>>::El,
+    <M as BinOp<'l, Eq>>::Op::<'e, 'y, 'y>
+);
 
-/// A commutative monoid: a carrier closed under a total, associative,
-/// commutative operation with a two-sided identity.
-///
-/// `Op<'x, 'y, 'z>` is the operation's graph, read "x ∘ y = z". See the module
-/// docs on why this is a ternary relation rather than a function on a
-/// Cartesian product.
-///
-/// The lifetime parameters of [`CommutativeMonoid::El`] and
-/// [`CommutativeMonoid::Op`] carry no `: 'l` bound. That bound would make them
-/// ill-formed inside a concrete `for<'n> View<'n>` predicate, which would
-/// render schemas like [`crate::logic::rat::Rationals::prime_field`]
-/// uninstantiable.
-pub trait CommutativeMonoid<'l, Eq>
+pub trait Total<'l, Logic>: BinOp<'l, Logic>
 where
-    Self: 'l,
-    Eq: PropLogic<'l> + Negation<'l> + Equality<'l> + And<'l> + ?Sized,
+    Logic: FirstOrder<'l> + Equality<'l> + And<'l>,
 {
-    /// Carrier predicate: which elements the operation is defined on
-    type El<'x>;
-
-    /// The operation's graph: `Op<'x, 'y, 'z>` means "x ∘ y = z"
-    type Op<'x, 'y, 'z>;
-
     /// Total: ∀x ∀y. El(x) → El(y) → ∃z. El(z) ∧ x ∘ y = z
-    fn total() -> Eq::Cert<
-        &'l dyn for<'x> View<
-            'x,
-            Output = &'l dyn for<'y> View<
-                'y,
-                Output = Eq::Imply<
-                    Self::El<'x>,
-                    Eq::Imply<
-                        Self::El<'y>,
-                        Eq::Neg<
-                            &'l dyn for<'z> View<
-                                'z,
-                                Output = Eq::Imply<Self::El<'z>, Eq::Neg<Self::Op<'x, 'y, 'z>>>,
-                            >,
-                        >,
-                    >,
-                >,
-            >,
-        >,
-    >;
+    fn total() -> thm!(
+        'l: { Logic },
+        Call::<'x> = Self::El,
+        Call::<'y> = Self::El,
+        Exists::<'z>(Self::El::<'z> && expr!('x * 'y == 'z))
+    );
+}
 
-    /// Functional (single-valued): ∀x ∀y ∀z ∀w. x ∘ y = z → x ∘ y = w → z = w
-    fn functional() -> Eq::Cert<
-        &'l dyn for<'x> View<
-            'x,
-            Output = &'l dyn for<'y> View<
-                'y,
-                Output = &'l dyn for<'z> View<
-                    'z,
-                    Output = &'l dyn for<'w> View<
-                        'w,
-                        Output = Eq::Imply<
-                            Self::Op<'x, 'y, 'z>,
-                            Eq::Imply<Self::Op<'x, 'y, 'w>, Eq::Eq<'z, 'w>>,
-                        >,
-                    >,
-                >,
-            >,
-        >,
-    >;
-
+pub trait Closed<'l, Logic>: BinOp<'l, Logic>
+where
+    Logic: FirstOrder<'l> + Equality<'l> + And<'l>,
+{
     /// Closed: ∀x ∀y ∀z. x ∘ y = z → El(x) ∧ (El(y) ∧ El(z))
-    fn closed() -> Eq::Cert<
-        &'l dyn for<'x> View<
-            'x,
-            Output = &'l dyn for<'y> View<
-                'y,
-                Output = &'l dyn for<'z> View<
-                    'z,
-                    Output = Eq::Imply<
-                        Self::Op<'x, 'y, 'z>,
-                        Eq::And<Self::El<'x>, Eq::And<Self::El<'y>, Self::El<'z>>>,
-                    >,
-                >,
-            >,
-        >,
-    >;
+    fn closed() -> thm!(
+        'l: { Logic },
+        ForAll::<'x, 'y, 'z>(
+            expr!('x * 'y == 'z).imply(Self::El::<'x> && Self::El::<'y> && Self::El::<'z>)
+        )
+    );
+}
 
+pub trait Commutative<'l, Logic>: BinOp<'l, Logic>
+where
+    Logic: FirstOrder<'l> + Equality<'l> + And<'l>,
+{
     /// Commutative: ∀x ∀y ∀z. x ∘ y = z → y ∘ x = z
-    fn comm() -> Eq::Cert<
-        &'l dyn for<'x> View<
-            'x,
-            Output = &'l dyn for<'y> View<
-                'y,
-                Output = &'l dyn for<'z> View<
-                    'z,
-                    Output = Eq::Imply<Self::Op<'x, 'y, 'z>, Self::Op<'y, 'x, 'z>>,
-                >,
-            >,
-        >,
-    >;
+    fn comm() -> thm!(
+        'l: { Logic },
+        ForAll::<'x, 'y, 'z>(expr!('x * 'y == 'z).imply(expr!('y * 'x == 'z)))
+    );
+}
 
+pub trait Associative<'l, Logic>: BinOp<'l, Logic>
+where
+    Logic: FirstOrder<'l> + Equality<'l> + And<'l>,
+{
     /// Associative: (x ∘ y) ∘ z = x ∘ (y ∘ z)
     ///
-    /// Relationally: `u = x∘y`, `v = y∘z`, `w = u∘z`, and then `x∘v = w`.
-    fn assoc() -> Eq::Cert<
-        &'l dyn for<'x> View<
-            'x,
-            Output = &'l dyn for<'y> View<
-                'y,
-                Output = &'l dyn for<'z> View<
-                    'z,
-                    Output = &'l dyn for<'u> View<
-                        'u,
-                        Output = &'l dyn for<'v> View<
-                            'v,
-                            Output = &'l dyn for<'w> View<
-                                'w,
-                                Output = Eq::Imply<
-                                    Self::Op<'x, 'y, 'u>,
-                                    Eq::Imply<
-                                        Self::Op<'y, 'z, 'v>,
-                                        Eq::Imply<Self::Op<'u, 'z, 'w>, Self::Op<'x, 'v, 'w>>,
-                                    >,
-                                >,
-                            >,
-                        >,
-                    >,
-                >,
-            >,
-        >,
-    >;
+    /// Relationally: `u = x∘y`, `v = y∘z`, `w = (u=x∘y)∘z`, and then `x∘v = w`.
+    fn assoc() -> thm!(
+        'l: { Logic },
+        ForAll::<'x, 'y, 'z>(
+            Call::<'u> = Self::Op::<'x, 'y>,
+            Call::<'v> = Self::Op::<'y, 'z>,
+            Call::<'w> = Self::Op::<'u, 'z>,
+            expr!('x * 'v == 'w)
+        )
+    );
+}
 
+pub trait IdentityExists<'l, Logic>: BinOp<'l, Logic>
+where
+    Logic: FirstOrder<'l> + Equality<'l> + And<'l>,
+{
     /// Identity exists: ∃e. El(e) ∧ IsUnitLike(e)
-    fn identity_exists() -> Eq::Cert<
-        Eq::Neg<
-            &'l dyn for<'e> View<
-                'e,
-                Output = Eq::Imply<Self::El<'e>, Eq::Neg<IsUnitLike<'l, 'e, Self, Eq>>>,
-            >,
-        >,
-    >;
+    fn identity_exists() -> thm!(
+        'l: { Logic },
+        Exists::<'e>(Self::El::<'e> && IsUnitLike::<'l, 'e, Self, Logic>)
+    );
+}
+
+pub trait InverseExists<'l, Logic>: BinOp<'l, Logic>
+where
+    Logic: FirstOrder<'l> + Equality<'l> + And<'l>,
+{
+    /// Inverses: ∀x. El(x) → ∃y. El(y) ∧ (x ∘ y is neutral)
+    fn inverse() -> thm!(
+        'l: { Logic },
+        Call::<'x> = Self::El,
+        Exists::<'y>(Self::El::<'y> && (Call::<'z> = Self::Op::<'x, 'y>, expr!('z == 1)))
+    );
+}
+
+pub trait Monoid<'l, Eq>:
+    Total<'l, Eq> + Closed<'l, Eq> + Associative<'l, Eq> + IdentityExists<'l, Eq> + 'l
+where
+    Eq: FirstOrder<'l> + Equality<'l> + And<'l>,
+{
+}
+impl<'l, Eq, T: 'l> Monoid<'l, Eq> for T
+where
+    T: Total<'l, Eq> + Closed<'l, Eq> + Associative<'l, Eq> + IdentityExists<'l, Eq> + 'l,
+    Eq: FirstOrder<'l> + Equality<'l> + And<'l>,
+{
+}
+
+pub trait CommutativeMonoid<'l, Eq>
+where
+    Self: Monoid<'l, Eq> + Commutative<'l, Eq> + 'l,
+    Eq: Equality<'l> + And<'l> + FirstOrder<'l>,
+{
+}
+impl<'l, Eq, T: 'l> CommutativeMonoid<'l, Eq> for T
+where
+    Self: Monoid<'l, Eq> + Commutative<'l, Eq> + 'l,
+    Eq: Equality<'l> + And<'l> + FirstOrder<'l>,
+{
 }
 
 /// An abelian group: a [`CommutativeMonoid`] in which every element has an
@@ -215,35 +207,15 @@ where
 ///
 /// This is the only axiom separating the two, and it is exactly the one a
 /// field's multiplication fails at 0 — see the module docs.
-pub trait AbelianGroup<'l, Eq>: CommutativeMonoid<'l, Eq>
+pub trait AbelianGroup<'l, Logic>:
+    CommutativeMonoid<'l, Logic> + InverseExists<'l, Logic> + 'l
 where
-    Self: 'l,
-    Eq: Negation<'l> + Equality<'l> + And<'l>,
+    Logic: Equality<'l> + And<'l> + FirstOrder<'l>,
 {
-    /// Inverses: ∀x. El(x) → ∃y. El(y) ∧ (x ∘ y is neutral)
-    fn inverse() -> Eq::Cert<
-        &'l dyn for<'x> View<
-            'x,
-            Output = Eq::Imply<
-                Self::El<'x>,
-                Eq::Neg<
-                    &'l dyn for<'y> View<
-                        'y,
-                        Output = Eq::Imply<
-                            Self::El<'y>,
-                            Eq::Neg<
-                                &'l dyn for<'z> View<
-                                    'z,
-                                    Output = Eq::Imply<
-                                        Self::Op<'x, 'y, 'z>,
-                                        IsUnitLike<'l, 'z, Self, Eq>,
-                                    >,
-                                >,
-                            >,
-                        >,
-                    >,
-                >,
-            >,
-        >,
-    >;
+}
+impl<'l, Logic, T: 'l> AbelianGroup<'l, Logic> for T
+where
+    T: CommutativeMonoid<'l, Logic> + InverseExists<'l, Logic> + 'l,
+    Logic: Equality<'l> + And<'l> + FirstOrder<'l>,
+{
 }

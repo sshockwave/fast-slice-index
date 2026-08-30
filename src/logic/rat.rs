@@ -1,23 +1,21 @@
 use crate::logic::function::Equality;
-use crate::logic::group::{AbelianGroup, CommutativeMonoid, IsUnitLike};
+use crate::logic::group::{AbelianGroup, BinOp, CommutativeMonoid, IsUnitLike};
 use crate::logic::macros::thm;
 use crate::logic::prop::{And, Cert, FirstOrder, Negation, Or, View};
 
 /// Type alias: "x is a rational"
 /// Equivalent to: x is in the additive group's carrier
-pub type IsRat<'l, 'x, Q> = <<Q as Rationals<'l>>::Add as CommutativeMonoid<'l, Q>>::El<'x>;
+pub type IsRat<'l, 'x, Q> = <<Q as Rationals<'l>>::Add as BinOp<'l, Q>>::El<'x>;
 
 /// Type alias: "x is in the multiplicative carrier"
 /// Pinned to [`IsRat`] by [`Rationals::same_carrier`]
-pub type IsRatMul<'l, 'x, Q> = <<Q as Rationals<'l>>::Mul as CommutativeMonoid<'l, Q>>::El<'x>;
+pub type IsRatMul<'l, 'x, Q> = <<Q as Rationals<'l>>::Mul as BinOp<'l, Q>>::El<'x>;
 
 /// Type alias: "x + y = z"
-pub type Sum<'l, 'x, 'y, 'z, Q> =
-    <<Q as Rationals<'l>>::Add as CommutativeMonoid<'l, Q>>::Op<'x, 'y, 'z>;
+pub type Sum<'l, 'x, 'y, 'z, Q> = <<Q as Rationals<'l>>::Add as BinOp<'l, Q>>::Op<'x, 'y, 'z>;
 
 /// Type alias: "x · y = z"
-pub type Prod<'l, 'x, 'y, 'z, Q> =
-    <<Q as Rationals<'l>>::Mul as CommutativeMonoid<'l, Q>>::Op<'x, 'y, 'z>;
+pub type Prod<'l, 'x, 'y, 'z, Q> = <<Q as Rationals<'l>>::Mul as BinOp<'l, Q>>::Op<'x, 'y, 'z>;
 
 /// Type alias: "x is additively neutral"
 /// Equivalent to: ∀y. IsRat(y) → x + y = y
@@ -171,7 +169,7 @@ pub trait Rationals<'l>:
         ForAll::<'x>(
             IsRat::<'l, 'x, Self>.imply((!IsZeroLike::<'l, 'x, Self>).imply(!ForAll::<'y>(
                 IsRat::<'l, 'y, Self>.imply(!(
-                    Call::<'z> = <Self::Mul as CommutativeMonoid<'l, Self>>::Op::<'x, 'y>,
+                    Call::<'z> = <Self::Mul as BinOp<'l, Self>>::Op::<'x, 'y>,
                     IsOneLike::<'l, 'z, Self>
                 ))
             )))
@@ -185,10 +183,10 @@ pub trait Rationals<'l>:
     fn distributive() -> thm!(
         'l: {},
         ForAll::<'x, 'y, 'z>(
-            Call::<'s> = <Self::Add as CommutativeMonoid<'l, Self>>::Op::<'y, 'z>,
-            Call::<'a> = <Self::Mul as CommutativeMonoid<'l, Self>>::Op::<'x, 'y>,
-            Call::<'b> = <Self::Mul as CommutativeMonoid<'l, Self>>::Op::<'x, 'z>,
-            Call::<'t> = <Self::Add as CommutativeMonoid<'l, Self>>::Op::<'a, 'b>,
+            Call::<'s> = <Self::Add as BinOp<'l, Self>>::Op::<'y, 'z>,
+            Call::<'a> = <Self::Mul as BinOp<'l, Self>>::Op::<'x, 'y>,
+            Call::<'b> = <Self::Mul as BinOp<'l, Self>>::Op::<'x, 'z>,
+            Call::<'t> = <Self::Add as BinOp<'l, Self>>::Op::<'a, 'b>,
             Prod::<'l, 'x, 's, 't, Self>
         )
     );
@@ -442,21 +440,22 @@ mod tests {
     /// single-valuedness, closure, commutativity, associativity and the
     /// neutral element are stated once each and reused by both operations.
     fn _group_axioms_cover_both<'l, Q: Rationals<'l>>() {
-        let _ = <Q::Add as CommutativeMonoid<'l, Q>>::total();
-        let _ = <Q::Add as CommutativeMonoid<'l, Q>>::functional();
-        let _ = <Q::Add as CommutativeMonoid<'l, Q>>::closed();
-        let _ = <Q::Add as CommutativeMonoid<'l, Q>>::comm();
-        let _ = <Q::Add as CommutativeMonoid<'l, Q>>::assoc();
-        let _ = <Q::Add as CommutativeMonoid<'l, Q>>::identity_exists();
+        use crate::logic::group::*;
+        let _ = <Q::Add as Total<'l, Q>>::total();
+        let _ = <Q::Add as BinOp<'l, Q>>::single_valued();
+        let _ = <Q::Add as Closed<'l, Q>>::closed();
+        let _ = <Q::Add as Commutative<'l, Q>>::comm();
+        let _ = <Q::Add as Associative<'l, Q>>::assoc();
+        let _ = <Q::Add as IdentityExists<'l, Q>>::identity_exists();
         // Only addition is a group: this is the additive inverse axiom.
-        let _ = <Q::Add as AbelianGroup<'l, Q>>::inverse();
+        let _ = <Q::Add as InverseExists<'l, Q>>::inverse();
 
-        let _ = <Q::Mul as CommutativeMonoid<'l, Q>>::total();
-        let _ = <Q::Mul as CommutativeMonoid<'l, Q>>::functional();
-        let _ = <Q::Mul as CommutativeMonoid<'l, Q>>::closed();
-        let _ = <Q::Mul as CommutativeMonoid<'l, Q>>::comm();
-        let _ = <Q::Mul as CommutativeMonoid<'l, Q>>::assoc();
-        let _ = <Q::Mul as CommutativeMonoid<'l, Q>>::identity_exists();
+        let _ = <Q::Mul as Total<'l, Q>>::total();
+        let _ = <Q::Mul as BinOp<'l, Q>>::single_valued();
+        let _ = <Q::Mul as Closed<'l, Q>>::closed();
+        let _ = <Q::Mul as Commutative<'l, Q>>::comm();
+        let _ = <Q::Mul as Associative<'l, Q>>::assoc();
+        let _ = <Q::Mul as IdentityExists<'l, Q>>::identity_exists();
     }
 
     /// A predicate usable with the [`Rationals::prime_field`] schema: the
