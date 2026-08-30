@@ -2,6 +2,7 @@ use super::{
     And, Cert, ExistsProof, FirstOrder, ForAllProof, Imply as Implication, Intuitionistic,
     Negation, Or, PropLogic, Reductio, View, exchange, reflexive,
 };
+use crate::utils::{IsSome, TrustedOption, option_scope};
 use ::core::{convert::Infallible, marker::PhantomData};
 
 /// This trait is sealed to hide the assumptions from the Rust type system.
@@ -318,9 +319,28 @@ mod sealed_forall {
     }
 }
 
-impl<'l> FirstOrder<'l> for IntuitionisticImpl<PropLogicThm> {
+use self::sealed_exists::{Exists, ExistsSupply, GetHandler};
+mod sealed_exists {
+    use super::View;
+    use crate::utils::IsSome;
+    pub trait GetHandler<'l, 'o, V: for<'x> View<'x> + ?Sized> {
+        fn handle<'t: 'l>(&mut self, value: <V as View<'t>>::Output) -> IsSome<'o>;
+    }
+    pub trait ExistsSupply<'l, V: for<'x> View<'x> + ?Sized> {
+        fn get<'o, 'm>(&self, f: Box<dyn GetHandler<'l, 'o, V> + 'm>) -> IsSome<'o>;
+        fn clone_dyn(&self) -> Box<dyn ExistsSupply<'l, V>>;
+    }
+    pub struct Exists<'l, V: ?Sized>(pub Box<dyn ExistsSupply<'l, V>>);
+    impl<V: for<'x> View<'x> + ?Sized> Clone for Exists<'_, V> {
+        fn clone(&self) -> Self {
+            Self(self.0.clone_dyn())
+        }
+    }
+}
+
+type Logic = IntuitionisticImpl<PropLogicThm>;
+impl<'l> FirstOrder<'l> for Logic {
     type ForAll<V: for<'x> View<'x> + ?Sized> = ForAll<'l, V>;
-    type Exists<P: for<'x> View<'x> + ?Sized> = ();
     fn forall_gen<
         P: Clone,
         Q: for<'x> View<'x, Output: Clone> + ?Sized,
@@ -328,7 +348,6 @@ impl<'l> FirstOrder<'l> for IntuitionisticImpl<PropLogicThm> {
     >(
         proof: S,
     ) -> Cert<'l, Self, Self::Imply<P, Self::ForAll<Q>>> {
-        type Logic = IntuitionisticImpl<PropLogicThm>;
         struct Deriver<P, S, Q: ?Sized>(PhantomData<Q>, P, S);
         impl<'x, P, S, Q: for<'y> View<'y> + ?Sized> View<'x> for Deriver<P, S, Q> {
             type Output = <Q as View<'x>>::Output;
@@ -369,17 +388,76 @@ impl<'l> FirstOrder<'l> for IntuitionisticImpl<PropLogicThm> {
         }
         Cert::new(Imply::new(Proof::<_, _>(PhantomData, proof)))
     }
-    fn exists_elim<'t, P: for<'x> View<'x> + ?Sized, Q>()
-    -> Cert<'l, Self, Self::Imply<<P as View<'t>>::Output, Self::Exists<P>>> {
-        todo!()
+    fn forall_elim<'t: 'l, P: for<'x> View<'x> + ?Sized>()
+    -> Cert<'l, Self, Self::Imply<Self::ForAll<P>, <P as View<'t>>::Output>>
+    where
+        <P as View<'t>>::Output: Clone,
+    {
+        struct Proof;
+        impl<'t: 'l, 'l, V> Infer<'l, ForAll<'l, V>, <V as View<'t>>::Output> for Proof
+        where
+            V: for<'x> View<'x> + ?Sized + 'l,
+            <V as View<'t>>::Output: Clone + 'l,
+        {
+            fn mp(&self, forall: ForAll<'l, V>) -> <V as View<'t>>::Output {
+                forall.1.get()
+            }
+            fn clone_dyn(&self) -> Imply<'l, ForAll<'l, V>, <V as View<'t>>::Output>
+            where
+                <V as View<'t>>::Output: 'l,
+            {
+                Imply::new(Proof)
+            }
+        }
+        Cert::new(Imply::new(Proof))
     }
-    fn exists_gen<P: for<'x> View<'x> + ?Sized, Q, S: ExistsProof<'l, Self, P, Q>>(
+
+    type Exists<P: for<'x> View<'x> + ?Sized> = Exists<'l, P>;
+    fn exists_gen<P: for<'x> View<'x> + ?Sized + 'l, Q, S: ExistsProof<'l, Self, P, Q>>(
         proof: S,
     ) -> Cert<'l, Self, Self::Imply<Self::Exists<P>, Q>> {
-        todo!()
+        struct Store<P: ?Sized, S>(PhantomData<P>, S);
+        impl<'l, P: for<'x> View<'x> + ?Sized + 'l, Q: 'l, S: ExistsProof<'l, Logic, P, Q>>
+            Infer<'l, <Logic as FirstOrder<'l>>::Exists<P>, Q> for Store<P, S>
+        {
+            fn mp(&self, p: <Logic as FirstOrder<'l>>::Exists<P>) -> Q {
+                let prover = self.1.clone();
+                option_scope(move |mut store| {
+                    struct Handler<'o, 'b, Q, S>(&'b mut TrustedOption<'o, Q>, S);
+                    impl<
+                        'l,
+                        'o,
+                        Q: 'l,
+                        S: ExistsProof<'l, Logic, V, Q>,
+                        V: for<'x> View<'x> + ?Sized + 'l,
+                    > GetHandler<'l, 'o, V> for Handler<'o, '_, Q, S>
+                    {
+                        fn handle<'t: 'l>(&mut self, value: <V as View<'t>>::Output) -> IsSome<'o> {
+                            let s: S = self.1.clone();
+                            let cert: Cert<
+                                'l,
+                                Logic,
+                                <Logic as Implication<'l>>::Imply<<V as View<'t>>::Output, Q>,
+                            > = s.prove();
+                            let q: Q = cert.into_inner().0.mp(value);
+                            self.0.set(q)
+                        }
+                    }
+                    let proof = p.0.get(Box::new(Handler(&mut store, prover)));
+                    store.take(proof)
+                })
+            }
+            fn clone_dyn(&self) -> Imply<'l, <Logic as FirstOrder<'l>>::Exists<P>, Q>
+            where
+                Q: 'l,
+            {
+                Imply::new(Store(PhantomData, self.1.clone()))
+            }
+        }
+        Cert::new(Imply::new(Store(PhantomData, proof)))
     }
-    fn forall_elim<'t, P: for<'x> View<'x> + ?Sized>()
-    -> Cert<'l, Self, Self::Imply<Self::ForAll<P>, <P as View<'t>>::Output>> {
+    fn exists_elim<'t, P: for<'x> View<'x> + ?Sized, Q>()
+    -> Cert<'l, Self, Self::Imply<<P as View<'t>>::Output, Self::Exists<P>>> {
         todo!()
     }
 }
