@@ -95,7 +95,7 @@ pub trait Rationals<'l>:
     /// set.
     fn same_carrier() -> thm!(
         'l: {},
-        ForAll::<'x>((IsRat::<'l, 'x, Self>).iff(IsRatMul::<'l, 'x, Self>))
+        ForAll::<'x>(IsRat::<'l, 'x, Self>.iff(IsRatMul::<'l, 'x, Self>))
     );
 
     /// Nontriviality: ∀x. IsOneLike(x) → ¬IsZeroLike(x), i.e. 1 ≠ 0
@@ -106,7 +106,7 @@ pub trait Rationals<'l>:
     /// upgrades that identity to a full [`IsOne`].
     fn nontrivial() -> thm!(
         'l: {},
-        ForAll::<'x>((IsOneLike::<'l, 'x, Self>).imply(!IsZeroLike::<'l, 'x, Self>))
+        ForAll::<'x>(IsOneLike::<'l, 'x, Self>.imply(!IsZeroLike::<'l, 'x, Self>))
     );
 
     /// Multiplicative inverse: every *nonzero* rational has a reciprocal
@@ -119,9 +119,10 @@ pub trait Rationals<'l>:
     fn mul_inverse() -> thm!(
         'l: {},
         ForAll::<'x>(
-            (IsRat::<'l, 'x, Self>).imply((!IsZeroLike::<'l, 'x, Self>).imply(!ForAll::<'y>(
-                (IsRat::<'l, 'y, Self>).imply(!ForAll::<'z>(
-                    (Prod::<'l, 'x, 'y, 'z, Self>).imply(IsOneLike::<'l, 'z, Self>)
+            IsRat::<'l, 'x, Self>.imply((!IsZeroLike::<'l, 'x, Self>).imply(!ForAll::<'y>(
+                IsRat::<'l, 'y, Self>.imply(!(
+                    Call::<'z> = <Self::Mul as CommutativeMonoid<'l, Self>>::Op::<'x, 'y>,
+                    IsOneLike::<'l, 'z, Self>
                 ))
             )))
         )
@@ -133,13 +134,12 @@ pub trait Rationals<'l>:
     /// `x·s = t`. This is the axiom linking `+` to `×`.
     fn distributive() -> thm!(
         'l: {},
-        ForAll::<'x, 'y, 'z, 's, 'a, 'b, 't>(
-            (Sum::<'l, 'y, 'z, 's, Self>).imply(
-                (Prod::<'l, 'x, 'y, 'a, Self>).imply(
-                    (Prod::<'l, 'x, 'z, 'b, Self>)
-                        .imply((Sum::<'l, 'a, 'b, 't, Self>).imply(Prod::<'l, 'x, 's, 't, Self>))
-                )
-            )
+        ForAll::<'x, 'y, 'z>(
+            Call::<'s> = <Self::Add as CommutativeMonoid<'l, Self>>::Op::<'y, 'z>,
+            Call::<'a> = <Self::Mul as CommutativeMonoid<'l, Self>>::Op::<'x, 'y>,
+            Call::<'b> = <Self::Mul as CommutativeMonoid<'l, Self>>::Op::<'x, 'z>,
+            Call::<'t> = <Self::Add as CommutativeMonoid<'l, Self>>::Op::<'a, 'b>,
+            Prod::<'l, 'x, 's, 't, Self>
         )
     );
 

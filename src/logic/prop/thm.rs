@@ -33,9 +33,6 @@ mod sealed_deduction {
     pub struct Deduction<A, Prop>(PhantomData<(A, Prop)>);
     impl<A, Prop> Clone for Deduction<A, Prop> {
         fn clone(&self) -> Self {
-            struct A<P> {
-                inner: P,
-            }
             *self
         }
     }

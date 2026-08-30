@@ -1,11 +1,15 @@
 [package]
-name = "fast-slice-index"
+name = "logic-macros"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+proc-macro = true
+
 [dependencies]
-no-panic = "0.1"
-logic-macros = { path = "logic-macros" }
+syn = { version = "2.0", features = ["full", "parsing", "printing"] }
+quote = "1.0"
+proc-macro2 = "1.0"
 
 [lints.rust]
 unsafe_code = "deny"
