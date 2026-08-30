@@ -81,88 +81,107 @@ fn try_parse_call_syntax(
         return Ok(None);
     }
 
-    // First element must be an assignment
-    let Expr::Assign(ExprAssign { left, right, .. }) = &elems[0] else {
-        return Ok(None);
-    };
-
-    // Left side must be a path (Call::<'x>)
-    let Expr::Path(left_path) = &**left else {
-        return Ok(None);
-    };
-
-    // Must be a single-segment path (just "Call", not "foo::Call")
-    if left_path.path.segments.len() != 1 {
-        return Ok(None);
-    }
-
-    // Get the segment and verify it's "Call"
-    let left_segment = &left_path.path.segments[0];
-
-    if left_segment.ident != "Call" {
-        return Ok(None);
-    }
-
-    // Must have turbofish generics
-    let syn::PathArguments::AngleBracketed(left_generics) = &left_segment.arguments else {
-        return Ok(None);
-    };
-
-    // Extract lifetimes from Call::<'x> and verify they're ALL lifetimes
-    let mut call_lifetimes = Vec::new();
-    for arg in &left_generics.args {
-        match arg {
-            syn::GenericArgument::Lifetime(lt) => call_lifetimes.push(lt),
-            _ => return Ok(None), // Non-lifetime argument, not our syntax
+    use syn::*;
+    let (path_with_call, call_lifetimes): (Expr, _) = if let Expr::Block(ExprBlock {
+        attrs,
+        label,
+        block,
+    }) = &elems[0]
+    {
+        if !attrs.is_empty() {
+            return Ok(None);
         }
-    }
+        let Some(label) = label else {
+            return Ok(None);
+        };
+        let block = &block.stmts;
+        (parse_quote!(#(#block)*), vec![&label.name])
+    } else {
+        // First element must be an assignment
+        let Expr::Assign(ExprAssign { left, right, .. }) = &elems[0] else {
+            return Ok(None);
+        };
 
-    if call_lifetimes.is_empty() {
-        return Ok(None);
-    }
+        // Left side must be a path (Call::<'x>)
+        let Expr::Path(left_path) = &**left else {
+            return Ok(None);
+        };
 
-    // Right side must be a path expression
-    let Expr::Path(right_path) = &**right else {
-        return Ok(None);
-    };
-
-    // Clone the full ExprPath and append call lifetimes to the last segment's generics
-    let mut path_expr = right_path.clone();
-
-    // Get mutable reference to the last segment
-    let last_segment = path_expr.path.segments.last_mut().unwrap();
-
-    // Build new generic arguments: existing + call lifetimes
-    let mut all_generics = syn::punctuated::Punctuated::new();
-
-    // Copy existing generics if present
-    if let syn::PathArguments::AngleBracketed(ref existing_generics) = last_segment.arguments {
-        for arg in &existing_generics.args {
-            all_generics.push(arg.clone());
+        // Must be a single-segment path (just "Call", not "foo::Call")
+        if left_path.path.segments.len() != 1 {
+            return Ok(None);
         }
-    }
 
-    // Append the call lifetimes
-    for lt in &call_lifetimes {
-        all_generics.push(syn::GenericArgument::Lifetime((*lt).clone()));
-    }
+        // Get the segment and verify it's "Call"
+        let left_segment = &left_path.path.segments[0];
 
-    // Update the last segment with new generics
-    last_segment.arguments =
-        syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments {
-            colon2_token: None,
-            lt_token: Default::default(),
-            args: all_generics,
-            gt_token: Default::default(),
-        });
+        if left_segment.ident != "Call" {
+            return Ok(None);
+        }
+
+        // Must have turbofish generics
+        let syn::PathArguments::AngleBracketed(left_generics) = &left_segment.arguments else {
+            return Ok(None);
+        };
+
+        // Extract lifetimes from Call::<'x> and verify they're ALL lifetimes
+        let mut call_lifetimes = Vec::new();
+        for arg in &left_generics.args {
+            match arg {
+                syn::GenericArgument::Lifetime(lt) => call_lifetimes.push(lt),
+                _ => return Ok(None), // Non-lifetime argument, not our syntax
+            }
+        }
+
+        if call_lifetimes.is_empty() {
+            return Ok(None);
+        }
+
+        // Right side must be a path expression
+        let Expr::Path(right_path) = &**right else {
+            return Ok(None);
+        };
+
+        // Clone the full ExprPath and append call lifetimes to the last segment's generics
+        let mut path_expr = right_path.clone();
+
+        // Get mutable reference to the last segment
+        let last_segment = path_expr.path.segments.last_mut().unwrap();
+
+        // Build new generic arguments: existing + call lifetimes
+        let mut all_generics = syn::punctuated::Punctuated::new();
+
+        // Copy existing generics if present
+        if let syn::PathArguments::AngleBracketed(ref existing_generics) = last_segment.arguments {
+            for arg in &existing_generics.args {
+                all_generics.push(arg.clone());
+            }
+        }
+
+        // Append the call lifetimes
+        for lt in &call_lifetimes {
+            all_generics.push(syn::GenericArgument::Lifetime((*lt).clone()));
+        }
+
+        // Update the last segment with new generics
+        last_segment.arguments =
+            syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments {
+                colon2_token: None,
+                lt_token: Default::default(),
+                args: all_generics,
+                gt_token: Default::default(),
+            });
+
+        // Build the path expression with all generics
+        (parse_quote!(#path_expr), call_lifetimes)
+    };
 
     // Build the consequent from remaining tuple elements
     let rest_elems: Vec<_> = elems.iter().skip(1).cloned().collect();
 
     let consequent = expand_pred_expr(pred_info, &parse_quote!((#(#rest_elems),*)))?;
 
-    // Build the path expression with all generics
-    let path_with_call: Type = parse_quote! { #path_expr };
+    let path_with_call = expand_pred_expr(pred_info, &path_with_call)?;
 
     // Build implication: path_with_call.imply(consequent)
     let implication: Type = parse_quote! {
@@ -275,15 +294,9 @@ fn expand_pred_expr2(pred_info: &PredInfo, expr: &Expr) -> syn::Result<Option<Ty
             let method_name = method.to_string();
 
             if method_name == "iff" {
-                let Some(arg) = args.into_iter().only() else {
-                    return Err(syn::Error::new_spanned(
-                        args,
-                        "imply requires exactly one argument",
-                    ));
-                };
-
                 let left = expand_pred_expr(pred_info, receiver)?;
-                let right = expand_pred_expr(pred_info, arg)?;
+                let args = args.iter();
+                let right = expand_pred_expr(pred_info, &parse_quote!((#(#args),*)))?;
 
                 Ok(Some(parse_quote! {
                     crate::logic::prop::Iff<#lifetime, #logic, #left, #right>

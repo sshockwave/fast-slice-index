@@ -51,7 +51,7 @@
 
 use crate::logic::function::Equality;
 use crate::logic::prop::{And, FirstOrder};
-use crate::macros::{pred, thm};
+use crate::macros::thm;
 
 macro_rules! expr {
     ($x:lifetime == $y:lifetime) => {
@@ -59,9 +59,6 @@ macro_rules! expr {
     };
     ($x:lifetime * $y:lifetime == $z:lifetime) => {
         <Self as BinOp<'l, Logic>>::Op::<$x, $y, $z>
-    };
-    ($x:lifetime == 1) => {
-        IsUnitLike::<'l, $x, Self, Logic>
     };
 }
 
@@ -85,18 +82,6 @@ where
         )
     );
 }
-
-/// Type alias: "e is neutral for the operation"
-/// Equivalent to: ∀y. El(y) → e ∘ y = y
-///
-/// Note: doesn't require e to be in the carrier.
-/// [`IdentityExists::identity_exists`] adds that conjunct, mirroring how
-/// `nat` splits `IsZeroLike` from `IsZero`.
-pub type IsUnitLike<'l, 'e, M, Eq> = pred!(
-    'l: { Eq },
-    Call::<'y> = <M as BinOp<'l, Eq>>::El,
-    <M as BinOp<'l, Eq>>::Op::<'e, 'y, 'y>
-);
 
 pub trait Total<'l, Logic>: BinOp<'l, Logic>
 where
@@ -145,10 +130,10 @@ where
     fn assoc() -> thm!(
         'l: { Logic },
         ForAll::<'x, 'y, 'z>(
-            Call::<'u> = Self::Op::<'x, 'y>,
-            Call::<'v> = Self::Op::<'y, 'z>,
-            Call::<'w> = Self::Op::<'u, 'z>,
-            expr!('x * 'v == 'w)
+            Call::<'xy> = Self::Op::<'x, 'y>,
+            Call::<'yz> = Self::Op::<'y, 'z>,
+            Call::<'xy_z> = Self::Op::<'xy, 'z>,
+            expr!('x * 'yz == 'xy_z)
         )
     );
 }
@@ -157,14 +142,25 @@ pub trait IdentityExists<'l, Logic>: BinOp<'l, Logic>
 where
     Logic: FirstOrder<'l> + Equality<'l> + And<'l>,
 {
+    /// Type alias: "e is neutral for the operation"
+    /// Equivalent to: ∀y. El(y) → e ∘ y = y
+    ///
+    /// Note: doesn't require e to be in the carrier.
+    /// [`IdentityExists::identity_exists`] adds that conjunct.
+    type IsIdentity<'e>;
+    fn identity_intro() -> thm!(
+        'l: { Logic },
+        ForAll::<'e>(Self::IsIdentity::<'e>.iff(Call::<'y> = Self::El, Self::Op::<'e, 'y, 'y>))
+    );
+
     /// Identity exists: ∃e. El(e) ∧ IsUnitLike(e)
     fn identity_exists() -> thm!(
         'l: { Logic },
-        Exists::<'e>(Self::El::<'e> && IsUnitLike::<'l, 'e, Self, Logic>)
+        Exists::<'e>(Self::El::<'e> && Self::IsIdentity::<'e>)
     );
 }
 
-pub trait InverseExists<'l, Logic>: BinOp<'l, Logic>
+pub trait InverseExists<'l, Logic>: BinOp<'l, Logic> + IdentityExists<'l, Logic>
 where
     Logic: FirstOrder<'l> + Equality<'l> + And<'l>,
 {
@@ -172,7 +168,7 @@ where
     fn inverse() -> thm!(
         'l: { Logic },
         Call::<'x> = Self::El,
-        Exists::<'y>(Self::El::<'y> && (Call::<'z> = Self::Op::<'x, 'y>, expr!('z == 1)))
+        Exists::<'y>(Self::El::<'y> && (Call::<'z> = Self::Op::<'x, 'y>, Self::IsIdentity::<'z>))
     );
 }
 
