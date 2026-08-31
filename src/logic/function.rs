@@ -1,7 +1,7 @@
-use crate::logic::prop::{Cert, Negation, PropLogic, View};
+use crate::logic::prop::{Cert, Imply, Negation, View};
 
 /// Equality trait - axiomatizes equality relation
-pub trait Equality<'l>: PropLogic<'l>
+pub trait Equality<'l>: Imply<'l>
 where
     Self: 'l,
 {
@@ -70,7 +70,7 @@ where
 /// WARNING: We do NOT quantify over all possible F generically.
 /// Instead, each specific function (like Succ) is a concrete associated type.
 /// This avoids impredicativity issues.
-pub trait Function<'l, Eq>: PropLogic<'l>
+pub trait Function<'l, Eq>
 where
     Self: 'l,
     Eq: Equality<'l> + Negation<'l> + ?Sized,
@@ -89,16 +89,16 @@ where
     /// Every element in domain has an image
     fn total() -> Cert<
         'l,
-        Self,
+        Eq,
         &'l dyn for<'x> View<
             'x,
-            Output = Self::Imply<
+            Output = Eq::Imply<
                 Self::Dom<'x>,
                 // ∃y. Codom(y) ∧ F(x,y)
                 Eq::Neg<
                     &'l dyn for<'y> View<
                         'y,
-                        Output = Self::Imply<Self::Codom<'y>, Eq::Neg<Self::F<'x, 'y>>>,
+                        Output = Eq::Imply<Self::Codom<'y>, Eq::Neg<Self::F<'x, 'y>>>,
                     >,
                 >,
             >,
@@ -109,17 +109,14 @@ where
     /// Each input maps to at most one output
     fn functional() -> Cert<
         'l,
-        Self,
+        Eq,
         &'l dyn for<'x> View<
             'x,
             Output = &'l dyn for<'y> View<
                 'y,
                 Output = &'l dyn for<'z> View<
                     'z,
-                    Output = Self::Imply<
-                        Self::F<'x, 'y>,
-                        Self::Imply<Self::F<'x, 'z>, Eq::Eq<'y, 'z>>,
-                    >,
+                    Output = Eq::Imply<Self::F<'x, 'y>, Eq::Imply<Self::F<'x, 'z>, Eq::Eq<'y, 'z>>>,
                 >,
             >,
         >,
@@ -128,12 +125,12 @@ where
     /// Well-typed: ∀x ∀y. F(x,y) → Dom(x) ∧ Codom(y)
     fn well_typed() -> Cert<
         'l,
-        Self,
+        Eq,
         &'l dyn for<'x> View<
             'x,
             Output = &'l dyn for<'y> View<
                 'y,
-                Output = Self::Imply<Self::F<'x, 'y>, Self::Imply<Self::Dom<'x>, Self::Codom<'y>>>,
+                Output = Eq::Imply<Self::F<'x, 'y>, Eq::Imply<Self::Dom<'x>, Self::Codom<'y>>>,
             >,
         >,
     >;
@@ -149,17 +146,14 @@ where
     /// Different inputs map to different outputs
     fn injective() -> Cert<
         'l,
-        Self,
+        Eq,
         &'l dyn for<'x> View<
             'x,
             Output = &'l dyn for<'y> View<
                 'y,
                 Output = &'l dyn for<'z> View<
                     'z,
-                    Output = Self::Imply<
-                        Self::F<'x, 'z>,
-                        Self::Imply<Self::F<'y, 'z>, Eq::Eq<'x, 'y>>,
-                    >,
+                    Output = Eq::Imply<Self::F<'x, 'z>, Eq::Imply<Self::F<'y, 'z>, Eq::Eq<'x, 'y>>>,
                 >,
             >,
         >,

@@ -54,21 +54,6 @@ fn expand_pred_expr(pred_info: &PredInfo, expr: &Expr) -> syn::Result<Type> {
     Ok(expand_pred_expr2(pred_info, expr)?.unwrap_or_else(|| parse_quote!(#expr)))
 }
 
-trait IterOnly: Iterator {
-    fn only(self) -> Option<Self::Item>;
-}
-
-impl<T: Iterator> IterOnly for T {
-    fn only(mut self) -> Option<Self::Item> {
-        let first = self.next()?;
-        if self.next().is_some() {
-            None
-        } else {
-            Some(first)
-        }
-    }
-}
-
 /// Try to parse the special (Call::<'x> = Path::<'y,'z>, Body) syntax
 /// Returns Some(expanded_type) if it matches the pattern, None otherwise
 fn try_parse_call_syntax(
@@ -302,15 +287,9 @@ fn expand_pred_expr2(pred_info: &PredInfo, expr: &Expr) -> syn::Result<Option<Ty
                     crate::logic::prop::Iff<#lifetime, #logic, #left, #right>
                 }))
             } else if method_name == "imply" {
-                let Some(arg) = args.into_iter().only() else {
-                    return Err(syn::Error::new_spanned(
-                        args,
-                        "imply requires exactly one argument",
-                    ));
-                };
-
                 let left = expand_pred_expr(pred_info, receiver)?;
-                let right = expand_pred_expr(pred_info, arg)?;
+                let args = args.iter();
+                let right = expand_pred_expr(pred_info, &parse_quote!((#(#args),*)))?;
 
                 Ok(Some(parse_quote! {
                     <#logic as crate::logic::prop::Imply<#lifetime>>::Imply<
