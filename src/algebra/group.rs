@@ -71,7 +71,7 @@ where
     Logic: FirstOrder<'l> + Equality<'l>,
 {
     /// The operation's graph: `Op<'x, 'y, 'z>` means "x ∘ y = z"
-    type Op<'x, 'y, 'z>;
+    type Op<'x: 'l, 'y: 'l, 'z: 'l>;
 
     /// Functional (single-valued): ∀x ∀y ∀z ∀w. x ∘ y = z → x ∘ y = w → z = w
     fn single_valued() -> thm!(

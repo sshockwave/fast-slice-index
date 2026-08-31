@@ -1,4 +1,5 @@
-use crate::logic::prop::{Cert, Imply, Negation, View};
+use crate::logic::prop::{And, Cert, FirstOrder, Imply, View};
+use crate::macros::thm;
 
 /// Equality trait - axiomatizes equality relation
 pub trait Equality<'l>: Imply<'l>
@@ -6,7 +7,7 @@ where
     Self: 'l,
 {
     /// Equality relation between two terms at lifetimes 'a and 'b
-    type Eq<'a: 'l, 'b: 'l>;
+    type Eq<'a: 'l, 'b: 'l>: Clone;
 
     /// Reflexivity: ∀x. x = x
     fn eq_refl() -> Cert<'l, Self, &'l dyn for<'x> View<'x, Output = Self::Eq<'x, 'x>>>;
@@ -73,37 +74,25 @@ where
 pub trait Function<'l, Eq>
 where
     Self: 'l,
-    Eq: Equality<'l> + Negation<'l> + ?Sized,
+    Eq: Equality<'l> + FirstOrder<'l> + And<'l>,
 {
     /// The function's graph: F<'x, 'y> means "F maps x to y"
     /// This is an associated type, not a quantified predicate
     type F<'x: 'l, 'y: 'l>;
 
     /// Domain predicate: what x values are in the domain
-    type Dom<'x: 'l>;
+    type Dom<'x: 'l>: Clone;
 
     /// Codomain predicate: what y values are in the codomain
     type Codom<'y: 'l>;
 
     /// Total: ∀x. Dom(x) → ∃y. Codom(y) ∧ F(x, y)
     /// Every element in domain has an image
-    fn total() -> Cert<
-        'l,
-        Eq,
-        &'l dyn for<'x> View<
-            'x,
-            Output = Eq::Imply<
-                Self::Dom<'x>,
-                // ∃y. Codom(y) ∧ F(x,y)
-                Eq::Neg<
-                    &'l dyn for<'y> View<
-                        'y,
-                        Output = Eq::Imply<Self::Codom<'y>, Eq::Neg<Self::F<'x, 'y>>>,
-                    >,
-                >,
-            >,
-        >,
-    >;
+    fn total() -> thm!(
+        'l: { Eq },
+        'x: { Self::Dom::<'x> },
+        Exists::<'y>(Self::Codom::<'y> && Self::F::<'x, 'y>)
+    );
 
     /// Functional (single-valued): ∀x ∀y ∀z. F(x,y) ∧ F(x,z) → y = z
     /// Each input maps to at most one output
@@ -140,7 +129,7 @@ where
 pub trait Injection<'l, Eq>: Function<'l, Eq>
 where
     Self: 'l,
-    Eq: Equality<'l> + Negation<'l>,
+    Eq: Equality<'l> + FirstOrder<'l> + And<'l>,
 {
     /// Injective: ∀x ∀y ∀z. F(x,z) ∧ F(y,z) → x = y
     /// Different inputs map to different outputs

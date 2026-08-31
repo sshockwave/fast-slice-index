@@ -1,5 +1,7 @@
 use std::marker::PhantomData;
 
+use crate::algebra::group::{self, BinOp};
+use crate::algebra::ring::SemiRing;
 use crate::logic::function::{Equality, Function, Injection};
 use crate::logic::prop::{And, FirstOrder, Negation, View};
 use crate::macros::{pred, thm};
@@ -9,25 +11,39 @@ macro_rules! expr {
     // Type alias: "x is a natural number"
     // Equivalent to: x ∈ Dom(SuccFn)
     ($x:lifetime in Nat) => {
-        <Self::SuccFn as Function<'l, Logic>>::Dom::<$x>
+        expr!(Self, $x in Nat)
     };
-    // Type alias: "x is zero-like"
-    // Equivalent to: ∀p∀s. Succ(p,s) → s≠x (no element's successor equals x)
-    // Note: doesn't require x to be a natural number
-    ($x:lifetime like 0) => {
-        pred!(
-            'l: { Logic },
-            ForAll::<'p>(!<Self::SuccFn as Function<'l, Logic>>::F::<'p, $x>)
-        )
+    ($Nat:ident, $x:lifetime in Nat) => {
+        <$Nat::SuccFn as Function<'l, Logic>>::Dom::<$x>
+    };
+    ($x:lifetime in El) => {
+        <Self as Set<'l>>::El::<$x>
     };
     // Type alias: "x is zero"
-    // Equivalent to: x is a natural number AND x is zero-like
+    // Equivalent to: ∀p∀s. Succ(p,s) → s≠x (no element's successor equals x) AND x is zero-like
     ($x:lifetime == 0) => {
+        expr!(Self, $x == 0)
+    };
+    ($Nat:ident, $x:lifetime == 0) => {
         pred!(
             'l: { Logic },
-            expr!($x in Nat) && expr!($x like 0)
+            expr!($Nat, $x in Nat) && ForAll::<'p>(
+                !<$Nat::SuccFn as Function<'l, Logic>>::F::<'p, $x>
+            )
         )
-    }
+    };
+    ($x:lifetime = $y:lifetime + $z:lifetime) => {
+        <<Self::Add as SemiRing<'l, Logic>>::Add as BinOp<'l, Logic>>::Op::<$y, $z, $x>
+    };
+    ($x:lifetime = $y:lifetime * $z:lifetime) => {
+        <<Self::Mul as SemiRing<'l, Logic>>::Mul as BinOp<'l, Logic>>::Op::<$y, $z, $x>
+    };
+    ($x:lifetime . $y:lifetime == $z:lifetime) => {
+        <Self as BinOp<'l, Logic>>::Op::<$x, $y, $z>
+    };
+    ($x:lifetime == $y:lifetime) => {
+        <Logic as Equality<'l>>::Eq::<$x, $y>
+    };
 }
 
 /// Natural numbers trait using function-based approach
@@ -87,3 +103,92 @@ where
 {
     type El<'a: 'l> = <<T as NaturalNumbers<'l, Logic>>::SuccFn as Function<'l, Logic>>::Dom<'a>;
 }
+
+struct AddMonoid<Logic, T>(PhantomData<(Logic, T)>);
+
+impl<'l, Logic, T> Set<'l> for AddMonoid<Logic, T>
+where
+    T: NaturalNumbers<'l, Logic>,
+    Logic: Equality<'l> + FirstOrder<'l> + And<'l> + Negation<'l>,
+{
+    type El<'a: 'l> = <<T as NaturalNumbers<'l, Logic>>::SuccFn as Function<'l, Logic>>::Dom<'a>;
+}
+
+// impl<'l, Logic, T: 'l> group::BinOp<'l, Logic> for AddMonoid<Logic, T>
+// where
+//     T: NaturalNumbers<'l, Logic>,
+//     Logic: Equality<'l> + FirstOrder<'l> + And<'l> + Negation<'l>,
+// {
+//     type Op<'a: 'l, 'b: 'l, 'c: 'l> = pred!(
+//         'l: { Logic },
+//         (expr!(T, 'b == 0) && expr!('a == 'c)) // (
+//                                                //     'succ_b: { <T::SuccFn as Function<'l, Logic>>::F::<'b, 'succ_b> },
+//                                                //     expr!('a . 'succ_b == 'c)
+//                                                // )
+//     );
+//     fn single_valued() -> thm!(
+//         'l: { Logic },
+//         ForAll::<'x, 'y>(
+//             Call::<'z> = Self::Op::<'x, 'y>,
+//             Call::<'w> = Self::Op::<'x, 'y>,
+//             expr!('z == 'w)
+//         )
+//     ) {
+//         todo!()
+//     }
+// }
+
+// impl<'l, Logic, T> group::Total<'l, Logic> for AddMonoid<Logic, T>
+// where
+//     Logic: And<'l>,
+// {
+//     fn total() -> thm!(
+//         'l: { Logic },
+//         Call::<'x> = Self::El,
+//         Call::<'y> = Self::El,
+//         Exists::<'z>(Self::El::<'z> && expr!('x . 'y == 'z))
+//     ) {
+//         todo!()
+//     }
+// }
+
+// impl<'l, Logic, T> SemiRing<'l, Logic> for NatTheorems<'l, Logic, T>
+// where
+//     Logic: FirstOrder<'l> + Equality<'l> + And<'l> + Negation<'l>,
+//     T: NaturalNumbers<'l, Logic>,
+// {
+//     type Add = AddMonoid<Logic, T>;
+//     type Mul = MulMonoid<Logic, T>;
+//     fn left_distributive() -> thm!(
+//         'l: { Logic },
+//         'a: { expr!('a in El) },
+//         'b: { expr!('b in El) },
+//         'c: { expr!('c in El) },
+//         'b_c: { expr!('b_c = 'b + 'c) },
+//         'ab: { expr!('ab = 'a * 'b) },
+//         'ac: { expr!('ac = 'a * 'c) },
+//         'ab_ac: { expr!('ab_ac = 'ab + 'ac) },
+//         expr!('ab_ac = 'a * 'b_c)
+//     ) {
+//         todo!()
+//     }
+//     fn right_distributive() -> thm!(
+//         'l: { Logic },
+//         'a: { expr!('a in El) },
+//         'b: { expr!('b in El) },
+//         'c: { expr!('c in El) },
+//         'b_c: { expr!('b_c = 'b + 'c) },
+//         'ba: { expr!('ba = 'b * 'a) },
+//         'ca: { expr!('ca = 'c * 'a) },
+//         'ba_ca: { expr!('ba_ca = 'ba + 'ca) },
+//         expr!('ba_ca = 'b_c * 'a)
+//     ) {
+//         todo!()
+//     }
+//     fn same_carrier() -> thm!(
+//         'l: { Logic },
+//         ForAll::<'x>(expr!('x in El).iff(<Self::Mul as Set<'l>>::El::<'x>))
+//     ) {
+//         todo!()
+//     }
+// }
