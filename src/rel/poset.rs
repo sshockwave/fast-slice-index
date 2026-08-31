@@ -7,14 +7,14 @@ pub trait BinRel {
     type Rel<'a, 'b>;
 }
 
-pub trait Reflexive<'l, Logic>: Set + BinRel + 'l
+pub trait Reflexive<'l, Logic>: Set<'l> + BinRel + 'l
 where
     Logic: Imply<'l> + FirstOrder<'l>,
 {
     fn refl() -> thm!('l: { Logic }, 'a: { Self::El::<'a> }, Self::Rel::<'a, 'a>);
 }
 
-pub trait Antisymmetric<'l, Logic>: Set + BinRel + 'l
+pub trait Antisymmetric<'l, Logic>: Set<'l> + BinRel + 'l
 where
     Logic: Imply<'l> + FirstOrder<'l> + Equality<'l>,
 {
@@ -26,7 +26,7 @@ where
     );
 }
 
-pub trait Transitive<'l, Logic>: Set + BinRel + 'l
+pub trait Transitive<'l, Logic>: Set<'l> + BinRel + 'l
 where
     Logic: Imply<'l> + FirstOrder<'l>,
 {

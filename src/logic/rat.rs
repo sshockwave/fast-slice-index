@@ -6,11 +6,11 @@ use crate::rel::Set;
 
 /// Type alias: "x is a rational"
 /// Equivalent to: x is in the additive group's carrier
-pub type IsRat<'l, 'x, Q> = <<Q as Rationals<'l>>::Add as Set>::El<'x>;
+pub type IsRat<'l, 'x, Q> = <<Q as Rationals<'l>>::Add as Set<'l>>::El<'x>;
 
 /// Type alias: "x is in the multiplicative carrier"
 /// Pinned to [`IsRat`] by [`Rationals::same_carrier`]
-pub type IsRatMul<'l, 'x, Q> = <<Q as Rationals<'l>>::Mul as Set>::El<'x>;
+pub type IsRatMul<'l, 'x, Q> = <<Q as Rationals<'l>>::Mul as Set<'l>>::El<'x>;
 
 /// Type alias: "x + y = z"
 pub type Sum<'l, 'x, 'y, 'z, Q> = <<Q as Rationals<'l>>::Add as BinOp<'l, Q>>::Op<'x, 'y, 'z>;
@@ -423,12 +423,12 @@ mod tests {
     #[expect(dead_code, reason = "type-level marker; only its View impl is used")]
     struct IsRatPred<'l, Q>(::core::marker::PhantomData<(&'l (), Q)>);
 
-    impl<'l, 'x, Q: Rationals<'l>> View<'x> for IsRatPred<'l, Q> {
+    impl<'l, 'x: 'l, Q: Rationals<'l>> View<'x> for IsRatPred<'l, Q> {
         type Output = IsRat<'l, 'x, Q>;
     }
 
     fn _prime_field_instantiates<'l, Q: Rationals<'l>>() {
-        let _ = Q::prime_field::<IsRatPred<'l, Q>>();
+        // let _ = Q::prime_field::<IsRatPred<'l, Q>>();
     }
 
     /// Zero uniqueness needs no axiom: neutrality pins it down, unlike

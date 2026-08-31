@@ -46,6 +46,18 @@ mod sealed_cert {
     }
 }
 
+/// The most basic logic trait: implication.
+///
+/// The most fundamental reason to have a lifetime in the trait
+/// is to allow using `dyn` in constructive proofs with Rust instances.
+/// Enums cannot be used instead of `dyn` until [#2999] is resolved.
+/// `dyn` require an explicit lifetime lower bound that the members of the object must satisfy,
+/// while from the object's perspective, it's the upper bound of the object's lifetime.
+/// We cannot use `'static` for this lower bound
+/// because that would require the object to contain only `'static` lifetimes.
+/// We want to use lifetimes for proofs because lifetimes are easier to express HRTB than types.
+///
+/// [#2999]: https://github.com/rust-lang/rfcs/issues/2999
 pub trait Imply<'a>: Sized {
     /// Implication: P implies Q
     type Imply<P: 'a, Q: 'a>: Clone + 'a;

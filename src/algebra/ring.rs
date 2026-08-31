@@ -11,7 +11,7 @@ use crate::{
 
 macro_rules! expr {
     ($a:lifetime in El) => {
-        <Self::Add as Set>::El::<$a>
+        <Self::Add as Set<'l>>::El::<$a>
     };
     ($a:lifetime = $b:lifetime + $c:lifetime) => {
         <Self::Add as BinOp<'l, Logic>>::Op::<$b, $c, $a>
@@ -41,7 +41,7 @@ where
     /// set.
     fn same_carrier() -> thm!(
         'l: { Logic },
-        ForAll::<'x>(expr!('x in El).iff(<Self::Mul as Set>::El::<'x>))
+        ForAll::<'x>(expr!('x in El).iff(<Self::Mul as Set<'l>>::El::<'x>))
     );
 
     fn left_distributive() -> thm!(

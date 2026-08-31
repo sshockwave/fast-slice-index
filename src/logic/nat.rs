@@ -1,6 +1,9 @@
+use std::marker::PhantomData;
+
 use crate::logic::function::{Equality, Function, Injection};
 use crate::logic::prop::{And, FirstOrder, Negation, View};
 use crate::macros::{pred, thm};
+use crate::rel::Set;
 
 macro_rules! expr {
     // Type alias: "x is a natural number"
@@ -73,4 +76,14 @@ where
         'y: { expr!('y in Nat) && expr!('y == 0) },
         Logic::Eq::<'x, 'y>,
     );
+}
+
+pub struct NatTheorems<'l, Logic, T>(PhantomData<(&'l (), Logic, T)>);
+
+impl<'l, Logic, T> Set<'l> for NatTheorems<'l, Logic, T>
+where
+    Logic: FirstOrder<'l> + Equality<'l> + Negation<'l> + And<'l>,
+    T: NaturalNumbers<'l, Logic>,
+{
+    type El<'a: 'l> = <<T as NaturalNumbers<'l, Logic>>::SuccFn as Function<'l, Logic>>::Dom<'a>;
 }

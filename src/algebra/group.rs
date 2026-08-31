@@ -84,7 +84,7 @@ where
     );
 }
 
-pub trait Total<'l, Logic>: BinOp<'l, Logic> + Set
+pub trait Total<'l, Logic>: BinOp<'l, Logic> + Set<'l>
 where
     Logic: FirstOrder<'l> + Equality<'l> + And<'l>,
 {
@@ -97,7 +97,7 @@ where
     );
 }
 
-pub trait Closed<'l, Logic>: BinOp<'l, Logic> + Set
+pub trait Closed<'l, Logic>: BinOp<'l, Logic> + Set<'l>
 where
     Logic: FirstOrder<'l> + Equality<'l> + And<'l>,
 {
@@ -146,11 +146,11 @@ where
 /// [`IdentityExists::identity_exists`] adds that conjunct.
 pub type IsUnitLike<'l, 'e, G, Logic> = pred!(
     'l: { Logic },
-    Call::<'y> = <G as Set>::El,
+    Call::<'y> = <G as Set<'l>>::El,
     <G as BinOp<'l, Logic>>::Op::<'e, 'y, 'y>
 );
 
-pub trait IdentityExists<'l, Logic>: BinOp<'l, Logic> + Set
+pub trait IdentityExists<'l, Logic>: BinOp<'l, Logic> + Set<'l>
 where
     Logic: FirstOrder<'l> + Equality<'l> + And<'l>,
 {
