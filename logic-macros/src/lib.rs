@@ -342,6 +342,12 @@ fn expand_pred_expr2(pred_info: &PredInfo, expr: &Expr) -> syn::Result<Option<Ty
                         #right_expanded,
                     >
                 },
+                syn::BinOp::ShrAssign(_) => parse_quote!(
+                    <#logic as crate::logic::prop::Imply<#lifetime>>::Imply<
+                        #left_expanded,
+                        #right_expanded,
+                    >
+                ),
                 _ => return Ok(None),
             }))
         }

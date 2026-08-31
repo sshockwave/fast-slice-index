@@ -7,7 +7,7 @@ where
     Self: 'l,
 {
     /// Equality relation between two terms at lifetimes 'a and 'b
-    type Eq<'a: 'l, 'b: 'l>: Clone;
+    type Eq<'a: 'l, 'b: 'l>;
 
     /// Reflexivity: ∀x. x = x
     fn eq_refl() -> Cert<'l, Self, &'l dyn for<'x> View<'x, Output = Self::Eq<'x, 'x>>>;
@@ -81,7 +81,7 @@ where
     type F<'x: 'l, 'y: 'l>;
 
     /// Domain predicate: what x values are in the domain
-    type Dom<'x: 'l>: Clone;
+    type Dom<'x: 'l>;
 
     /// Codomain predicate: what y values are in the codomain
     type Codom<'y: 'l>;

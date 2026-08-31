@@ -356,5 +356,5 @@ const _: () = {
     // No in-crate instantiation is possible: no concrete logic asserts the
     // classical axiom yet. The generic bodies are themselves the proof -- they
     // typecheck exactly when the impls apply at the stated bounds.
-    let _ = reductio_is_intuitionistic::<crate::logic::prop::il::PropLogicThm> as fn();
+    let _ = reductio_is_intuitionistic::<crate::logic::axiom::Axiomize> as fn();
 };

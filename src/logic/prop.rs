@@ -2,6 +2,7 @@
 
 pub mod il;
 pub mod neg;
+mod rust;
 mod thm;
 
 pub use self::thm::*;
