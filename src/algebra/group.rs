@@ -52,6 +52,7 @@
 use crate::logic::function::Equality;
 use crate::logic::prop::{And, FirstOrder};
 use crate::macros::thm;
+use crate::rel::Set;
 
 macro_rules! expr {
     ($x:lifetime == $y:lifetime) => {
@@ -69,9 +70,6 @@ where
     /// The operation's graph: `Op<'x, 'y, 'z>` means "x ∘ y = z"
     type Op<'x, 'y, 'z>;
 
-    /// Carrier predicate: which elements the operation is defined on
-    type El<'x>;
-
     /// Functional (single-valued): ∀x ∀y ∀z ∀w. x ∘ y = z → x ∘ y = w → z = w
     fn single_valued() -> thm!(
         'l: { Logic },
@@ -83,7 +81,7 @@ where
     );
 }
 
-pub trait Total<'l, Logic>: BinOp<'l, Logic>
+pub trait Total<'l, Logic>: BinOp<'l, Logic> + Set
 where
     Logic: FirstOrder<'l> + Equality<'l> + And<'l>,
 {
@@ -96,7 +94,7 @@ where
     );
 }
 
-pub trait Closed<'l, Logic>: BinOp<'l, Logic>
+pub trait Closed<'l, Logic>: BinOp<'l, Logic> + Set
 where
     Logic: FirstOrder<'l> + Equality<'l> + And<'l>,
 {
@@ -138,7 +136,7 @@ where
     );
 }
 
-pub trait IdentityExists<'l, Logic>: BinOp<'l, Logic>
+pub trait IdentityExists<'l, Logic>: BinOp<'l, Logic> + Set
 where
     Logic: FirstOrder<'l> + Equality<'l> + And<'l>,
 {

@@ -2,14 +2,15 @@ use crate::algebra::group::{AbelianGroup, BinOp, CommutativeMonoid, IdentityExis
 use crate::logic::function::Equality;
 use crate::logic::prop::{And, Cert, FirstOrder, Negation, Or, View};
 use crate::macros::thm;
+use crate::rel::Set;
 
 /// Type alias: "x is a rational"
 /// Equivalent to: x is in the additive group's carrier
-pub type IsRat<'l, 'x, Q> = <<Q as Rationals<'l>>::Add as BinOp<'l, Q>>::El<'x>;
+pub type IsRat<'l, 'x, Q> = <<Q as Rationals<'l>>::Add as Set>::El<'x>;
 
 /// Type alias: "x is in the multiplicative carrier"
 /// Pinned to [`IsRat`] by [`Rationals::same_carrier`]
-pub type IsRatMul<'l, 'x, Q> = <<Q as Rationals<'l>>::Mul as BinOp<'l, Q>>::El<'x>;
+pub type IsRatMul<'l, 'x, Q> = <<Q as Rationals<'l>>::Mul as Set>::El<'x>;
 
 /// Type alias: "x + y = z"
 pub type Sum<'l, 'x, 'y, 'z, Q> = <<Q as Rationals<'l>>::Add as BinOp<'l, Q>>::Op<'x, 'y, 'z>;

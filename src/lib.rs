@@ -1,5 +1,6 @@
 pub mod algebra;
 pub mod logic;
+pub mod rel;
 pub mod utils;
 
 mod macros {

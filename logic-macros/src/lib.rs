@@ -3,7 +3,7 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
-    Expr, ExprAssign, ExprBlock, ExprParen, Lifetime, Token, Type,
+    Expr, ExprBlock, ExprParen, Lifetime, Token, Type,
     parse::{Parse, ParseStream},
     parse_quote,
     punctuated::Punctuated,
