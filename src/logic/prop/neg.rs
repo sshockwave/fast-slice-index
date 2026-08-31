@@ -5,16 +5,16 @@ use crate::logic::prop::{
 use ::core::marker::PhantomData;
 
 pub trait Contraposition<'a>: Imply<'a> + Negation<'a> {
-    fn l3<P: Clone + 'a, Q: Clone + 'a>()
+    fn l3<P: 'a, Q: 'a>()
     -> Cert<'a, Self, Self::Imply<Self::Imply<Self::Neg<P>, Self::Neg<Q>>, Self::Imply<Q, P>>>;
 }
 
 pub trait DoubleNegElim<'a>: PropLogic<'a> + Negation<'a> {
-    fn double_neg_elim<P: Clone + 'a>() -> Cert<'a, Self, Self::Imply<Self::Neg<Self::Neg<P>>, P>>;
+    fn double_neg_elim<P: 'a>() -> Cert<'a, Self, Self::Imply<Self::Neg<Self::Neg<P>>, P>>;
 }
 
 pub trait DoubleNegIntro<'a>: PropLogic<'a> + Negation<'a> {
-    fn double_neg_intro<P: Clone + 'a>() -> Cert<'a, Self, Self::Imply<P, Self::Neg<Self::Neg<P>>>>;
+    fn double_neg_intro<P: 'a>() -> Cert<'a, Self, Self::Imply<P, Self::Neg<Self::Neg<P>>>>;
 }
 
 /// Peirce's law: ((P → Q) → P) → P
@@ -22,8 +22,7 @@ pub trait DoubleNegIntro<'a>: PropLogic<'a> + Negation<'a> {
 /// The characteristic classical axiom: it is equivalent to [`Contraposition`]
 /// over the intuitionistic base `L1`/`L2`, so it is derivable here.
 pub trait PeirceLaw<'a>: PropLogic<'a> {
-    fn peirce<P: Clone + 'a, Q: Clone + 'a>()
-    -> Cert<'a, Self, Self::Imply<Self::Imply<Self::Imply<P, Q>, P>, P>>;
+    fn peirce<P: 'a, Q: 'a>() -> Cert<'a, Self, Self::Imply<Self::Imply<Self::Imply<P, Q>, P>, P>>;
 }
 
 pub struct ProofRing<Prop>(PhantomData<Prop>);
@@ -32,10 +31,10 @@ impl<'a, Prop> PropLogic<'a> for ProofRing<Prop>
 where
     Prop: PropLogic<'a>,
 {
-    fn l1<P: Clone + 'a, Q>() -> Cert<'a, Self, Self::Imply<P, Self::Imply<Q, P>>> {
+    fn l1<P: 'a, Q>() -> Cert<'a, Self, Self::Imply<P, Self::Imply<Q, P>>> {
         Prop::l1().cast()
     }
-    fn l2<P: Clone + 'a, Q: 'a, R: 'a>() -> Cert<
+    fn l2<P: 'a, Q: 'a, R: 'a>() -> Cert<
         'a,
         Self,
         Self::Imply<
@@ -49,8 +48,8 @@ where
 
 impl<'a, Prop: Imply<'a>> Imply<'a> for ProofRing<Prop> {
     type Imply<P: 'a, Q: 'a> = Prop::Imply<P, Q>;
-    type Cert<P: Clone + 'a> = Prop::Cert<P>;
-    fn mp<P: Clone, Q: Clone + 'a>(
+    type Cert<P: 'a> = Prop::Cert<P>;
+    fn mp<P, Q: 'a>(
         pq: Cert<'a, Self, Self::Imply<P, Q>>,
         p: Cert<'a, Self, P>,
     ) -> Cert<'a, Self, Q> {
@@ -66,7 +65,7 @@ impl<'a, Prop> DoubleNegElim<'a> for ProofRing<Prop>
 where
     Prop: Contraposition<'a> + PropLogic<'a>,
 {
-    fn double_neg_elim<P: Clone + 'a>() -> Cert<'a, Self, Self::Imply<Self::Neg<Self::Neg<P>>, P>> {
+    fn double_neg_elim<P: 'a>() -> Cert<'a, Self, Self::Imply<Self::Neg<Self::Neg<P>>, P>> {
         // https://math.stackexchange.com/questions/4634566/prove-that-contrapositive-rule-is-equivalent-to-the-rule-of-double-negation
         syllogism::<_, _, _, Prop>()
             .mp(Prop::l1())
@@ -80,8 +79,7 @@ where
 }
 
 impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> DoubleNegIntro<'a> for ProofRing<Prop> {
-    fn double_neg_intro<P: Clone + 'a>() -> Cert<'a, Self, Self::Imply<P, Self::Neg<Self::Neg<P>>>>
-    {
+    fn double_neg_intro<P: 'a>() -> Cert<'a, Self, Self::Imply<P, Self::Neg<Self::Neg<P>>>> {
         Prop::l3().cast().mp(Self::double_neg_elim())
     }
 }
@@ -90,7 +88,7 @@ impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> DoubleNegIntro<'a> for ProofR
 /// logics that already have the classical axiom: transposing `P → ¬Q` gives
 /// `¬¬Q → ¬P`, and `Q → ¬¬Q` feeds it.
 impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> Reductio<'a> for ProofRing<Prop> {
-    fn reductio<P: Clone + 'a, Q: Clone + 'a>()
+    fn reductio<P: 'a, Q: 'a>()
     -> Cert<'a, Self, Self::Imply<Self::Imply<P, Self::Neg<Q>>, Self::Imply<Q, Self::Neg<P>>>> {
         // (¬¬Q → ¬P) → (Q → ¬P)
         let pre = Prop::mp(
@@ -105,12 +103,12 @@ impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> Reductio<'a> for ProofRing<Pr
 }
 
 pub trait ExFalsoQuodlibet<'a>: PropLogic<'a> + Negation<'a> {
-    fn ex_falso_quodlibet<P: Clone + 'a, Q: Clone + 'a>()
+    fn ex_falso_quodlibet<P: 'a, Q: 'a>()
     -> Cert<'a, Self, Self::Imply<Self::Neg<P>, Self::Imply<P, Q>>>;
 }
 
 impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> ExFalsoQuodlibet<'a> for ProofRing<Prop> {
-    fn ex_falso_quodlibet<P: Clone + 'a, Q: Clone + 'a>()
+    fn ex_falso_quodlibet<P: 'a, Q: 'a>()
     -> Cert<'a, Self, Self::Imply<Self::Neg<P>, Self::Imply<P, Q>>> {
         syllogism().mp(Prop::l1()).mp(Prop::l3()).cast()
     }
@@ -119,8 +117,8 @@ impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> ExFalsoQuodlibet<'a> for Proo
 pub fn simplification<'a, P, Q, Prop: Contraposition<'a> + PropLogic<'a>>()
 -> Cert<'a, Prop, Prop::Imply<Prop::Neg<Prop::Imply<P, Q>>, P>>
 where
-    P: Clone + 'a,
-    Q: Clone + 'a,
+    P: 'a,
+    Q: 'a,
 {
     syllogism::<_, _, _, Prop>()
         .mp(ProofRing::<Prop>::ex_falso_quodlibet().cast())
@@ -132,7 +130,7 @@ where
 ///
 /// The converse of [`Contraposition`], obtained by wrapping both sides in a
 /// double negation so that [`Contraposition::l3`] applies.
-pub fn transposition<'a, P: Clone + 'a, Q: Clone + 'a, Prop: Contraposition<'a> + PropLogic<'a>>()
+pub fn transposition<'a, P: 'a, Q: 'a, Prop: Contraposition<'a> + PropLogic<'a>>()
 -> Cert<'a, Prop, Prop::Imply<Prop::Imply<P, Q>, Prop::Imply<Prop::Neg<Q>, Prop::Neg<P>>>> {
     // (P → Q) → (¬¬P → Q)
     let pre = syllogism().mp(ProofRing::<Prop>::double_neg_elim().cast());
@@ -154,7 +152,7 @@ pub fn transposition<'a, P: Clone + 'a, Q: Clone + 'a, Prop: Contraposition<'a> 
 /// If denying `P` proves `P`, then `P` holds outright. The self-implication
 /// `P → P` stands in for "truth": deriving `¬(P → P)` from `¬P` lets
 /// [`Contraposition::l3`] transpose it back into `(P → P) → P`.
-pub fn consequentia_mirabilis<'a, P: Clone + 'a, Prop: Contraposition<'a> + PropLogic<'a>>()
+pub fn consequentia_mirabilis<'a, P: 'a, Prop: Contraposition<'a> + PropLogic<'a>>()
 -> Cert<'a, Prop, Prop::Imply<Prop::Imply<Prop::Neg<P>, P>, P>> {
     // ¬P → (P → ¬(P → P)), distributed over the assumption ¬P → P,
     // yields ¬P → ¬(P → P).
@@ -172,8 +170,7 @@ pub fn consequentia_mirabilis<'a, P: Clone + 'a, Prop: Contraposition<'a> + Prop
 }
 
 impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> PeirceLaw<'a> for ProofRing<Prop> {
-    fn peirce<P: Clone + 'a, Q: Clone + 'a>()
-    -> Cert<'a, Self, Self::Imply<Self::Imply<Self::Imply<P, Q>, P>, P>> {
+    fn peirce<P: 'a, Q: 'a>() -> Cert<'a, Self, Self::Imply<Self::Imply<Self::Imply<P, Q>, P>, P>> {
         // ¬P → (P → Q) composed with the antecedent (P → Q) → P gives ¬P → P.
         syllogism()
             .mp(<Self as ExFalsoQuodlibet<'_>>::ex_falso_quodlibet())
@@ -183,7 +180,7 @@ impl<'a, Prop: Contraposition<'a> + PropLogic<'a>> PeirceLaw<'a> for ProofRing<P
 }
 
 impl<'l, Logic: DoubleNegElim<'l> + Reductio<'l>> Contraposition<'l> for ProofRing<Logic> {
-    fn l3<P: Clone + 'l, Q: Clone + 'l>()
+    fn l3<P: 'l, Q: 'l>()
     -> Cert<'l, Self, Self::Imply<Self::Imply<Self::Neg<P>, Self::Neg<Q>>, Self::Imply<Q, P>>> {
         // Reductio at (¬P, Q) introduces the outer negation:
         // (¬P → ¬Q) → (Q → ¬¬P)
@@ -198,16 +195,15 @@ impl<'l, Logic: DoubleNegElim<'l> + Reductio<'l>> Contraposition<'l> for ProofRi
 }
 
 impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> super::And<'l> for ProofRing<Logic> {
-    type And<P: Clone + 'l, Q: Clone + 'l> = Logic::Neg<Self::Imply<Q, Logic::Neg<P>>>;
-    fn and_intro<P: Clone, Q: Clone>()
-    -> Cert<'l, Self, Self::Imply<P, Self::Imply<Q, Self::And<P, Q>>>> {
+    type And<P: 'l, Q: 'l> = Logic::Neg<Self::Imply<Q, Logic::Neg<P>>>;
+    fn and_intro<P, Q>() -> Cert<'l, Self, Self::Imply<P, Self::Imply<Q, Self::And<P, Q>>>> {
         pub fn intro<'l, P, Q, Prop: Contraposition<'l> + PropLogic<'l>>(
             p: Cert<'l, Prop, P>,
             q: Cert<'l, Prop, Q>,
         ) -> Cert<'l, Prop, Prop::Neg<Prop::Imply<Q, Prop::Neg<P>>>>
         where
-            P: Clone + 'l,
-            Q: Clone + 'l,
+            P: 'l,
+            Q: 'l,
         {
             // From Q, derive (Q → ¬P) → ¬P by modus ponens on the assumption.
             Prop::l2()
@@ -226,7 +222,7 @@ impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> super::And<'l> for ProofRing
         .cast()
     }
     /// Left elimination: P ∧ Q → P
-    fn and_left<P: Clone, Q: Clone>() -> Cert<'l, Self, Self::Imply<Self::And<P, Q>, P>> {
+    fn and_left<P, Q>() -> Cert<'l, Self, Self::Imply<Self::And<P, Q>, P>> {
         // ¬P → (Q → ¬P) transposes to ¬(Q → ¬P) → ¬¬P, then double negation.
         transposition()
             .mp(Logic::l1::<Logic::Neg<P>, Q>())
@@ -236,7 +232,7 @@ impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> super::And<'l> for ProofRing
             .cast()
     }
     /// Right elimination: P ∧ Q → Q
-    fn and_right<P: Clone, Q: Clone>() -> Cert<'l, Self, Self::Imply<Self::And<P, Q>, Q>> {
+    fn and_right<P, Q>() -> Cert<'l, Self, Self::Imply<Self::And<P, Q>, Q>> {
         simplification()
             .upgrade()
             .mp(Deduction::<_, Logic>::assume())
@@ -244,17 +240,17 @@ impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> super::And<'l> for ProofRing
     }
 }
 
-impl<'l, A: Clone + 'l, Logic: Contraposition<'l> + PropLogic<'l>> Contraposition<'l>
+impl<'l, A: 'l, Logic: Contraposition<'l> + PropLogic<'l>> Contraposition<'l>
     for Deduction<A, Logic>
 {
-    fn l3<P: Clone + 'l, Q: Clone + 'l>()
+    fn l3<P: 'l, Q: 'l>()
     -> Cert<'l, Self, Self::Imply<Self::Imply<Self::Neg<P>, Self::Neg<Q>>, Self::Imply<Q, P>>> {
         Self::upgrade(Logic::l3())
     }
 }
 impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> super::Or<'l> for ProofRing<Logic> {
-    type Or<P: Clone + 'l, Q: Clone + 'l> = Logic::Imply<Logic::Neg<P>, Q>;
-    fn or_left<P: Clone, Q: Clone>() -> Cert<'l, Self, Self::Imply<P, Self::Or<P, Q>>> {
+    type Or<P: 'l, Q: 'l> = Logic::Imply<Logic::Neg<P>, Q>;
+    fn or_left<P, Q>() -> Cert<'l, Self, Self::Imply<P, Self::Or<P, Q>>> {
         Self::double_neg_intro()
             .cast()
             .upgrade()
@@ -263,10 +259,10 @@ impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> super::Or<'l> for ProofRing<
             .pipe(Logic::l3().upgrade())
             .cast()
     }
-    fn or_right<P: Clone, Q: Clone>() -> Cert<'l, Self, Self::Imply<Q, Self::Or<P, Q>>> {
+    fn or_right<P, Q>() -> Cert<'l, Self, Self::Imply<Q, Self::Or<P, Q>>> {
         Logic::l1().upgrade().mp(Deduction::assume()).cast()
     }
-    fn or_elim<P: Clone, Q: Clone, R: Clone>() -> Cert<
+    fn or_elim<P, Q, R>() -> Cert<
         'l,
         Self,
         Self::Imply<
@@ -309,7 +305,7 @@ impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> super::Or<'l> for ProofRing<
 }
 impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> Intuitionistic<'l> for ProofRing<Logic> {
     type False = Self::And<(), Self::Neg<()>>;
-    fn explosion<P: Clone>() -> Cert<'l, Self, Self::Imply<Self::False, P>> {
+    fn explosion<P>() -> Cert<'l, Self, Self::Imply<Self::False, P>> {
         let absurd = Deduction::assume();
         Self::ex_falso_quodlibet()
             .upgrade()
@@ -317,7 +313,7 @@ impl<'l, Logic: Contraposition<'l> + PropLogic<'l>> Intuitionistic<'l> for Proof
             .mp(absurd.pipe(Self::and_left().upgrade()))
             .qed()
     }
-    fn neg_def<P: Clone>()
+    fn neg_def<P>()
     -> Cert<'l, Self, super::Iff<'l, Self, Self::Neg<P>, Self::Imply<P, Self::False>>> {
         let l2r: Cert<Self, Self::Imply<Self::Neg<P>, Self::Imply<P, Self::False>>> =
             Self::ex_falso_quodlibet();

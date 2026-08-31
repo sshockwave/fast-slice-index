@@ -24,7 +24,7 @@ mod sealed_cert {
         }
     }
 
-    pub unsafe fn cert<'l, T: Clone>() -> Cert<'l, Axiomize, T> {
+    pub unsafe fn cert<'l, T>() -> Cert<'l, Axiomize, T> {
         Cert::new(PhantomCert(PhantomData))
     }
 
@@ -38,8 +38,8 @@ mod sealed_cert {
 
     impl<'l> Imply<'l> for Axiomize {
         type Imply<P: 'l, Q: 'l> = Infer<P, Q>;
-        type Cert<P: Clone + 'l> = PhantomCert<P>;
-        fn mp<P: Clone, Q: Clone + 'l>(
+        type Cert<P: 'l> = PhantomCert<P>;
+        fn mp<P, Q: 'l>(
             _pq: Cert<'l, Self, Self::Imply<P, Q>>,
             _p: Cert<'l, Self, P>,
         ) -> Cert<'l, Self, Q> {
@@ -49,10 +49,10 @@ mod sealed_cert {
 }
 
 impl<'l> PropLogic<'l> for Axiomize {
-    fn l1<P: Clone + 'l, Q>() -> Cert<'l, Self, Self::Imply<P, Self::Imply<Q, P>>> {
+    fn l1<P: 'l, Q>() -> Cert<'l, Self, Self::Imply<P, Self::Imply<Q, P>>> {
         unsafe { cert() }
     }
-    fn l2<P: Clone + 'l, Q: 'l, R: 'l>() -> Cert<
+    fn l2<P: 'l, Q: 'l, R: 'l>() -> Cert<
         'l,
         Self,
         Self::Imply<
@@ -65,7 +65,7 @@ impl<'l> PropLogic<'l> for Axiomize {
 }
 
 impl<'l> Contraposition<'l> for Axiomize {
-    fn l3<P: Clone + 'l, Q: Clone + 'l>()
+    fn l3<P: 'l, Q: 'l>()
     -> Cert<'l, Self, Self::Imply<Self::Imply<Self::Neg<P>, Self::Neg<Q>>, Self::Imply<Q, P>>> {
         unsafe { cert() }
     }
@@ -73,10 +73,10 @@ impl<'l> Contraposition<'l> for Axiomize {
 
 impl<'l> Intuitionistic<'l> for Axiomize {
     type False = Infallible;
-    fn explosion<P: Clone>() -> Cert<'l, Self, Self::Imply<Self::False, P>> {
+    fn explosion<P>() -> Cert<'l, Self, Self::Imply<Self::False, P>> {
         unsafe { cert() }
     }
-    fn neg_def<P: Clone>()
+    fn neg_def<P>()
     -> Cert<'l, Self, crate::logic::prop::Iff<'l, Self, Self::Neg<P>, Self::Imply<P, Self::False>>>
     {
         <Self as And<'l>>::and_intro()
@@ -109,8 +109,6 @@ mod sealed_fol {
         type Exists<P: for<'x> View<'x> + ?Sized> = Exists<P>;
         fn exists_elim<'t: 'l, P: for<'x> crate::logic::prop::View<'x> + ?Sized, Q>()
         -> Cert<'l, Self, Self::Imply<<P as crate::logic::prop::View<'t>>::Output, Self::Exists<P>>>
-        where
-            <P as crate::logic::prop::View<'t>>::Output: Clone,
         {
             unsafe { cert() }
         }
@@ -125,14 +123,12 @@ mod sealed_fol {
         }
         fn forall_elim<'t: 'l, P: for<'x> crate::logic::prop::View<'x> + ?Sized>()
         -> Cert<'l, Self, Self::Imply<Self::ForAll<P>, <P as crate::logic::prop::View<'t>>::Output>>
-        where
-            <P as crate::logic::prop::View<'t>>::Output: Clone,
         {
             unsafe { cert() }
         }
         fn forall_gen<
-            P: Clone,
-            Q: for<'x> crate::logic::prop::View<'x, Output: Clone> + ?Sized,
+            P,
+            Q: for<'x> crate::logic::prop::View<'x> + ?Sized,
             S: crate::logic::prop::ForAllProof<'l, Self, P, Q>,
         >(
             _: S,
