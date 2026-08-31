@@ -51,7 +51,7 @@
 
 use crate::logic::function::Equality;
 use crate::logic::prop::{And, FirstOrder};
-use crate::macros::thm;
+use crate::macros::{pred, thm};
 use crate::rel::Set;
 
 macro_rules! expr {
@@ -61,9 +61,12 @@ macro_rules! expr {
     ($x:lifetime * $y:lifetime == $z:lifetime) => {
         <Self as BinOp<'l, Logic>>::Op::<$x, $y, $z>
     };
+    ($x:lifetime == 1) => {
+        IsUnitLike::<'l, $x, Self, Logic>
+    };
 }
 
-pub trait BinOp<'l, Logic>
+pub trait BinOp<'l, Logic>: 'l
 where
     Logic: FirstOrder<'l> + Equality<'l>,
 {
@@ -136,25 +139,25 @@ where
     );
 }
 
+/// Type alias: "e is neutral for the operation"
+/// Equivalent to: ∀y. El(y) → e ∘ y = y
+///
+/// Note: doesn't require e to be in the carrier.
+/// [`IdentityExists::identity_exists`] adds that conjunct.
+pub type IsUnitLike<'l, 'e, G, Logic> = pred!(
+    'l: { Logic },
+    Call::<'y> = <G as Set>::El,
+    <G as BinOp<'l, Logic>>::Op::<'e, 'y, 'y>
+);
+
 pub trait IdentityExists<'l, Logic>: BinOp<'l, Logic> + Set
 where
     Logic: FirstOrder<'l> + Equality<'l> + And<'l>,
 {
-    /// Type alias: "e is neutral for the operation"
-    /// Equivalent to: ∀y. El(y) → e ∘ y = y
-    ///
-    /// Note: doesn't require e to be in the carrier.
-    /// [`IdentityExists::identity_exists`] adds that conjunct.
-    type IsIdentity<'e>;
-    fn identity_intro() -> thm!(
-        'l: { Logic },
-        ForAll::<'e>(Self::IsIdentity::<'e>.iff(Call::<'y> = Self::El, Self::Op::<'e, 'y, 'y>))
-    );
-
     /// Identity exists: ∃e. El(e) ∧ IsUnitLike(e)
     fn identity_exists() -> thm!(
         'l: { Logic },
-        Exists::<'e>(Self::El::<'e> && Self::IsIdentity::<'e>)
+        Exists::<'e>(Self::El::<'e> && expr!('e == 1))
     );
 }
 
@@ -166,7 +169,7 @@ where
     fn inverse() -> thm!(
         'l: { Logic },
         Call::<'x> = Self::El,
-        Exists::<'y>(Self::El::<'y> && (Call::<'z> = Self::Op::<'x, 'y>, Self::IsIdentity::<'z>))
+        Exists::<'y>(Self::El::<'y> && (Call::<'z> = Self::Op::<'x, 'y>, expr!('z == 1)))
     );
 }
 

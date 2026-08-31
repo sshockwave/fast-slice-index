@@ -122,7 +122,7 @@ pub trait ExistsProof<'l, Logic: Imply<'l>, P: for<'x> View<'x> + ?Sized, Q>: Cl
 }
 
 pub trait FirstOrder<'l>: Imply<'l> + 'l {
-    type ForAll<P: for<'x> View<'x> + ?Sized>: Clone;
+    type ForAll<P: for<'x> View<'x> + ?Sized + 'l>: Clone + 'l;
     type Exists<P: for<'x> View<'x> + ?Sized>: Clone;
     fn forall_gen<
         P: Clone,

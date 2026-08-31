@@ -313,7 +313,7 @@ mod sealed_exists {
 
 type Logic = IntuitionisticImpl<PropLogicThm>;
 impl<'l> FirstOrder<'l> for Logic {
-    type ForAll<V: for<'x> View<'x> + ?Sized> = ForAll<'l, V>;
+    type ForAll<V: for<'x> View<'x> + ?Sized + 'l> = ForAll<'l, V>;
     fn forall_gen<
         P: Clone,
         Q: for<'x> View<'x, Output: Clone> + ?Sized,

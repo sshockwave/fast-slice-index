@@ -1,6 +1,6 @@
 use super::group::Monoid;
 use crate::{
-    algebra::group::{AbelianGroup, BinOp, Commutative, IdentityExists},
+    algebra::group::{AbelianGroup, BinOp, Commutative, IsUnitLike},
     logic::{
         function::Equality,
         prop::{And, FirstOrder, Negation, Or},
@@ -20,10 +20,10 @@ macro_rules! expr {
         <Self::Mul as BinOp<'l, Logic>>::Op::<$b, $c, $a>
     };
     ($a:lifetime == 0) => {
-        <Self::Add as IdentityExists<'l, Logic>>::IsIdentity::<$a>
+        IsUnitLike::<'l, $a, Self::Add, Logic>
     };
     ($a:lifetime == 1) => {
-        <Self::Mul as IdentityExists<'l, Logic>>::IsIdentity::<$a>
+        IsUnitLike::<'l, $a, Self::Mul, Logic>
     };
 }
 
@@ -127,6 +127,13 @@ pub trait Field<'l, Logic>: CommutativeRing<'l, Logic> + NonZero<'l, Logic>
 where
     Logic: FirstOrder<'l> + Equality<'l> + And<'l> + Negation<'l>,
 {
+    /// Multiplicative inverse: every *nonzero* rational has a reciprocal
+    ///
+    /// ∀x. IsRat(x) → ¬IsZeroLike(x) → ∃y. IsRat(y) ∧ (x · y is one)
+    ///
+    /// The `¬IsZeroLike` guard is what keeps this from being false at 0, and
+    /// is exactly why [`Rationals::Mul`] is a monoid rather than an
+    /// [`AbelianGroup`].
     fn mul_inverse() -> thm!(
         'l: { Logic },
         'x: { expr!('x in El) && !expr!('x == 0) },

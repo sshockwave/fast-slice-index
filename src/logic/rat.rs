@@ -1,4 +1,4 @@
-use crate::algebra::group::{AbelianGroup, BinOp, CommutativeMonoid, IdentityExists};
+use crate::algebra::group::{AbelianGroup, BinOp, CommutativeMonoid, IsUnitLike};
 use crate::logic::function::Equality;
 use crate::logic::prop::{And, Cert, FirstOrder, Negation, Or, View};
 use crate::macros::thm;
@@ -23,8 +23,7 @@ pub type Prod<'l, 'x, 'y, 'z, Q> = <<Q as Rationals<'l>>::Mul as BinOp<'l, Q>>::
 ///
 /// Just the additive group's [`IsUnitLike`]. Doesn't require x to be a
 /// rational; [`IsZero`] adds that conjunct.
-pub type IsZeroLike<'l, 'x, Q> =
-    <<Q as Rationals<'l>>::Add as IdentityExists<'l, Q>>::IsIdentity<'x>;
+pub type IsZeroLike<'l, 'x, Q> = IsUnitLike<'l, 'x, <Q as Rationals<'l>>::Add, Q>;
 
 /// Type alias: "x is zero"
 /// Equivalent to: x is a rational AND x is additively neutral
@@ -32,8 +31,7 @@ pub type IsZero<'l, 'x, Q> = <Q as And<'l>>::And<IsRat<'l, 'x, Q>, IsZeroLike<'l
 
 /// Type alias: "x is multiplicatively neutral"
 /// Equivalent to: ∀y. IsRatMul(y) → x · y = y
-pub type IsOneLike<'l, 'x, Q> =
-    <<Q as Rationals<'l>>::Mul as IdentityExists<'l, Q>>::IsIdentity<'x>;
+pub type IsOneLike<'l, 'x, Q> = IsUnitLike<'l, 'x, <Q as Rationals<'l>>::Mul, Q>;
 
 /// Type alias: "x is one"
 ///
@@ -138,25 +136,6 @@ pub trait Rationals<'l>:
 
     /// Strict order: `Lt<'x, 'y>` means "x < y"
     type Lt<'x: 'l, 'y: 'l>;
-
-    /// Multiplicative inverse: every *nonzero* rational has a reciprocal
-    ///
-    /// ∀x. IsRat(x) → ¬IsZeroLike(x) → ∃y. IsRat(y) ∧ (x · y is one)
-    ///
-    /// The `¬IsZeroLike` guard is what keeps this from being false at 0, and
-    /// is exactly why [`Rationals::Mul`] is a monoid rather than an
-    /// [`AbelianGroup`].
-    fn mul_inverse() -> thm!(
-        'l: {},
-        ForAll::<'x>(
-            IsRat::<'l, 'x, Self>.imply((!IsZeroLike::<'l, 'x, Self>).imply(!ForAll::<'y>(
-                IsRat::<'l, 'y, Self>.imply(!(
-                    Call::<'z> = <Self::Mul as BinOp<'l, Self>>::Op::<'x, 'y>,
-                    IsOneLike::<'l, 'z, Self>
-                ))
-            )))
-        )
-    );
 
     /// Distributivity: x · (y + z) = x · y + x · z
     ///
@@ -407,7 +386,7 @@ mod tests {
     fn _axioms_are_callable<'l, Q: Rationals<'l>>() {
         // let _ = Q::same_carrier();
         // let _ = Q::nontrivial();
-        let _ = Q::mul_inverse();
+        // let _ = Q::mul_inverse();
         let _ = Q::distributive();
         let _ = Q::lt_typed();
         let _ = Q::lt_irrefl();

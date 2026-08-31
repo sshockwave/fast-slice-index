@@ -105,7 +105,7 @@ mod sealed_fol {
     }
 
     impl<'l> FirstOrder<'l> for Axiomize {
-        type ForAll<P: for<'x> View<'x> + ?Sized> = ForAll<P>;
+        type ForAll<P: for<'x> View<'x> + ?Sized + 'l> = ForAll<P>;
         type Exists<P: for<'x> View<'x> + ?Sized> = Exists<P>;
         fn exists_elim<'t: 'l, P: for<'x> crate::logic::prop::View<'x> + ?Sized, Q>()
         -> Cert<'l, Self, Self::Imply<<P as crate::logic::prop::View<'t>>::Output, Self::Exists<P>>>
