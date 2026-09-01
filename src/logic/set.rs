@@ -1030,6 +1030,203 @@ where
     }
 }
 
+// ---------------------------------------------------------------------------
+// Reading a set back out of its description
+// ---------------------------------------------------------------------------
+//
+// The lemmas above say what a described set *contains*. These say the converse:
+// if two descriptions fit the same set, the described elements must agree.
+// Together they are what the Kuratowski pair needs — `⟨a,b⟩` is only injective
+// because `{a}` and `{a,b}` can each be read back.
+
+/// `s = {a} → s = {c} → a = c`, at fixed points.
+fn singleton_injective_at<'a, 'c, 's>() -> Cert<
+    Axiomize,
+    <Axiomize as Imply>::Imply<
+        IsSingleton<'s, 'a>,
+        <Axiomize as Imply>::Imply<IsSingleton<'s, 'c>, Eq<'a, 'c>>,
+    >,
+> {
+    Deduction::<IsSingleton<'s, 'a>, Axiomize>::scope(|sa| {
+        Deduction::<IsSingleton<'s, 'c>, _>::scope(|sc| {
+            // `{a}` contains `a` ...
+            let a_in_s = sa
+                .upgrade()
+                .pipe(singleton_member_at::<'a, 's>().upgrade().upgrade());
+            // ... and everything in `{c}` equals `c`.
+            let to_c = sc
+                .pipe(
+                    <Axiomize as FirstOrder>::forall_elim::<'a, SingletonView<'s, 'c>>()
+                        .upgrade()
+                        .upgrade(),
+                )
+                .pipe(<Axiomize as And>::and_left().upgrade().upgrade());
+            a_in_s.pipe(to_c)
+        })
+    })
+}
+
+/// `λa. ∀c ∀s. s = {a} → s = {c} → a = c`
+pub type SingletonInjectiveView = dyn for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<SingletonInjectiveView1<'a>>>
+    + 'static;
+/// `λc. ∀s. s = {a} → s = {c} → a = c`
+pub type SingletonInjectiveView1<'a> = dyn for<'c> View<'c, Output = <Axiomize as FirstOrder>::ForAll<SingletonInjectiveView2<'a, 'c>>>
+    + 'static;
+/// `λs. s = {a} → s = {c} → a = c`
+pub type SingletonInjectiveView2<'a, 'c> = dyn for<'s> View<
+        's,
+        Output = pred!(
+            { Axiomize },
+            IsSingleton::<'s, 'a> >>= IsSingleton::<'s, 'c> >>= Eq::<'a, 'c>
+        ),
+    > + 'static;
+
+/// `∀a ∀c ∀s. s = {a} → s = {c} → a = c` — **proved**.
+///
+/// Singletons are injective: a set determines its sole member. This is the
+/// converse of [`singleton_unique`], which said the member determines the set,
+/// and it is the first half of the ordered-pair characterisation.
+pub fn singleton_injective()
+-> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<SingletonInjectiveView>> {
+    forall_intro(SingletonInjective)
+}
+
+#[derive(Clone, Copy)]
+struct SingletonInjective;
+impl<Q> Generalise<Axiomize, Q> for SingletonInjective
+where
+    Q: for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<SingletonInjectiveView1<'a>>>
+        + ?Sized,
+{
+    fn prove<'a>(self) -> Cert<Axiomize, <Q as View<'a>>::Output> {
+        forall_intro::<Axiomize, SingletonInjectiveView1<'a>, _>(SingletonInjective1(PhantomData))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct SingletonInjective1<'a>(PhantomData<&'a ()>);
+impl<'a, Q> Generalise<Axiomize, Q> for SingletonInjective1<'a>
+where
+    Q: for<'c> View<'c, Output = <Axiomize as FirstOrder>::ForAll<SingletonInjectiveView2<'a, 'c>>>
+        + ?Sized,
+{
+    fn prove<'c>(self) -> Cert<Axiomize, <Q as View<'c>>::Output> {
+        forall_intro::<Axiomize, SingletonInjectiveView2<'a, 'c>, _>(SingletonInjective2(
+            PhantomData,
+        ))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct SingletonInjective2<'a, 'c>(PhantomData<(&'a (), &'c ())>);
+impl<'a, 'c, Q> Generalise<Axiomize, Q> for SingletonInjective2<'a, 'c>
+where
+    Q: for<'s> View<
+            's,
+            Output = pred!(
+                { Axiomize },
+                IsSingleton::<'s, 'a> >>= IsSingleton::<'s, 'c> >>= Eq::<'a, 'c>
+            ),
+        > + ?Sized,
+{
+    fn prove<'s>(self) -> Cert<Axiomize, <Q as View<'s>>::Output> {
+        singleton_injective_at::<'a, 'c, 's>()
+    }
+}
+
+/// `p = {a,b} → p = {a} → b = a`, at fixed points.
+fn pair_collapses_at<'a, 'b, 'p>() -> Cert<
+    Axiomize,
+    <Axiomize as Imply>::Imply<
+        IsPair<'p, 'a, 'b>,
+        <Axiomize as Imply>::Imply<IsSingleton<'p, 'a>, Eq<'b, 'a>>,
+    >,
+> {
+    Deduction::<IsPair<'p, 'a, 'b>, Axiomize>::scope(|pab| {
+        Deduction::<IsSingleton<'p, 'a>, _>::scope(|pa| {
+            // `{a,b}` contains `b` ...
+            let b_in_p = pab.upgrade().pipe(
+                pair_member::<'a, 'b, 'b, 'p>(<Axiomize as Or>::or_right().mp(eq_refl_at::<'b>()))
+                    .upgrade()
+                    .upgrade(),
+            );
+            // ... and everything in `{a}` equals `a`.
+            let to_a = pa
+                .pipe(
+                    <Axiomize as FirstOrder>::forall_elim::<'b, SingletonView<'p, 'a>>()
+                        .upgrade()
+                        .upgrade(),
+                )
+                .pipe(<Axiomize as And>::and_left().upgrade().upgrade());
+            b_in_p.pipe(to_a)
+        })
+    })
+}
+
+/// `λa. ∀b ∀p. p = {a,b} → p = {a} → b = a`
+pub type PairCollapsesView = dyn for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<PairCollapsesView1<'a>>>
+    + 'static;
+/// `λb. ∀p. p = {a,b} → p = {a} → b = a`
+pub type PairCollapsesView1<'a> = dyn for<'b> View<'b, Output = <Axiomize as FirstOrder>::ForAll<PairCollapsesView2<'a, 'b>>>
+    + 'static;
+/// `λp. p = {a,b} → p = {a} → b = a`
+pub type PairCollapsesView2<'a, 'b> = dyn for<'p> View<
+        'p,
+        Output = pred!(
+            { Axiomize },
+            IsPair::<'p, 'a, 'b> >>= IsSingleton::<'p, 'a> >>= Eq::<'b, 'a>
+        ),
+    > + 'static;
+
+/// `∀a ∀b ∀p. p = {a,b} → p = {a} → b = a` — **proved**.
+///
+/// A pair that is also a singleton had equal components all along. This is the
+/// degenerate case the ordered-pair characterisation has to rule out
+/// separately, and [`singleton_is_pair`] is its converse.
+pub fn pair_collapses() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<PairCollapsesView>> {
+    forall_intro(PairCollapses)
+}
+
+#[derive(Clone, Copy)]
+struct PairCollapses;
+impl<Q> Generalise<Axiomize, Q> for PairCollapses
+where
+    Q: for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<PairCollapsesView1<'a>>> + ?Sized,
+{
+    fn prove<'a>(self) -> Cert<Axiomize, <Q as View<'a>>::Output> {
+        forall_intro::<Axiomize, PairCollapsesView1<'a>, _>(PairCollapses1(PhantomData))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct PairCollapses1<'a>(PhantomData<&'a ()>);
+impl<'a, Q> Generalise<Axiomize, Q> for PairCollapses1<'a>
+where
+    Q: for<'b> View<'b, Output = <Axiomize as FirstOrder>::ForAll<PairCollapsesView2<'a, 'b>>>
+        + ?Sized,
+{
+    fn prove<'b>(self) -> Cert<Axiomize, <Q as View<'b>>::Output> {
+        forall_intro::<Axiomize, PairCollapsesView2<'a, 'b>, _>(PairCollapses2(PhantomData))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct PairCollapses2<'a, 'b>(PhantomData<(&'a (), &'b ())>);
+impl<'a, 'b, Q> Generalise<Axiomize, Q> for PairCollapses2<'a, 'b>
+where
+    Q: for<'p> View<
+            'p,
+            Output = pred!(
+                { Axiomize },
+                IsPair::<'p, 'a, 'b> >>= IsSingleton::<'p, 'a> >>= Eq::<'b, 'a>
+            ),
+        > + ?Sized,
+{
+    fn prove<'p>(self) -> Cert<Axiomize, <Q as View<'p>>::Output> {
+        pair_collapses_at::<'a, 'b, 'p>()
+    }
+}
+
 /// Typecheck witnesses: `cargo check` is the proof checker.
 #[expect(dead_code, reason = "typecheck-only proof assertions")]
 const _: () = {
@@ -1071,6 +1268,8 @@ const _: () = {
         let _ = singleton_unique();
         let _ = singleton_is_pair();
         let _ = pair_is_singleton();
+        let _ = singleton_injective();
+        let _ = pair_collapses();
     }
 
     /// [`IsSingleton`] is still the proposition its doc comment claims: naming
