@@ -2,6 +2,7 @@ pub mod axiom;
 pub mod function;
 pub mod nat;
 pub mod prop;
+pub mod set;
 pub mod rat;
 pub mod zfc;
 
