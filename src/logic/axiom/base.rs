@@ -11,7 +11,9 @@ use crate::logic::prop::{
 use std::convert::Infallible;
 
 use self::sealed_cert::{PhantomCert, cert};
-mod sealed_cert {
+/// Visible to the rest of `axiom` so sibling modules can state axioms, but no
+/// wider — this is what keeps certificates unforgeable outside the axiom layer.
+pub(super) mod sealed_cert {
     use super::{Axiomize, Cert};
     use ::core::marker::PhantomData;
 

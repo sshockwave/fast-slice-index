@@ -1,6 +1,7 @@
 use crate::logic::prop::{And, Imply, Intuitionistic, Negation, Or, neg::ProofRing};
 
 mod base;
+pub mod zfc;
 
 pub struct Axiomize;
 

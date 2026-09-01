@@ -1,4 +1,5 @@
-use super::{Cert, Imply, Negation, PropLogic};
+use super::{And, Cert, ExistsProof, FirstOrder, ForAllProof, Imply, Negation, PropLogic, View};
+use ::core::marker::PhantomData;
 
 impl<PQ, Prop: Imply + ?Sized> Cert<Prop, PQ> {
     pub fn mp<P, Q>(self, p: Cert<Prop, P>) -> Cert<Prop, Q>
@@ -108,4 +109,205 @@ pub fn exchange<P, Q, R, Prop: PropLogic>()
         .qed()
         .qed()
         .qed()
+}
+
+/// Currying: `((A ∧ B) → C) → (A → (B → C))`
+pub fn curry<A, B, C, Prop: And>()
+-> Cert<Prop, Prop::Imply<Prop::Imply<Prop::And<A, B>, C>, Prop::Imply<A, Prop::Imply<B, C>>>> {
+    // Three nested scopes: the outer assumes `(A ∧ B) → C`, then `A`, then `B`.
+    let g = Deduction::<Prop::Imply<Prop::And<A, B>, C>, Prop>::assume();
+    let a = Deduction::<A, Deduction<Prop::Imply<Prop::And<A, B>, C>, Prop>>::assume();
+    let b =
+        Deduction::<B, Deduction<A, Deduction<Prop::Imply<Prop::And<A, B>, C>, Prop>>>::assume();
+    let pair = Prop::and_intro::<A, B>()
+        .upgrade()
+        .upgrade()
+        .upgrade()
+        .mp(a.upgrade())
+        .mp(b);
+    g.upgrade().upgrade().mp(pair).cast()
+}
+
+/// Uncurrying: `(A → (B → C)) → ((A ∧ B) → C)`
+///
+/// The direction that lets an extra hypothesis be folded into a single
+/// antecedent, which is what [`FirstOrder::forall_gen`] needs in order to
+/// generalise underneath a [`Deduction`] assumption.
+pub fn uncurry<A, B, C, Prop: And>()
+-> Cert<Prop, Prop::Imply<Prop::Imply<A, Prop::Imply<B, C>>, Prop::Imply<Prop::And<A, B>, C>>> {
+    let f = Deduction::<Prop::Imply<A, Prop::Imply<B, C>>, Prop>::assume();
+    let ab =
+        Deduction::<Prop::And<A, B>, Deduction<Prop::Imply<A, Prop::Imply<B, C>>, Prop>>::assume();
+    f.upgrade()
+        .mp(ab.clone().pipe(Prop::and_left().upgrade().upgrade()))
+        .mp(ab.pipe(Prop::and_right().upgrade().upgrade()))
+        .cast()
+}
+
+/// Conjunction survives an assumption: every axiom is closed, so `upgrade`
+/// carries each one in unchanged.
+impl<A, Logic: And> And for Deduction<A, Logic> {
+    type And<P, Q> = Logic::And<P, Q>;
+    fn and_left<P, Q>() -> Cert<Self, Self::Imply<Self::And<P, Q>, P>> {
+        Self::upgrade(Logic::and_left())
+    }
+    fn and_right<P, Q>() -> Cert<Self, Self::Imply<Self::And<P, Q>, Q>> {
+        Self::upgrade(Logic::and_right())
+    }
+    fn and_intro<P, Q>() -> Cert<Self, Self::Imply<P, Self::Imply<Q, Self::And<P, Q>>>> {
+        Self::upgrade(Logic::and_intro())
+    }
+}
+
+use self::sealed_deduction_fol::{Exchanged, Uncurried};
+mod sealed_deduction_fol {
+    use super::{
+        And, Cert, Deduction, ExistsProof, FirstOrder, ForAllProof, PhantomData, View, exchange,
+        uncurry,
+    };
+
+    /// Repackages a [`ForAllProof`] written under the assumption `A` as one
+    /// whose single antecedent is `A ∧ P`.
+    pub struct Uncurried<A, Logic, P, S>(pub S, pub PhantomData<(A, Logic, P)>);
+
+    impl<A, Logic, P, S: Clone> Clone for Uncurried<A, Logic, P, S> {
+        fn clone(&self) -> Self {
+            Uncurried(self.0.clone(), PhantomData)
+        }
+    }
+
+    impl<A, Logic, P, Q, S> ForAllProof<Logic, Logic::And<A, P>, Q> for Uncurried<A, Logic, P, S>
+    where
+        Logic: FirstOrder + And,
+        Q: for<'x> View<'x> + ?Sized,
+        S: ForAllProof<Deduction<A, Logic>, P, Q>,
+    {
+        fn prove<'x>(self) -> Cert<Logic, Logic::Imply<Logic::And<A, P>, <Q as View<'x>>::Output>> {
+            uncurry::<A, P, <Q as View<'x>>::Output, Logic>().mp(self.0.prove::<'x>().cast())
+        }
+    }
+
+    /// Repackages an [`ExistsProof`] written under the assumption `A` by
+    /// swapping `A` past the witness antecedent. Unlike [`Uncurried`] this
+    /// needs no conjunction — the assumption can simply move into the
+    /// consequent.
+    pub struct Exchanged<A, Logic, P: ?Sized, Q, S>(
+        pub S,
+        pub PhantomData<(A, Logic, Q)>,
+        pub PhantomData<P>,
+    );
+
+    impl<A, Logic, P: ?Sized, Q, S: Clone> Clone for Exchanged<A, Logic, P, Q, S> {
+        fn clone(&self) -> Self {
+            Exchanged(self.0.clone(), PhantomData, PhantomData)
+        }
+    }
+
+    impl<A, Logic, P, Q, S> ExistsProof<Logic, P, Logic::Imply<A, Q>> for Exchanged<A, Logic, P, Q, S>
+    where
+        Logic: FirstOrder + super::PropLogic,
+        P: for<'x> View<'x> + ?Sized,
+        S: ExistsProof<Deduction<A, Logic>, P, Q>,
+    {
+        fn prove<'x>(
+            self,
+        ) -> Cert<Logic, Logic::Imply<<P as View<'x>>::Output, Logic::Imply<A, Q>>> {
+            exchange::<A, <P as View<'x>>::Output, Q, Logic>().mp(self.0.prove::<'x>().cast())
+        }
+    }
+}
+
+/// Quantifiers survive an assumption.
+///
+/// The two elimination rules are closed axioms, so they just `upgrade`. The
+/// two generalisation rules have to move the assumption `A` out of the way
+/// first, because `∀x. (A → Q x)` is not the same proposition as
+/// `A → ∀x. Q x`: `forall_gen` folds `A` into the antecedent with
+/// [`uncurry`] and unfolds the result with [`curry`], while `exists_gen`
+/// only has to [`exchange`] `A` past the witness.
+impl<A, Logic: FirstOrder + And> FirstOrder for Deduction<A, Logic> {
+    type ForAll<P: for<'x> View<'x> + ?Sized> = Logic::ForAll<P>;
+    type Exists<P: for<'x> View<'x> + ?Sized> = Logic::Exists<P>;
+
+    fn forall_elim<'t, P: for<'x> View<'x> + ?Sized>()
+    -> Cert<Self, Self::Imply<Self::ForAll<P>, <P as View<'t>>::Output>> {
+        Self::upgrade(Logic::forall_elim::<'t, P>())
+    }
+
+    fn exists_elim<'t, P: for<'x> View<'x> + ?Sized, Q>()
+    -> Cert<Self, Self::Imply<<P as View<'t>>::Output, Self::Exists<P>>> {
+        Self::upgrade(Logic::exists_elim::<'t, P, Q>())
+    }
+
+    fn forall_gen<P, Q: for<'x> View<'x> + ?Sized, S: ForAllProof<Self, P, Q>>(
+        proof: S,
+    ) -> Cert<Self, Self::Imply<P, Self::ForAll<Q>>> {
+        curry::<A, P, Logic::ForAll<Q>, Logic>()
+            .mp(Logic::forall_gen(Uncurried::<A, Logic, P, S>(
+                proof,
+                PhantomData,
+            )))
+            .cast()
+    }
+
+    fn exists_gen<P: for<'x> View<'x> + ?Sized, Q, S: ExistsProof<Self, P, Q>>(
+        proof: S,
+    ) -> Cert<Self, Self::Imply<Self::Exists<P>, Q>> {
+        exchange::<Logic::Exists<P>, A, Q, Logic>()
+            .mp(Logic::exists_gen(Exchanged::<A, Logic, P, Q, S>(
+                proof,
+                PhantomData,
+                PhantomData,
+            )))
+            .cast()
+    }
+}
+
+/// A proof of `Q<'x>` that is uniform in `'x`, with no antecedent.
+///
+/// [`FirstOrder::forall_gen`] always produces an implication `P → ∀x. Q x`,
+/// because that is the shape universal generalisation takes in a Hilbert
+/// system. When the theorem being generalised is closed there is nothing for
+/// `P` to be, and threading a dummy antecedent through by hand at every use
+/// obscures the proof. [`forall_intro`] does it once.
+pub trait Generalise<Logic: Imply, Q: for<'x> View<'x> + ?Sized>: Clone {
+    fn prove<'x>(self) -> Cert<Logic, <Q as View<'x>>::Output>;
+}
+
+use self::sealed_generalise::Generalised;
+mod sealed_generalise {
+    use super::{Cert, ForAllProof, Generalise, PhantomData, PropLogic, View};
+
+    pub struct Generalised<Logic, Q: ?Sized, S>(pub S, pub PhantomData<Logic>, pub PhantomData<Q>);
+
+    impl<Logic, Q: ?Sized, S: Clone> Clone for Generalised<Logic, Q, S> {
+        fn clone(&self) -> Self {
+            Generalised(self.0.clone(), PhantomData, PhantomData)
+        }
+    }
+
+    impl<Logic, Q, S> ForAllProof<Logic, Logic::Imply<(), ()>, Q> for Generalised<Logic, Q, S>
+    where
+        Logic: PropLogic,
+        Q: for<'x> View<'x> + ?Sized,
+        S: Generalise<Logic, Q>,
+    {
+        fn prove<'x>(
+            self,
+        ) -> Cert<Logic, Logic::Imply<Logic::Imply<(), ()>, <Q as View<'x>>::Output>> {
+            Logic::l1().mp(self.0.prove::<'x>())
+        }
+    }
+}
+
+/// Universal generalisation of a closed theorem: from a proof of `Q<'x>`
+/// uniform in `'x`, conclude `∀x. Q x`.
+pub fn forall_intro<Logic, Q, S>(proof: S) -> Cert<Logic, Logic::ForAll<Q>>
+where
+    Logic: FirstOrder + PropLogic,
+    Q: for<'x> View<'x> + ?Sized,
+    S: Generalise<Logic, Q>,
+{
+    Logic::forall_gen(Generalised::<Logic, Q, S>(proof, PhantomData, PhantomData))
+        .mp(reflexive::<(), Logic>())
 }

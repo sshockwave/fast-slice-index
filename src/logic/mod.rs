@@ -1,4 +1,4 @@
-mod axiom;
+pub mod axiom;
 pub mod function;
 pub mod nat;
 pub mod prop;
