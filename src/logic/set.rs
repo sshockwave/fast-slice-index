@@ -58,8 +58,15 @@ pub type Subset<'x, 'y> = <Axiomize as FirstOrder>::ForAll<SubsetView<'x, 'y>>;
 /// `IsEmpty(e) := ∀z. z ∉ e`
 pub type IsEmpty<'e> = pred!({ Axiomize }, ForAll::<'z>(!(In::<'z, 'e>)));
 
+/// `λz. z ∈ s ↔ z = a` — the body of [`IsSingleton`].
+///
+/// Named for the same reason as [`PairView`]: a proof about singletons has to
+/// pin this view in an impl header.
+pub type SingletonView<'s, 'a> =
+    dyn for<'z> View<'z, Output = Iff<Axiomize, In<'z, 's>, Eq<'z, 'a>>> + 'static;
+
 /// `IsSingleton(s, a) := ∀z. (z ∈ s ↔ z = a)`, i.e. `s = {a}`.
-pub type IsSingleton<'s, 'a> = pred!({ Axiomize }, ForAll::<'z>((In::<'z, 's>).iff(Eq::<'z, 'a>)));
+pub type IsSingleton<'s, 'a> = <Axiomize as FirstOrder>::ForAll<SingletonView<'s, 'a>>;
 
 /// `λz. z ∈ p ↔ (z = a ∨ z = b)` — the body of [`IsPair`].
 ///
@@ -667,6 +674,362 @@ where
     }
 }
 
+// ---------------------------------------------------------------------------
+// Singletons
+// ---------------------------------------------------------------------------
+//
+// The singleton mirror of the pair lemmas above. `{a}` is the inner layer of a
+// Kuratowski ordered pair, so everything the ordered-pair characterisation
+// needs to know about `{a}` has to exist before that proof can start.
+
+/// `s = {a} → a ∈ s`, at fixed `'a` and `'s`.
+///
+/// The singleton counterpart of [`pair_member`], and shorter: there is no
+/// disjunction to choose a side of, only `a = a`.
+fn singleton_member_at<'a, 's>()
+-> Cert<Axiomize, <Axiomize as Imply>::Imply<IsSingleton<'s, 'a>, In<'a, 's>>> {
+    <Axiomize as PropLogic>::l2()
+        .mp(syllogism()
+            .mp(<Axiomize as FirstOrder>::forall_elim::<
+                'a,
+                SingletonView<'s, 'a>,
+            >())
+            .mp(<Axiomize as And>::and_right()))
+        .mp(<Axiomize as PropLogic>::l1().mp(eq_refl_at::<'a>()))
+}
+
+/// `λa. ∀s. s = {a} → a ∈ s`
+pub type SingletonMemberView = dyn for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<SingletonMemberView1<'a>>>
+    + 'static;
+/// `λs. s = {a} → a ∈ s`
+pub type SingletonMemberView1<'a> = dyn for<'s> View<'s, Output = pred!({ Axiomize }, IsSingleton::<'s, 'a> >>= In::<'a, 's>)>
+    + 'static;
+
+/// `∀a ∀s. s = {a} → a ∈ s` — **proved**.
+///
+/// A singleton is not empty. This is what stops the ordered-pair proof from
+/// arguing vacuously about `{a}`.
+pub fn singleton_member() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<SingletonMemberView>> {
+    forall_intro(SingletonMember)
+}
+
+#[derive(Clone, Copy)]
+struct SingletonMember;
+impl<Q> Generalise<Axiomize, Q> for SingletonMember
+where
+    Q: for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<SingletonMemberView1<'a>>>
+        + ?Sized,
+{
+    fn prove<'a>(self) -> Cert<Axiomize, <Q as View<'a>>::Output> {
+        forall_intro::<Axiomize, SingletonMemberView1<'a>, _>(SingletonMember1(PhantomData))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct SingletonMember1<'a>(PhantomData<&'a ()>);
+impl<'a, Q> Generalise<Axiomize, Q> for SingletonMember1<'a>
+where
+    Q: for<'s> View<'s, Output = pred!({ Axiomize }, IsSingleton::<'s, 'a> >>= In::<'a, 's>)>
+        + ?Sized,
+{
+    fn prove<'s>(self) -> Cert<Axiomize, <Q as View<'s>>::Output> {
+        singleton_member_at::<'a, 's>()
+    }
+}
+
+/// `λa. ∀s ∀t. s = {a} → t = {a} → s = t`
+pub type SingletonUniqueView = dyn for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<SingletonUniqueView1<'a>>>
+    + 'static;
+/// `λs. ∀t. s = {a} → t = {a} → s = t`
+pub type SingletonUniqueView1<'a> = dyn for<'s> View<'s, Output = <Axiomize as FirstOrder>::ForAll<SingletonUniqueView2<'a, 's>>>
+    + 'static;
+/// `λt. s = {a} → t = {a} → s = t`
+pub type SingletonUniqueView2<'a, 's> = dyn for<'t> View<
+        't,
+        Output = pred!(
+            { Axiomize },
+            IsSingleton::<'s, 'a> >>= IsSingleton::<'t, 'a> >>= Eq::<'s, 't>
+        ),
+    > + 'static;
+
+/// `∀a ∀s ∀t. s = {a} → t = {a} → s = t` — **proved**.
+///
+/// The singleton counterpart of [`pair_unique`], and identical in shape: both
+/// sets share the membership condition `z = a`, and `Eq` is *defined* as
+/// sharing members.
+pub fn singleton_unique() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<SingletonUniqueView>> {
+    forall_intro(SingletonUnique)
+}
+
+#[derive(Clone, Copy)]
+struct SingletonUnique;
+impl<Q> Generalise<Axiomize, Q> for SingletonUnique
+where
+    Q: for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<SingletonUniqueView1<'a>>>
+        + ?Sized,
+{
+    fn prove<'a>(self) -> Cert<Axiomize, <Q as View<'a>>::Output> {
+        forall_intro::<Axiomize, SingletonUniqueView1<'a>, _>(SingletonUnique1(PhantomData))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct SingletonUnique1<'a>(PhantomData<&'a ()>);
+impl<'a, Q> Generalise<Axiomize, Q> for SingletonUnique1<'a>
+where
+    Q: for<'s> View<'s, Output = <Axiomize as FirstOrder>::ForAll<SingletonUniqueView2<'a, 's>>>
+        + ?Sized,
+{
+    fn prove<'s>(self) -> Cert<Axiomize, <Q as View<'s>>::Output> {
+        forall_intro::<Axiomize, SingletonUniqueView2<'a, 's>, _>(SingletonUnique2(PhantomData))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct SingletonUnique2<'a, 's>(PhantomData<(&'a (), &'s ())>);
+impl<'a, 's, Q> Generalise<Axiomize, Q> for SingletonUnique2<'a, 's>
+where
+    Q: for<'t> View<
+            't,
+            Output = pred!(
+                { Axiomize },
+                IsSingleton::<'s, 'a> >>= IsSingleton::<'t, 'a> >>= Eq::<'s, 't>
+            ),
+        > + ?Sized,
+{
+    fn prove<'t>(self) -> Cert<Axiomize, <Q as View<'t>>::Output> {
+        curry().mp(<Axiomize as FirstOrder>::forall_gen(SingletonUnique3::<
+            'a,
+            's,
+            't,
+            SingletonView<'s, 'a>,
+            SingletonView<'t, 'a>,
+        >(
+            PhantomData,
+            PhantomData,
+            PhantomData,
+        )))
+    }
+}
+
+struct SingletonUnique3<'a, 's, 't, E1: ?Sized, E2: ?Sized>(
+    PhantomData<(&'a (), &'s (), &'t ())>,
+    PhantomData<E1>,
+    PhantomData<E2>,
+);
+impl<E1: ?Sized, E2: ?Sized> Clone for SingletonUnique3<'_, '_, '_, E1, E2> {
+    fn clone(&self) -> Self {
+        SingletonUnique3(PhantomData, PhantomData, PhantomData)
+    }
+}
+impl<'a, 's, 't, E1, E2, Q>
+    ForAllProof<
+        Axiomize,
+        <Axiomize as And>::And<
+            <Axiomize as FirstOrder>::ForAll<E1>,
+            <Axiomize as FirstOrder>::ForAll<E2>,
+        >,
+        Q,
+    > for SingletonUnique3<'a, 's, 't, E1, E2>
+where
+    E1: for<'z> View<'z, Output = Iff<Axiomize, In<'z, 's>, Eq<'z, 'a>>> + ?Sized,
+    E2: for<'z> View<'z, Output = Iff<Axiomize, In<'z, 't>, Eq<'z, 'a>>> + ?Sized,
+    Q: for<'z> View<'z, Output = Iff<Axiomize, In<'z, 's>, In<'z, 't>>> + ?Sized,
+{
+    fn prove<'z>(
+        self,
+    ) -> Cert<
+        Axiomize,
+        <Axiomize as Imply>::Imply<
+            <Axiomize as And>::And<
+                <Axiomize as FirstOrder>::ForAll<E1>,
+                <Axiomize as FirstOrder>::ForAll<E2>,
+            >,
+            <Q as View<'z>>::Output,
+        >,
+    > {
+        // (z∈s ↔ z=a) and (z∈t ↔ z=a) give (z∈s ↔ z=a) and (z=a ↔ z∈t).
+        syllogism()
+            .mp(and_map(
+                <Axiomize as FirstOrder>::forall_elim::<'z, E1>(),
+                syllogism()
+                    .mp(<Axiomize as FirstOrder>::forall_elim::<'z, E2>())
+                    .mp(and_comm()),
+            ))
+            .mp(iff_trans())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// A singleton is a pair of one thing with itself
+// ---------------------------------------------------------------------------
+
+/// `P ↔ (P ∨ P)`, at any logic with conjunction and disjunction.
+fn or_idem<P, L: And + Or>() -> Cert<L, Iff<L, P, L::Or<P, P>>> {
+    L::and_intro()
+        .mp(L::or_left())
+        .mp(L::or_elim().mp(reflexive()).mp(reflexive()))
+}
+
+/// `(B ↔ C) → ((A ↔ B) → (A ↔ C))`
+///
+/// [`iff_trans`] with the right-hand biconditional already in hand, which is
+/// the shape needed to rewrite one side of a biconditional under a quantifier.
+fn iff_extend<A, B, C, L: And>(
+    bc: Cert<L, Iff<L, B, C>>,
+) -> Cert<L, L::Imply<Iff<L, A, B>, Iff<L, A, C>>> {
+    let h = Deduction::<Iff<L, A, B>, L>::assume();
+    iff_trans::<A, B, C, L>()
+        .upgrade()
+        .mp(L::and_intro().upgrade().mp(h).mp(bc.upgrade()))
+        .cast()
+}
+
+/// `λa. ∀s. s = {a} → s = {a,a}`
+pub type SingletonIsPairView = dyn for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<SingletonIsPairView1<'a>>>
+    + 'static;
+/// `λs. s = {a} → s = {a,a}`
+pub type SingletonIsPairView1<'a> = dyn for<'s> View<'s, Output = pred!({ Axiomize }, IsSingleton::<'s, 'a> >>= IsPair::<'s, 'a, 'a>)>
+    + 'static;
+
+/// `∀a ∀s. s = {a} → s = {a,a}` — **proved**.
+///
+/// The bridge that lets the singleton layer of a Kuratowski pair be treated as
+/// an ordinary pair. Its content is just `P ↔ (P ∨ P)` pushed under the
+/// quantifier by [`iff_extend`]; see [`pair_is_singleton`] for the converse.
+pub fn singleton_is_pair() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<SingletonIsPairView>>
+{
+    forall_intro(SingletonIsPair)
+}
+
+#[derive(Clone, Copy)]
+struct SingletonIsPair;
+impl<Q> Generalise<Axiomize, Q> for SingletonIsPair
+where
+    Q: for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<SingletonIsPairView1<'a>>>
+        + ?Sized,
+{
+    fn prove<'a>(self) -> Cert<Axiomize, <Q as View<'a>>::Output> {
+        forall_intro::<Axiomize, SingletonIsPairView1<'a>, _>(SingletonIsPair1(PhantomData))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct SingletonIsPair1<'a>(PhantomData<&'a ()>);
+impl<'a, Q> Generalise<Axiomize, Q> for SingletonIsPair1<'a>
+where
+    Q: for<'s> View<
+            's,
+            Output = pred!({ Axiomize }, IsSingleton::<'s, 'a> >>= IsPair::<'s, 'a, 'a>),
+        > + ?Sized,
+{
+    fn prove<'s>(self) -> Cert<Axiomize, <Q as View<'s>>::Output> {
+        <Axiomize as FirstOrder>::forall_gen(SingletonIsPair2::<'a, 's, SingletonView<'s, 'a>>(
+            PhantomData,
+            PhantomData,
+        ))
+    }
+}
+
+struct SingletonIsPair2<'a, 's, E: ?Sized>(PhantomData<(&'a (), &'s ())>, PhantomData<E>);
+impl<E: ?Sized> Clone for SingletonIsPair2<'_, '_, E> {
+    fn clone(&self) -> Self {
+        SingletonIsPair2(PhantomData, PhantomData)
+    }
+}
+impl<'a, 's, E, Q> ForAllProof<Axiomize, <Axiomize as FirstOrder>::ForAll<E>, Q>
+    for SingletonIsPair2<'a, 's, E>
+where
+    E: for<'z> View<'z, Output = Iff<Axiomize, In<'z, 's>, Eq<'z, 'a>>> + ?Sized,
+    Q: for<'z> View<
+            'z,
+            Output = pred!({ Axiomize }, In::<'z, 's>.iff(Eq::<'z, 'a> || Eq::<'z, 'a>)),
+        > + ?Sized,
+{
+    fn prove<'z>(
+        self,
+    ) -> Cert<
+        Axiomize,
+        <Axiomize as Imply>::Imply<<Axiomize as FirstOrder>::ForAll<E>, <Q as View<'z>>::Output>,
+    > {
+        // (z∈s ↔ z=a), then rewrite the right side with z=a ↔ (z=a ∨ z=a).
+        syllogism()
+            .mp(<Axiomize as FirstOrder>::forall_elim::<'z, E>())
+            .mp(iff_extend(or_idem::<Eq<'z, 'a>, Axiomize>()))
+    }
+}
+
+/// `λa. ∀s. s = {a,a} → s = {a}`
+pub type PairIsSingletonView = dyn for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<PairIsSingletonView1<'a>>>
+    + 'static;
+/// `λs. s = {a,a} → s = {a}`
+pub type PairIsSingletonView1<'a> = dyn for<'s> View<'s, Output = pred!({ Axiomize }, IsPair::<'s, 'a, 'a> >>= IsSingleton::<'s, 'a>)>
+    + 'static;
+
+/// `∀a ∀s. s = {a,a} → s = {a}` — **proved**. The converse of
+/// [`singleton_is_pair`], so the two notions coincide at a repeated element.
+pub fn pair_is_singleton() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<PairIsSingletonView>>
+{
+    forall_intro(PairIsSingleton)
+}
+
+#[derive(Clone, Copy)]
+struct PairIsSingleton;
+impl<Q> Generalise<Axiomize, Q> for PairIsSingleton
+where
+    Q: for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<PairIsSingletonView1<'a>>>
+        + ?Sized,
+{
+    fn prove<'a>(self) -> Cert<Axiomize, <Q as View<'a>>::Output> {
+        forall_intro::<Axiomize, PairIsSingletonView1<'a>, _>(PairIsSingleton1(PhantomData))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct PairIsSingleton1<'a>(PhantomData<&'a ()>);
+impl<'a, Q> Generalise<Axiomize, Q> for PairIsSingleton1<'a>
+where
+    Q: for<'s> View<
+            's,
+            Output = pred!({ Axiomize }, IsPair::<'s, 'a, 'a> >>= IsSingleton::<'s, 'a>),
+        > + ?Sized,
+{
+    fn prove<'s>(self) -> Cert<Axiomize, <Q as View<'s>>::Output> {
+        <Axiomize as FirstOrder>::forall_gen(PairIsSingleton2::<'a, 's, PairView<'s, 'a, 'a>>(
+            PhantomData,
+            PhantomData,
+        ))
+    }
+}
+
+struct PairIsSingleton2<'a, 's, E: ?Sized>(PhantomData<(&'a (), &'s ())>, PhantomData<E>);
+impl<E: ?Sized> Clone for PairIsSingleton2<'_, '_, E> {
+    fn clone(&self) -> Self {
+        PairIsSingleton2(PhantomData, PhantomData)
+    }
+}
+impl<'a, 's, E, Q> ForAllProof<Axiomize, <Axiomize as FirstOrder>::ForAll<E>, Q>
+    for PairIsSingleton2<'a, 's, E>
+where
+    E: for<'z> View<
+            'z,
+            Output = pred!({ Axiomize }, In::<'z, 's>.iff(Eq::<'z, 'a> || Eq::<'z, 'a>)),
+        > + ?Sized,
+    Q: for<'z> View<'z, Output = Iff<Axiomize, In<'z, 's>, Eq<'z, 'a>>> + ?Sized,
+{
+    fn prove<'z>(
+        self,
+    ) -> Cert<
+        Axiomize,
+        <Axiomize as Imply>::Imply<<Axiomize as FirstOrder>::ForAll<E>, <Q as View<'z>>::Output>,
+    > {
+        // Same rewrite as `singleton_is_pair`, with the biconditional flipped.
+        syllogism()
+            .mp(<Axiomize as FirstOrder>::forall_elim::<'z, E>())
+            .mp(iff_extend(and_comm().mp(or_idem::<Eq<'z, 'a>, Axiomize>())))
+    }
+}
+
 /// Typecheck witnesses: `cargo check` is the proof checker.
 #[expect(dead_code, reason = "typecheck-only proof assertions")]
 const _: () = {
@@ -704,6 +1067,19 @@ const _: () = {
         let _ = pair_unique();
         let _ = pair_left();
         let _ = pair_right();
+        let _ = singleton_member();
+        let _ = singleton_unique();
+        let _ = singleton_is_pair();
+        let _ = pair_is_singleton();
+    }
+
+    /// [`IsSingleton`] is still the proposition its doc comment claims: naming
+    /// the body as [`SingletonView`] must not have changed the statement, so
+    /// the two spellings have to be the same type.
+    fn singleton_view_is_the_definition<'s, 'a>(
+        c: Cert<Axiomize, pred!({ Axiomize }, ForAll::<'z>((In::<'z, 's>).iff(Eq::<'z, 'a>)))>,
+    ) -> Cert<Axiomize, IsSingleton<'s, 'a>> {
+        c
     }
 
     /// The defined notions all resolve, including the Kuratowski pair and the
