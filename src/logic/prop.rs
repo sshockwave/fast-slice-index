@@ -9,15 +9,14 @@ pub trait View<'x> {
     type Output;
 }
 
-pub trait PropLogic<'a>: Imply<'a> {
+pub trait PropLogic: Imply {
     /// Axiom L1: P → (Q → P)
     /// If P is true, then Q implies P
-    fn l1<P: 'a, Q>() -> Cert<'a, Self, Self::Imply<P, Self::Imply<Q, P>>>;
+    fn l1<P, Q>() -> Cert<Self, Self::Imply<P, Self::Imply<Q, P>>>;
 
     /// Axiom L2: (P → (Q → R)) → ((P → Q) → (P → R))
     /// Distribution of implication
-    fn l2<P: 'a, Q: 'a, R: 'a>() -> Cert<
-        'a,
+    fn l2<P, Q, R>() -> Cert<
         Self,
         Self::Imply<
             Self::Imply<P, Self::Imply<Q, R>>,
@@ -29,13 +28,13 @@ pub trait PropLogic<'a>: Imply<'a> {
 pub use self::sealed_cert::Cert;
 mod sealed_cert {
     use super::Imply;
-    pub struct Cert<'l, Logic: Imply<'l>, P: 'l>(Logic::Cert<P>);
-    impl<'l, Logic: Imply<'l>, P: 'l> Clone for Cert<'l, Logic, P> {
+    pub struct Cert<Logic: Imply, P>(Logic::Cert<P>);
+    impl<Logic: Imply, P> Clone for Cert<Logic, P> {
         fn clone(&self) -> Self {
             Cert(self.0.clone())
         }
     }
-    impl<'l, Logic: Imply<'l>, P: 'l> Cert<'l, Logic, P> {
+    impl<Logic: Imply, P> Cert<Logic, P> {
         pub fn new(cert: Logic::Cert<P>) -> Self {
             Cert(cert)
         }
@@ -57,21 +56,18 @@ mod sealed_cert {
 /// We want to use lifetimes for proofs because lifetimes are easier to express HRTB than types.
 ///
 /// [#2999]: https://github.com/rust-lang/rfcs/issues/2999
-pub trait Imply<'a>: Sized {
+pub trait Imply: Sized {
     /// Implication: P implies Q
-    type Imply<P: 'a, Q: 'a>: 'a;
-    type Cert<P: 'a>: Clone;
+    type Imply<P, Q>;
+    type Cert<P>: Clone;
 
     /// Modus Ponens: Given (P → Q) and P, derive Q
     /// This is the only inference rule - all others are axioms
-    fn mp<P, Q: 'a>(
-        pq: Cert<'a, Self, Self::Imply<P, Q>>,
-        p: Cert<'a, Self, P>,
-    ) -> Cert<'a, Self, Q>;
+    fn mp<P, Q>(pq: Cert<Self, Self::Imply<P, Q>>, p: Cert<Self, P>) -> Cert<Self, Q>;
 }
 
-pub trait Negation<'l> {
-    type Neg<P: 'l>: 'l;
+pub trait Negation {
+    type Neg<P>;
 }
 
 /// Reductio ad absurdum: (P → ¬Q) → (Q → ¬P)
@@ -88,27 +84,25 @@ pub trait Negation<'l> {
 /// [`ExFalsoQuodlibet`]: neg::ExFalsoQuodlibet
 /// [`DoubleNegIntro`]: neg::DoubleNegIntro
 /// [`Contraposition`]: neg::Contraposition
-pub trait Reductio<'a>: PropLogic<'a> + Negation<'a> {
-    fn reductio<P: 'a, Q: 'a>()
-    -> Cert<'a, Self, Self::Imply<Self::Imply<P, Self::Neg<Q>>, Self::Imply<Q, Self::Neg<P>>>>;
+pub trait Reductio: PropLogic + Negation {
+    fn reductio<P, Q>()
+    -> Cert<Self, Self::Imply<Self::Imply<P, Self::Neg<Q>>, Self::Imply<Q, Self::Neg<P>>>>;
 }
 
-pub trait And<'l>: PropLogic<'l> {
-    type And<P: 'l, Q: 'l>;
-    fn and_left<P, Q>() -> Cert<'l, Self, Self::Imply<Self::And<P, Q>, P>>;
-    fn and_right<P, Q>() -> Cert<'l, Self, Self::Imply<Self::And<P, Q>, Q>>;
-    fn and_intro<P, Q>() -> Cert<'l, Self, Self::Imply<P, Self::Imply<Q, Self::And<P, Q>>>>;
+pub trait And: PropLogic {
+    type And<P, Q>;
+    fn and_left<P, Q>() -> Cert<Self, Self::Imply<Self::And<P, Q>, P>>;
+    fn and_right<P, Q>() -> Cert<Self, Self::Imply<Self::And<P, Q>, Q>>;
+    fn and_intro<P, Q>() -> Cert<Self, Self::Imply<P, Self::Imply<Q, Self::And<P, Q>>>>;
 }
 
-pub type Iff<'l, L, P, Q> =
-    <L as And<'l>>::And<<L as Imply<'l>>::Imply<P, Q>, <L as Imply<'l>>::Imply<Q, P>>;
+pub type Iff<L, P, Q> = <L as And>::And<<L as Imply>::Imply<P, Q>, <L as Imply>::Imply<Q, P>>;
 
-pub trait Or<'l>: PropLogic<'l> {
-    type Or<P: 'l, Q: 'l>;
-    fn or_left<P, Q>() -> Cert<'l, Self, Self::Imply<P, Self::Or<P, Q>>>;
-    fn or_right<P, Q>() -> Cert<'l, Self, Self::Imply<Q, Self::Or<P, Q>>>;
+pub trait Or: PropLogic {
+    type Or<P, Q>;
+    fn or_left<P, Q>() -> Cert<Self, Self::Imply<P, Self::Or<P, Q>>>;
+    fn or_right<P, Q>() -> Cert<Self, Self::Imply<Q, Self::Or<P, Q>>>;
     fn or_elim<P, Q, R>() -> Cert<
-        'l,
         Self,
         Self::Imply<
             Self::Imply<P, R>,
@@ -117,52 +111,52 @@ pub trait Or<'l>: PropLogic<'l> {
     >;
 }
 
-pub trait Intuitionistic<'l>: PropLogic<'l> + And<'l> + Or<'l> + Negation<'l> {
+pub trait Intuitionistic: PropLogic + And + Or + Negation {
     type False;
-    fn explosion<P>() -> Cert<'l, Self, Self::Imply<Self::False, P>>;
-    fn neg_def<P>() -> Cert<'l, Self, Iff<'l, Self, Self::Neg<P>, Self::Imply<P, Self::False>>>;
+    fn explosion<P>() -> Cert<Self, Self::Imply<Self::False, P>>;
+    fn neg_def<P>() -> Cert<Self, Iff<Self, Self::Neg<P>, Self::Imply<P, Self::False>>>;
 }
 
-pub trait ForAllProof<'l, Logic: Imply<'l>, P, Q: for<'x> View<'x> + ?Sized>: Clone + 'l {
-    fn prove<'x>(self) -> Cert<'l, Logic, Logic::Imply<P, <Q as View<'x>>::Output>>;
+pub trait ForAllProof<Logic: Imply, P, Q: for<'x> View<'x> + ?Sized>: Clone {
+    fn prove<'x>(self) -> Cert<Logic, Logic::Imply<P, <Q as View<'x>>::Output>>;
 }
-pub trait ExistsProof<'l, Logic: Imply<'l>, P: for<'x> View<'x> + ?Sized, Q>: Clone + 'l {
-    fn prove<'x>(self) -> Cert<'l, Logic, Logic::Imply<<P as View<'x>>::Output, Q>>;
+pub trait ExistsProof<Logic: Imply, P: for<'x> View<'x> + ?Sized, Q>: Clone {
+    fn prove<'x>(self) -> Cert<Logic, Logic::Imply<<P as View<'x>>::Output, Q>>;
 }
 
-pub trait FirstOrder<'l>: Imply<'l> + 'l {
-    type ForAll<P: for<'x> View<'x> + ?Sized + 'l>: 'l;
+pub trait FirstOrder: Imply {
+    type ForAll<P: for<'x> View<'x> + ?Sized>;
     type Exists<P: for<'x> View<'x> + ?Sized>;
-    fn forall_gen<P, Q: for<'x> View<'x> + ?Sized, S: ForAllProof<'l, Self, P, Q>>(
+    fn forall_gen<P, Q: for<'x> View<'x> + ?Sized, S: ForAllProof<Self, P, Q>>(
         proof: S,
-    ) -> Cert<'l, Self, Self::Imply<P, Self::ForAll<Q>>>;
-    fn exists_gen<P: for<'x> View<'x> + ?Sized + 'l, Q, S: ExistsProof<'l, Self, P, Q>>(
+    ) -> Cert<Self, Self::Imply<P, Self::ForAll<Q>>>;
+    fn exists_gen<P: for<'x> View<'x> + ?Sized, Q, S: ExistsProof<Self, P, Q>>(
         proof: S,
-    ) -> Cert<'l, Self, Self::Imply<Self::Exists<P>, Q>>;
-    fn forall_elim<'t: 'l, P: for<'x> View<'x> + ?Sized>()
-    -> Cert<'l, Self, Self::Imply<Self::ForAll<P>, <P as View<'t>>::Output>>;
-    fn exists_elim<'t: 'l, P: for<'x> View<'x> + ?Sized, Q>()
-    -> Cert<'l, Self, Self::Imply<<P as View<'t>>::Output, Self::Exists<P>>>;
+    ) -> Cert<Self, Self::Imply<Self::Exists<P>, Q>>;
+    fn forall_elim<'t, P: for<'x> View<'x> + ?Sized>()
+    -> Cert<Self, Self::Imply<Self::ForAll<P>, <P as View<'t>>::Output>>;
+    fn exists_elim<'t, P: for<'x> View<'x> + ?Sized, Q>()
+    -> Cert<Self, Self::Imply<<P as View<'t>>::Output, Self::Exists<P>>>;
 }
 
 pub trait ViewT {
     type Output<T>;
 }
 
-pub trait ForAllProofT<'l, Logic: Imply<'l>, P, Q: ViewT + ?Sized> {
+pub trait ForAllProofT<Logic: Imply, P, Q: ViewT + ?Sized> {
     fn prove<T>(self) -> Logic::Imply<P, Q::Output<T>>;
 }
-pub trait ExistsProofT<'l, Logic: Imply<'l>, P: ViewT + ?Sized, Q> {
+pub trait ExistsProofT<Logic: Imply, P: ViewT + ?Sized, Q> {
     fn prove<T>(self) -> Logic::Imply<P::Output<T>, Q>;
 }
 
-pub trait FirstOrderT<'l>: Imply<'l> + 'l {
+pub trait FirstOrderT: Imply {
     type ForAll<P: ViewT + ?Sized>;
     type Exists<P: ViewT + ?Sized>;
-    fn forall_gen<P, Q: ViewT + ?Sized, S: ForAllProofT<'l, Self, P, Q>>(
+    fn forall_gen<P, Q: ViewT + ?Sized, S: ForAllProofT<Self, P, Q>>(
         proof: S,
-    ) -> Cert<'l, Self, Self::Imply<P, Self::ForAll<Q>>>;
-    fn exists_gen<P: ViewT + ?Sized, Q, S: ExistsProofT<'l, Self, P, Q>>(
+    ) -> Cert<Self, Self::Imply<P, Self::ForAll<Q>>>;
+    fn exists_gen<P: ViewT + ?Sized, Q, S: ExistsProofT<Self, P, Q>>(
         proof: S,
-    ) -> Cert<'l, Self, Self::Imply<Self::Exists<P>, Q>>;
+    ) -> Cert<Self, Self::Imply<Self::Exists<P>, Q>>;
 }

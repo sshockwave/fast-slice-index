@@ -2,38 +2,37 @@ use crate::logic::prop::{And, Cert, FirstOrder, Imply, View};
 use crate::macros::thm;
 
 /// Equality trait - axiomatizes equality relation
-pub trait Equality<'l>: Imply<'l>
-where
-    Self: 'l,
-{
+pub trait Equality: Imply {
     /// Equality relation between two terms at lifetimes 'a and 'b
-    type Eq<'a: 'l, 'b: 'l>;
+    type Eq<'a, 'b>;
 
     /// Reflexivity: ∀x. x = x
-    fn eq_refl() -> Cert<'l, Self, &'l dyn for<'x> View<'x, Output = Self::Eq<'x, 'x>>>;
+    fn eq_refl() -> Cert<Self, &'static dyn for<'x> View<'x, Output = Self::Eq<'x, 'x>>>
+    where
+        Self: 'static;
 
     /// Symmetry: ∀x ∀y. x = y → y = x
     fn eq_symm() -> Cert<
-        'l,
         Self,
-        &'l dyn for<'x> View<
+        &'static dyn for<'x> View<
             'x,
-            Output = &'l dyn for<'y> View<
+            Output = &'static dyn for<'y> View<
                 'y,
                 Output = Self::Imply<Self::Eq<'x, 'y>, Self::Eq<'y, 'x>>,
             >,
         >,
-    >;
+    >
+    where
+        Self: 'static;
 
     /// Transitivity: ∀x ∀y ∀z. x = y → y = z → x = z
     fn eq_trans() -> Cert<
-        'l,
         Self,
-        &'l dyn for<'x> View<
+        &'static dyn for<'x> View<
             'x,
-            Output = &'l dyn for<'y> View<
+            Output = &'static dyn for<'y> View<
                 'y,
-                Output = &'l dyn for<'z> View<
+                Output = &'static dyn for<'z> View<
                     'z,
                     Output = Self::Imply<
                         Self::Eq<'x, 'y>,
@@ -42,16 +41,17 @@ where
                 >,
             >,
         >,
-    >;
+    >
+    where
+        Self: 'static;
 
     /// Substitution (Leibniz's law): ∀x ∀y. x = y → (P(x) → P(y))
     /// For any predicate P
     fn eq_subst<P>() -> Cert<
-        'l,
         Self,
-        &'l dyn for<'x> View<
+        &'static dyn for<'x> View<
             'x,
-            Output = &'l dyn for<'y> View<
+            Output = &'static dyn for<'y> View<
                 'y,
                 Output = Self::Imply<
                     Self::Eq<'x, 'y>,
@@ -61,7 +61,8 @@ where
         >,
     >
     where
-        P: for<'a> View<'a> + 'l;
+        P: for<'a> View<'a> + 'static,
+        Self: 'static;
 }
 
 /// Function trait: A binary relation F that is total and functional
@@ -71,25 +72,24 @@ where
 /// WARNING: We do NOT quantify over all possible F generically.
 /// Instead, each specific function (like Succ) is a concrete associated type.
 /// This avoids impredicativity issues.
-pub trait Function<'l, Eq>
+pub trait Function<Eq>
 where
-    Self: 'l,
-    Eq: Equality<'l> + FirstOrder<'l> + And<'l>,
+    Eq: Equality + FirstOrder + And,
 {
     /// The function's graph: F<'x, 'y> means "F maps x to y"
     /// This is an associated type, not a quantified predicate
-    type F<'x: 'l, 'y: 'l>;
+    type F<'x, 'y>;
 
     /// Domain predicate: what x values are in the domain
-    type Dom<'x: 'l>;
+    type Dom<'x>;
 
     /// Codomain predicate: what y values are in the codomain
-    type Codom<'y: 'l>;
+    type Codom<'y>;
 
     /// Total: ∀x. Dom(x) → ∃y. Codom(y) ∧ F(x, y)
     /// Every element in domain has an image
     fn total() -> thm!(
-        'l: { Eq },
+        { Eq },
         'x: { Self::Dom::<'x> },
         Exists::<'y>(Self::Codom::<'y> && Self::F::<'x, 'y>)
     );
@@ -97,56 +97,49 @@ where
     /// Functional (single-valued): ∀x ∀y ∀z. F(x,y) ∧ F(x,z) → y = z
     /// Each input maps to at most one output
     fn functional() -> Cert<
-        'l,
         Eq,
-        &'l dyn for<'x> View<
+        &'static dyn for<'x> View<
             'x,
-            Output = &'l dyn for<'y> View<
+            Output = &'static dyn for<'y> View<
                 'y,
-                Output = &'l dyn for<'z> View<
+                Output = &'static dyn for<'z> View<
                     'z,
                     Output = Eq::Imply<Self::F<'x, 'y>, Eq::Imply<Self::F<'x, 'z>, Eq::Eq<'y, 'z>>>,
                 >,
             >,
         >,
-    >;
+    >
+    where
+        Eq: 'static,
+        Self: 'static;
 
     /// Well-typed: ∀x ∀y. F(x,y) → Dom(x) ∧ Codom(y)
     fn well_typed() -> Cert<
-        'l,
         Eq,
-        &'l dyn for<'x> View<
+        &'static dyn for<'x> View<
             'x,
-            Output = &'l dyn for<'y> View<
+            Output = &'static dyn for<'y> View<
                 'y,
                 Output = Eq::Imply<Self::F<'x, 'y>, Eq::Imply<Self::Dom<'x>, Self::Codom<'y>>>,
             >,
         >,
-    >;
+    >
+    where
+        Eq: 'static,
+        Self: 'static;
 }
 
 /// Injection trait: A function that is injective
-pub trait Injection<'l, Eq>: Function<'l, Eq>
+pub trait Injection<Eq>: Function<Eq>
 where
-    Self: 'l,
-    Eq: Equality<'l> + FirstOrder<'l> + And<'l>,
+    Eq: Equality + FirstOrder + And,
 {
     /// Injective: ∀x ∀y ∀z. F(x,z) ∧ F(y,z) → x = y
     /// Different inputs map to different outputs
-    fn injective() -> Cert<
-        'l,
-        Eq,
-        &'l dyn for<'x> View<
-            'x,
-            Output = &'l dyn for<'y> View<
-                'y,
-                Output = &'l dyn for<'z> View<
-                    'z,
-                    Output = Eq::Imply<Self::F<'x, 'z>, Eq::Imply<Self::F<'y, 'z>, Eq::Eq<'x, 'y>>>,
-                >,
-            >,
-        >,
-    >;
+    fn injective() -> thm!(
+        { Eq },
+        ForAll::<'x, 'y, 'z>((Self::F::<'x, 'z> && Self::F::<'y, 'z>).imply(Eq::Eq::<'x, 'y>))
+    );
 }
 
 // SAFETY NOTE: Consistency Analysis

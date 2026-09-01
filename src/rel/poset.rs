@@ -7,31 +7,31 @@ pub trait BinRel {
     type Rel<'a, 'b>;
 }
 
-pub trait Reflexive<'l, Logic>: Set<'l> + BinRel + 'l
+pub trait Reflexive<Logic>: Set + BinRel
 where
-    Logic: Imply<'l> + FirstOrder<'l>,
+    Logic: Imply + FirstOrder,
 {
-    fn refl() -> thm!('l: { Logic }, 'a: { Self::El::<'a> }, Self::Rel::<'a, 'a>);
+    fn refl() -> thm!({ Logic }, 'a: { Self::El::<'a> }, Self::Rel::<'a, 'a>);
 }
 
-pub trait Antisymmetric<'l, Logic>: Set<'l> + BinRel + 'l
+pub trait Antisymmetric<Logic>: Set + BinRel
 where
-    Logic: Imply<'l> + FirstOrder<'l> + Equality<'l>,
+    Logic: Imply + FirstOrder + Equality,
 {
     fn antisym() -> thm!(
-        'l: { Logic },
+        { Logic },
         'a: { Self::El::<'a> },
         'b: { Self::El::<'b> },
         Self::Rel::<'a, 'b>.imply(Self::Rel::<'b, 'a>.imply(Logic::Eq::<'a, 'b>))
     );
 }
 
-pub trait Transitive<'l, Logic>: Set<'l> + BinRel + 'l
+pub trait Transitive<Logic>: Set + BinRel
 where
-    Logic: Imply<'l> + FirstOrder<'l>,
+    Logic: Imply + FirstOrder,
 {
     fn transitive() -> thm!(
-        'l: { Logic },
+        { Logic },
         'a: { Self::El::<'a> },
         'b: { Self::El::<'b> },
         'c: { Self::El::<'c> },
@@ -39,15 +39,14 @@ where
     );
 }
 
-pub trait Poset<'l, Logic>:
-    Reflexive<'l, Logic> + Antisymmetric<'l, Logic> + Transitive<'l, Logic>
+pub trait Poset<Logic>: Reflexive<Logic> + Antisymmetric<Logic> + Transitive<Logic>
 where
-    Logic: Imply<'l> + FirstOrder<'l> + Equality<'l>,
+    Logic: Imply + FirstOrder + Equality,
 {
 }
-impl<'l, Logic, T> Poset<'l, Logic> for T
+impl<Logic, T> Poset<Logic> for T
 where
-    Self: Reflexive<'l, Logic> + Antisymmetric<'l, Logic> + Transitive<'l, Logic>,
-    Logic: Imply<'l> + FirstOrder<'l> + Equality<'l>,
+    T: Reflexive<Logic> + Antisymmetric<Logic> + Transitive<Logic>,
+    Logic: Imply + FirstOrder + Equality,
 {
 }

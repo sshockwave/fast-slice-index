@@ -4,40 +4,38 @@ pub trait Spec<'x, 'w, 'z> {
     type Output;
 }
 
-pub type Empty<'l, 'x, P> =
-    dyn for<'y> View<'y, Output = <P as Negation<'l>>::Neg<<P as ZF<'l>>::In<'y, 'x>>> + 'l;
+pub type Empty<'x, P> = dyn for<'y> View<'y, Output = <P as Negation>::Neg<<P as ZF>::In<'y, 'x>>>;
 
-pub type Disjoint<'l, 'x, 'y, P> = dyn for<'z> View<
+pub type Disjoint<'x, 'y, P> = dyn for<'z> View<
         'z,
-        Output = <P as Imply<'l>>::Imply<
-            <P as ZF<'l>>::In<'z, 'x>,
-            <P as Negation<'l>>::Neg<<P as ZF<'l>>::In<'z, 'y>>,
+        Output = <P as Imply>::Imply<
+            <P as ZF>::In<'z, 'x>,
+            <P as Negation>::Neg<<P as ZF>::In<'z, 'y>>,
         >,
-    > + 'l;
+    >;
 
-pub type Subset<'l, 'x, 'y, P> = dyn for<'z> View<
-        'z,
-        Output = <P as Imply<'l>>::Imply<<P as ZF<'l>>::In<'z, 'x>, <P as ZF<'l>>::In<'z, 'y>>,
-    > + 'l;
+pub type Subset<'x, 'y, P> = dyn for<'z> View<'z, Output = <P as Imply>::Imply<<P as ZF>::In<'z, 'x>, <P as ZF>::In<'z, 'y>>>;
 
-pub trait ZF<'l>: Negation<'l> + And<'l> + 'l {
-    type In<'b: 'l, 'c: 'l>;
+pub trait ZF: Negation + And
+where
+    Self: 'static,
+{
+    type In<'b, 'c>;
 
     fn extensionality() -> Cert<
-        'l,
         Self,
-        &'l dyn for<'x> View<
+        &'static dyn for<'x> View<
             'x,
-            Output = &'l dyn for<'y> View<
+            Output = &'static dyn for<'y> View<
                 'y,
                 Output = Self::Imply<
-                    &'l dyn for<'z> View<
+                    &'static dyn for<'z> View<
                         'z,
-                        Output = Iff<'l, Self, Self::In<'z, 'x>, Self::In<'z, 'y>>,
+                        Output = Iff<Self, Self::In<'z, 'x>, Self::In<'z, 'y>>,
                     >,
-                    &'l dyn for<'w> View<
+                    &'static dyn for<'w> View<
                         'w,
-                        Output = Iff<'l, Self, Self::In<'w, 'x>, Self::In<'w, 'y>>,
+                        Output = Iff<Self, Self::In<'w, 'x>, Self::In<'w, 'y>>,
                     >,
                 >,
             >,
@@ -45,19 +43,18 @@ pub trait ZF<'l>: Negation<'l> + And<'l> + 'l {
     >;
 
     fn regularity() -> Cert<
-        'l,
         Self,
-        &'l dyn for<'x> View<
+        &'static dyn for<'x> View<
             'x,
             Output = Self::Imply<
                 dyn for<'y> View<
                         'y,
                         Output = Self::Neg<
-                            Self::Imply<Disjoint<'y, 'x, 'y, Self>, Self::Neg<Self::In<'y, 'x>>>,
+                            Self::Imply<Disjoint<'y, 'x, Self>, Self::Neg<Self::In<'y, 'x>>>,
                         >,
-                    > + 'l,
+                    > + 'static,
                 // We can't find a disjoint member, the set must be empty.
-                Empty<'l, 'x, Self>,
+                Empty<'x, Self>,
             >,
         >,
     >;
@@ -73,16 +70,15 @@ pub trait ZF<'l>: Negation<'l> + And<'l> + 'l {
                                 dyn for<'x> View<
                                         'x,
                                         Output = Iff<
-                                            'l,
                                             Self,
                                             Self::In<'x, 'z>,
                                             <S as Spec<'x, 'w, 'z>>::Output,
                                         >,
-                                    > + 'l,
+                                    > + 'static,
                             >,
-                        > + 'l,
+                        > + 'static,
                 >,
-            > + 'l,
+            > + 'static,
         >;
 
     fn pairing() -> dyn for<'x> View<
@@ -93,10 +89,10 @@ pub trait ZF<'l>: Negation<'l> + And<'l> + 'l {
                     dyn for<'z> View<
                             'z,
                             Output = Self::Imply<Self::In<'x, 'z>, Self::Neg<Self::In<'y, 'z>>>,
-                        > + 'l,
+                        > + 'static,
                 >,
-            > + 'l,
-        > + 'l;
+            > + 'static,
+        >;
 
     fn union() -> dyn for<'f> View<
             'f,
@@ -112,10 +108,10 @@ pub trait ZF<'l>: Negation<'l> + And<'l> + 'l {
                                             Self::And<Self::In<'x, 'y>, Self::In<'y, 'f>>,
                                             Self::In<'x, 'a>,
                                         >,
-                                    > + 'l,
-                                > + 'l,
+                                    > + 'static,
+                                > + 'static,
                         >,
-                    > + 'l,
+                    > + 'static,
             >,
         >;
 
@@ -130,13 +126,10 @@ pub trait ZF<'l>: Negation<'l> + And<'l> + 'l {
                         Output = Self::Neg<
                             dyn for<'z> View<
                                     'z,
-                                    Output = Self::Imply<
-                                        Subset<'l, 'z, 'x, Self>,
-                                        Self::In<'z, 'y>,
-                                    >,
-                                > + 'l,
+                                    Output = Self::Imply<Subset<'z, 'x, Self>, Self::In<'z, 'y>>,
+                                > + 'static,
                         >,
-                    > + 'l,
+                    > + 'static,
             >,
         >;
 }

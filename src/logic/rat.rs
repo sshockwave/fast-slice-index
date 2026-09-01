@@ -6,32 +6,32 @@ use crate::rel::Set;
 
 /// Type alias: "x is a rational"
 /// Equivalent to: x is in the additive group's carrier
-pub type IsRat<'l, 'x, Q> = <<Q as Rationals<'l>>::Add as Set<'l>>::El<'x>;
+pub type IsRat<'x, Q> = <<Q as Rationals>::Add as Set>::El<'x>;
 
 /// Type alias: "x is in the multiplicative carrier"
 /// Pinned to [`IsRat`] by [`Rationals::same_carrier`]
-pub type IsRatMul<'l, 'x, Q> = <<Q as Rationals<'l>>::Mul as Set<'l>>::El<'x>;
+pub type IsRatMul<'x, Q> = <<Q as Rationals>::Mul as Set>::El<'x>;
 
 /// Type alias: "x + y = z"
-pub type Sum<'l, 'x, 'y, 'z, Q> = <<Q as Rationals<'l>>::Add as BinOp<'l, Q>>::Op<'x, 'y, 'z>;
+pub type Sum<'x, 'y, 'z, Q> = <<Q as Rationals>::Add as BinOp<Q>>::Op<'x, 'y, 'z>;
 
 /// Type alias: "x · y = z"
-pub type Prod<'l, 'x, 'y, 'z, Q> = <<Q as Rationals<'l>>::Mul as BinOp<'l, Q>>::Op<'x, 'y, 'z>;
+pub type Prod<'x, 'y, 'z, Q> = <<Q as Rationals>::Mul as BinOp<Q>>::Op<'x, 'y, 'z>;
 
 /// Type alias: "x is additively neutral"
 /// Equivalent to: ∀y. IsRat(y) → x + y = y
 ///
 /// Just the additive group's [`IsUnitLike`]. Doesn't require x to be a
 /// rational; [`IsZero`] adds that conjunct.
-pub type IsZeroLike<'l, 'x, Q> = IsUnitLike<'l, 'x, <Q as Rationals<'l>>::Add, Q>;
+pub type IsZeroLike<'x, Q> = IsUnitLike<'x, <Q as Rationals>::Add, Q>;
 
 /// Type alias: "x is zero"
 /// Equivalent to: x is a rational AND x is additively neutral
-pub type IsZero<'l, 'x, Q> = <Q as And<'l>>::And<IsRat<'l, 'x, Q>, IsZeroLike<'l, 'x, Q>>;
+pub type IsZero<'x, Q> = <Q as And>::And<IsRat<'x, Q>, IsZeroLike<'x, Q>>;
 
 /// Type alias: "x is multiplicatively neutral"
 /// Equivalent to: ∀y. IsRatMul(y) → x · y = y
-pub type IsOneLike<'l, 'x, Q> = IsUnitLike<'l, 'x, <Q as Rationals<'l>>::Mul, Q>;
+pub type IsOneLike<'x, Q> = IsUnitLike<'x, <Q as Rationals>::Mul, Q>;
 
 /// Type alias: "x is one"
 ///
@@ -39,57 +39,57 @@ pub type IsOneLike<'l, 'x, Q> = IsUnitLike<'l, 'x, <Q as Rationals<'l>>::Mul, Q>
 /// The `Neg<IsZeroLike>` conjunct is the field's nontriviality condition
 /// (1 ≠ 0), which rules out the one-element degenerate "field"; it is
 /// discharged by [`Rationals::nontrivial`].
-pub type IsOne<'l, 'x, Q> = <Q as And<'l>>::And<
-    IsRat<'l, 'x, Q>,
-    <Q as And<'l>>::And<IsOneLike<'l, 'x, Q>, <Q as Negation<'l>>::Neg<IsZeroLike<'l, 'x, Q>>>,
+pub type IsOne<'x, Q> = <Q as And>::And<
+    IsRat<'x, Q>,
+    <Q as And>::And<IsOneLike<'x, Q>, <Q as Negation>::Neg<IsZeroLike<'x, Q>>>,
 >;
 
 macro_rules! expr {
     (Cert::<$l:lifetime>, $($P:tt)*) => {
-        Cert<$l, Self, expr!($l, $($P)*)>
+        Cert<Self, expr!($($P)*)>
     };
-    ($l:lifetime, ForAll::<$x:lifetime, $($y:lifetime),+$(,)?>( $($P:tt)+ )) => {
-        expr!($l, ForAll::<$x>(ForAll::<$($y),+>( $($P)+ )))
+    (ForAll::<$x:lifetime, $($y:lifetime),+$(,)?>( $($P:tt)+ )) => {
+        expr!(ForAll::<$x>(ForAll::<$($y),+>( $($P)+ )))
     };
-    ($l:lifetime, ForAll::<$x:lifetime$(,)?>( $($P:tt)+ )) => {
-        <Self as $crate::logic::prop::FirstOrder<$l>>::ForAll<
+    (ForAll::<$x:lifetime$(,)?>( $($P:tt)+ )) => {
+        <Self as $crate::logic::prop::FirstOrder>::ForAll<
             dyn for<$x> $crate::logic::prop::View<
                 $x,
-                Output = expr!($l, $($P)+)
-            > + $l,
+                Output = expr!($($P)+)
+            > +'static
         >
     };
-    ($l:lifetime, !($($P:tt)*)) => {
-        <Self as Negation<$l>>::Neg<expr!($l, $($P)*)>
+    (!($($P:tt)*)) => {
+        <Self as Negation>::Neg<expr!($($P)*)>
     };
-    ($l:lifetime, ($($P:tt)*).iff($($Q:tt)*)) => {
-        $crate::logic::prop::Iff<$l, Self, expr!($l, $($P)*), expr!($l, $($Q)*)>
+    (($($P:tt)*).iff($($Q:tt)*)) => {
+        $crate::logic::prop::Iff<Self, expr!($($P)*), expr!($($Q)*)>
     };
-    ($l:lifetime, ($($P:tt)*).imply($($Q:tt)*)) => {
-        <Self as $crate::logic::prop::Imply<$l>>::Imply<
-            expr!($l, ($($P)*)),
-            expr!($l, ($($Q)*)),
+    (($($P:tt)*).imply($($Q:tt)*)) => {
+        <Self as $crate::logic::prop::Imply>::Imply<
+            expr!(($($P)*)),
+            expr!(($($Q)*)),
         >
     };
-    ($l:lifetime, ($($P:tt)*) && ($($Q:tt)*)) => {
-        <Self as $crate::logic::prop::And<$l>>::And<
-            expr!($l, $($P)*),
-            expr!($l, $($Q)*),
+    (($($P:tt)*) && ($($Q:tt)*)) => {
+        <Self as $crate::logic::prop::And>::And<
+            expr!($($P)*),
+            expr!($($Q)*),
         >
     };
-    ($l:lifetime, ($($P:tt)*) || ($($Q:tt)*)) => {
-        <Self as $crate::logic::prop::Or<$l>>::Or<
-            expr!($l, ($($P)*)),
-            expr!($l, ($($Q)*)),
+    (($($P:tt)*) || ($($Q:tt)*)) => {
+        <Self as $crate::logic::prop::Or>::Or<
+            expr!(($($P)*)),
+            expr!(($($Q)*)),
         >
     };
-    ($l:lifetime, e!($x:lifetime < $y:lifetime)) => {
+    (e!($x:lifetime < $y:lifetime)) => {
         Self::Lt::<$x, $y>
     };
-    ($l:lifetime, ($($P:tt)*)) => {
-        expr!($l, $($P)*)
+    (($($P:tt)*)) => {
+        expr!($($P)*)
     };
-    ($l:lifetime, $P:ty) => {
+    ($P:ty) => {
         $P
     };
 }
@@ -119,57 +119,57 @@ macro_rules! expr {
 /// encoding is strictly weaker than the existential it stands for, and the
 /// witnesses in [`AbelianGroup::inverse`] and [`Rationals::mul_inverse`] could
 /// not be extracted.
-pub trait Rationals<'l>:
-    Equality<'l> + Negation<'l> + And<'l> + Or<'l> + FirstOrder<'l> + 'l
+pub trait Rationals: Equality + Negation + And + Or + FirstOrder
+where
+    Self: 'static,
 {
     /// Addition: an abelian group on all of ℚ
     ///
     /// [`AbelianGroup::inverse`] is the additive inverse axiom, and
     /// [`CommutativeMonoid::identity_exists`] asserts 0.
-    type Add: AbelianGroup<'l, Self>;
+    type Add: AbelianGroup<Self>;
 
     /// Multiplication: only a commutative *monoid*, not a group
     ///
     /// `×` is total on ℚ, so 0 is in its carrier, so it cannot have inverses
     /// everywhere. [`Rationals::mul_inverse`] supplies the guarded version.
-    type Mul: CommutativeMonoid<'l, Self>;
+    type Mul: CommutativeMonoid<Self>;
 
     /// Strict order: `Lt<'x, 'y>` means "x < y"
-    type Lt<'x: 'l, 'y: 'l>;
+    type Lt<'x, 'y>;
 
     /// Distributivity: x · (y + z) = x · y + x · z
     ///
     /// Relationally: `s = y+z`, `a = x·y`, `b = x·z`, `t = a+b`, and then
     /// `x·s = t`. This is the axiom linking `+` to `×`.
     fn distributive() -> thm!(
-        'l: {},
+        {},
         ForAll::<'x, 'y, 'z>(
-            Call::<'s> = <Self::Add as BinOp<'l, Self>>::Op::<'y, 'z>,
-            Call::<'a> = <Self::Mul as BinOp<'l, Self>>::Op::<'x, 'y>,
-            Call::<'b> = <Self::Mul as BinOp<'l, Self>>::Op::<'x, 'z>,
-            Call::<'t> = <Self::Add as BinOp<'l, Self>>::Op::<'a, 'b>,
-            Prod::<'l, 'x, 's, 't, Self>
+            Call::<'s> = <Self::Add as BinOp<Self>>::Op::<'y, 'z>,
+            Call::<'a> = <Self::Mul as BinOp<Self>>::Op::<'x, 'y>,
+            Call::<'b> = <Self::Mul as BinOp<Self>>::Op::<'x, 'z>,
+            Call::<'t> = <Self::Add as BinOp<Self>>::Op::<'a, 'b>,
+            Prod::<'x, 's, 't, Self>
         )
     );
 
     /// The order only relates rationals: ∀x ∀y. x < y → IsRat(x) ∧ IsRat(y)
     fn lt_typed() -> expr!(
         Cert::<'l>,
-        ForAll::<'x, 'y>((e!('x < 'y)).imply((IsRat::<'l, 'x, Self>) && (IsRat::<'l, 'y, Self>)))
+        ForAll::<'x, 'y>((e!('x < 'y)).imply((IsRat::<'x, Self>) && (IsRat::<'y, Self>)))
     );
 
     /// Irreflexive: ∀x. ¬(x < x)
-    fn lt_irrefl() -> Cert<'l, Self, &'l dyn for<'x> View<'x, Output = Self::Neg<Self::Lt<'x, 'x>>>>;
+    fn lt_irrefl() -> Cert<Self, &'static dyn for<'x> View<'x, Output = Self::Neg<Self::Lt<'x, 'x>>>>;
 
     /// Transitive: ∀x ∀y ∀z. x < y → y < z → x < z
     fn lt_trans() -> Cert<
-        'l,
         Self,
-        &'l dyn for<'x> View<
+        &'static dyn for<'x> View<
             'x,
-            Output = &'l dyn for<'y> View<
+            Output = &'static dyn for<'y> View<
                 'y,
-                Output = &'l dyn for<'z> View<
+                Output = &'static dyn for<'z> View<
                     'z,
                     Output = Self::Imply<
                         Self::Lt<'x, 'y>,
@@ -184,16 +184,15 @@ pub trait Rationals<'l>:
     ///
     /// Together with [`Rationals::lt_irrefl`] this makes the order total.
     fn trichotomy() -> Cert<
-        'l,
         Self,
-        &'l dyn for<'x> View<
+        &'static dyn for<'x> View<
             'x,
-            Output = &'l dyn for<'y> View<
+            Output = &'static dyn for<'y> View<
                 'y,
                 Output = Self::Imply<
-                    IsRat<'l, 'x, Self>,
+                    IsRat<'x, Self>,
                     Self::Imply<
-                        IsRat<'l, 'y, Self>,
+                        IsRat<'y, Self>,
                         Self::Or<Self::Lt<'x, 'y>, Self::Or<Self::Eq<'x, 'y>, Self::Lt<'y, 'x>>>,
                     >,
                 >,
@@ -205,23 +204,22 @@ pub trait Rationals<'l>:
     ///
     /// Relationally: `u = x+z`, `v = y+z`, then `u < v`.
     fn lt_add() -> Cert<
-        'l,
         Self,
-        &'l dyn for<'x> View<
+        &'static dyn for<'x> View<
             'x,
-            Output = &'l dyn for<'y> View<
+            Output = &'static dyn for<'y> View<
                 'y,
-                Output = &'l dyn for<'z> View<
+                Output = &'static dyn for<'z> View<
                     'z,
-                    Output = &'l dyn for<'u> View<
+                    Output = &'static dyn for<'u> View<
                         'u,
-                        Output = &'l dyn for<'v> View<
+                        Output = &'static dyn for<'v> View<
                             'v,
                             Output = Self::Imply<
                                 Self::Lt<'x, 'y>,
                                 Self::Imply<
-                                    Sum<'l, 'x, 'z, 'u, Self>,
-                                    Self::Imply<Sum<'l, 'y, 'z, 'v, Self>, Self::Lt<'u, 'v>>,
+                                    Sum<'x, 'z, 'u, Self>,
+                                    Self::Imply<Sum<'y, 'z, 'v, Self>, Self::Lt<'u, 'v>>,
                                 >,
                             >,
                         >,
@@ -236,30 +234,29 @@ pub trait Rationals<'l>:
     /// "Positive" is stated as `IsZeroLike(n) ∧ n < w`: the order relates
     /// elements, so zero has to be quantified in rather than named.
     fn lt_mul() -> Cert<
-        'l,
         Self,
-        &'l dyn for<'n> View<
+        &'static dyn for<'n> View<
             'n,
-            Output = &'l dyn for<'w> View<
+            Output = &'static dyn for<'w> View<
                 'w,
-                Output = &'l dyn for<'x> View<
+                Output = &'static dyn for<'x> View<
                     'x,
-                    Output = &'l dyn for<'y> View<
+                    Output = &'static dyn for<'y> View<
                         'y,
-                        Output = &'l dyn for<'u> View<
+                        Output = &'static dyn for<'u> View<
                             'u,
-                            Output = &'l dyn for<'v> View<
+                            Output = &'static dyn for<'v> View<
                                 'v,
                                 Output = Self::Imply<
-                                    IsZeroLike<'l, 'n, Self>,
+                                    IsZeroLike<'n, Self>,
                                     Self::Imply<
                                         Self::Lt<'n, 'w>,
                                         Self::Imply<
                                             Self::Lt<'x, 'y>,
                                             Self::Imply<
-                                                Prod<'l, 'x, 'w, 'u, Self>,
+                                                Prod<'x, 'w, 'u, Self>,
                                                 Self::Imply<
-                                                    Prod<'l, 'y, 'w, 'v, Self>,
+                                                    Prod<'y, 'w, 'v, Self>,
                                                     Self::Lt<'u, 'v>,
                                                 >,
                                             >,
@@ -288,28 +285,27 @@ pub trait Rationals<'l>:
     /// `P` is a type parameter, not a quantified predicate, so this is a
     /// schema instantiated per `P`. Same predicativity argument as
     /// [`crate::logic::nat::NaturalNumbers::induction`].
-    fn prime_field<P>() -> Cert<
-        'l,
+    fn prime_field<P: 'static>() -> Cert<
         Self,
         Self::Imply<
             // P(1)
-            &'l dyn for<'o> View<
+            &'static dyn for<'o> View<
                 'o,
-                Output = Self::Imply<IsOne<'l, 'o, Self>, <P as View<'o>>::Output>,
+                Output = Self::Imply<IsOne<'o, Self>, <P as View<'o>>::Output>,
             >,
             Self::Imply<
                 // closed under +: ∀x ∀y ∀z. P(x) → P(y) → x + y = z → P(z)
-                &'l dyn for<'x> View<
+                &'static dyn for<'x> View<
                     'x,
-                    Output = &'l dyn for<'y> View<
+                    Output = &'static dyn for<'y> View<
                         'y,
-                        Output = &'l dyn for<'z> View<
+                        Output = &'static dyn for<'z> View<
                             'z,
                             Output = Self::Imply<
                                 <P as View<'x>>::Output,
                                 Self::Imply<
                                     <P as View<'y>>::Output,
-                                    Self::Imply<Sum<'l, 'x, 'y, 'z, Self>, <P as View<'z>>::Output>,
+                                    Self::Imply<Sum<'x, 'y, 'z, Self>, <P as View<'z>>::Output>,
                                 >,
                             >,
                         >,
@@ -318,20 +314,17 @@ pub trait Rationals<'l>:
                 Self::Imply<
                     // closed under additive inverse:
                     // ∀x ∀y ∀z. P(x) → x + y = z → IsZeroLike(z) → P(y)
-                    &'l dyn for<'x> View<
+                    &'static dyn for<'x> View<
                         'x,
-                        Output = &'l dyn for<'y> View<
+                        Output = &'static dyn for<'y> View<
                             'y,
-                            Output = &'l dyn for<'z> View<
+                            Output = &'static dyn for<'z> View<
                                 'z,
                                 Output = Self::Imply<
                                     <P as View<'x>>::Output,
                                     Self::Imply<
-                                        Sum<'l, 'x, 'y, 'z, Self>,
-                                        Self::Imply<
-                                            IsZeroLike<'l, 'z, Self>,
-                                            <P as View<'y>>::Output,
-                                        >,
+                                        Sum<'x, 'y, 'z, Self>,
+                                        Self::Imply<IsZeroLike<'z, Self>, <P as View<'y>>::Output>,
                                     >,
                                 >,
                             >,
@@ -340,20 +333,20 @@ pub trait Rationals<'l>:
                     Self::Imply<
                         // closed under reciprocal:
                         // ∀x ∀y ∀z. P(x) → ¬IsZeroLike(x) → x · y = z → IsOneLike(z) → P(y)
-                        &'l dyn for<'x> View<
+                        &'static dyn for<'x> View<
                             'x,
-                            Output = &'l dyn for<'y> View<
+                            Output = &'static dyn for<'y> View<
                                 'y,
-                                Output = &'l dyn for<'z> View<
+                                Output = &'static dyn for<'z> View<
                                     'z,
                                     Output = Self::Imply<
                                         <P as View<'x>>::Output,
                                         Self::Imply<
-                                            Self::Neg<IsZeroLike<'l, 'x, Self>>,
+                                            Self::Neg<IsZeroLike<'x, Self>>,
                                             Self::Imply<
-                                                Prod<'l, 'x, 'y, 'z, Self>,
+                                                Prod<'x, 'y, 'z, Self>,
                                                 Self::Imply<
-                                                    IsOneLike<'l, 'z, Self>,
+                                                    IsOneLike<'z, Self>,
                                                     <P as View<'y>>::Output,
                                                 >,
                                             >,
@@ -363,9 +356,9 @@ pub trait Rationals<'l>:
                             >,
                         >,
                         // ∀x. IsRat(x) → P(x)
-                        &'l dyn for<'x> View<
+                        &'static dyn for<'x> View<
                             'x,
-                            Output = Self::Imply<IsRat<'l, 'x, Self>, <P as View<'x>>::Output>,
+                            Output = Self::Imply<IsRat<'x, Self>, <P as View<'x>>::Output>,
                         >,
                     >,
                 >,
@@ -373,7 +366,7 @@ pub trait Rationals<'l>:
         >,
     >
     where
-        P: for<'n> View<'n> + 'l;
+        P: for<'n> View<'n>;
 }
 
 #[cfg(test)]
@@ -383,7 +376,7 @@ mod tests {
     /// The field-specific axioms are reachable from outside this module, and
     /// the `IsZero` / `IsOne` / `Sum` / `Prod` aliases all resolve against a
     /// generic `Q`.
-    fn _axioms_are_callable<'l, Q: Rationals<'l>>() {
+    fn _axioms_are_callable<Q: Rationals>() {
         // let _ = Q::same_carrier();
         // let _ = Q::nontrivial();
         // let _ = Q::mul_inverse();
@@ -399,40 +392,40 @@ mod tests {
     /// The shared structure really does come from the group traits: totality,
     /// single-valuedness, closure, commutativity, associativity and the
     /// neutral element are stated once each and reused by both operations.
-    fn _group_axioms_cover_both<'l, Q: Rationals<'l>>() {
+    fn _group_axioms_cover_both<Q: Rationals>() {
         use crate::algebra::group::*;
-        let _ = <Q::Add as Total<'l, Q>>::total();
-        let _ = <Q::Add as BinOp<'l, Q>>::single_valued();
-        let _ = <Q::Add as Closed<'l, Q>>::closed();
-        let _ = <Q::Add as Commutative<'l, Q>>::comm();
-        let _ = <Q::Add as Associative<'l, Q>>::assoc();
-        let _ = <Q::Add as IdentityExists<'l, Q>>::identity_exists();
+        let _ = <Q::Add as Total<Q>>::total();
+        let _ = <Q::Add as BinOp<Q>>::single_valued();
+        let _ = <Q::Add as Closed<Q>>::closed();
+        let _ = <Q::Add as Commutative<Q>>::comm();
+        let _ = <Q::Add as Associative<Q>>::assoc();
+        let _ = <Q::Add as IdentityExists<Q>>::identity_exists();
         // Only addition is a group: this is the additive inverse axiom.
-        let _ = <Q::Add as InverseExists<'l, Q>>::inverse();
+        let _ = <Q::Add as InverseExists<Q>>::inverse();
 
-        let _ = <Q::Mul as Total<'l, Q>>::total();
-        let _ = <Q::Mul as BinOp<'l, Q>>::single_valued();
-        let _ = <Q::Mul as Closed<'l, Q>>::closed();
-        let _ = <Q::Mul as Commutative<'l, Q>>::comm();
-        let _ = <Q::Mul as Associative<'l, Q>>::assoc();
-        let _ = <Q::Mul as IdentityExists<'l, Q>>::identity_exists();
+        let _ = <Q::Mul as Total<Q>>::total();
+        let _ = <Q::Mul as BinOp<Q>>::single_valued();
+        let _ = <Q::Mul as Closed<Q>>::closed();
+        let _ = <Q::Mul as Commutative<Q>>::comm();
+        let _ = <Q::Mul as Associative<Q>>::assoc();
+        let _ = <Q::Mul as IdentityExists<Q>>::identity_exists();
     }
 
     /// A predicate usable with the [`Rationals::prime_field`] schema: the
     /// witness that `P` may mention the field's own vocabulary.
     #[expect(dead_code, reason = "type-level marker; only its View impl is used")]
-    struct IsRatPred<'l, Q>(::core::marker::PhantomData<(&'l (), Q)>);
+    struct IsRatPred<Q>(::core::marker::PhantomData<Q>);
 
-    impl<'l, 'x: 'l, Q: Rationals<'l>> View<'x> for IsRatPred<'l, Q> {
-        type Output = IsRat<'l, 'x, Q>;
+    impl<'x, Q: Rationals> View<'x> for IsRatPred<Q> {
+        type Output = IsRat<'x, Q>;
     }
 
-    fn _prime_field_instantiates<'l, Q: Rationals<'l>>() {
-        // let _ = Q::prime_field::<IsRatPred<'l, Q>>();
+    fn _prime_field_instantiates<Q: Rationals>() {
+        // let _ = Q::prime_field::<IsRatPred<Q>>();
     }
 
     /// Zero uniqueness needs no axiom: neutrality pins it down, unlike
     /// `nat`'s "not a successor" characterization.
-    type _ZeroAndOne<'l, 'x, Q> = (IsZero<'l, 'x, Q>, IsOne<'l, 'x, Q>);
-    type _Ops<'l, 'x, 'y, 'z, Q> = (Sum<'l, 'x, 'y, 'z, Q>, Prod<'l, 'x, 'y, 'z, Q>);
+    type _ZeroAndOne<'x, Q> = (IsZero<'x, Q>, IsOne<'x, Q>);
+    type _Ops<'x, 'y, 'z, Q> = (Sum<'x, 'y, 'z, Q>, Prod<'x, 'y, 'z, Q>);
 }

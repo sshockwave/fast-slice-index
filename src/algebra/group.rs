@@ -59,23 +59,23 @@ macro_rules! expr {
         Logic::Eq::<$x, $y>
     };
     ($x:lifetime * $y:lifetime == $z:lifetime) => {
-        <Self as BinOp<'l, Logic>>::Op::<$x, $y, $z>
+        <Self as BinOp<Logic>>::Op::<$x, $y, $z>
     };
     ($x:lifetime == 1) => {
-        IsUnitLike::<'l, $x, Self, Logic>
+        IsUnitLike::<$x, Self, Logic>
     };
 }
 
-pub trait BinOp<'l, Logic>: 'l
+pub trait BinOp<Logic>
 where
-    Logic: FirstOrder<'l> + Equality<'l>,
+    Logic: FirstOrder + Equality,
 {
     /// The operation's graph: `Op<'x, 'y, 'z>` means "x ∘ y = z"
-    type Op<'x: 'l, 'y: 'l, 'z: 'l>;
+    type Op<'x, 'y, 'z>;
 
     /// Functional (single-valued): ∀x ∀y ∀z ∀w. x ∘ y = z → x ∘ y = w → z = w
     fn single_valued() -> thm!(
-        'l: { Logic },
+        { Logic },
         ForAll::<'x, 'y>(
             Call::<'z> = Self::Op::<'x, 'y>,
             Call::<'w> = Self::Op::<'x, 'y>,
@@ -84,52 +84,52 @@ where
     );
 }
 
-pub trait Total<'l, Logic>: BinOp<'l, Logic> + Set<'l>
+pub trait Total<Logic>: BinOp<Logic> + Set
 where
-    Logic: FirstOrder<'l> + Equality<'l> + And<'l>,
+    Logic: FirstOrder + Equality + And,
 {
     /// Total: ∀x ∀y. El(x) → El(y) → ∃z. El(z) ∧ x ∘ y = z
     fn total() -> thm!(
-        'l: { Logic },
+        { Logic },
         Call::<'x> = Self::El,
         Call::<'y> = Self::El,
         Exists::<'z>(Self::El::<'z> && expr!('x * 'y == 'z))
     );
 }
 
-pub trait Closed<'l, Logic>: BinOp<'l, Logic> + Set<'l>
+pub trait Closed<Logic>: BinOp<Logic> + Set
 where
-    Logic: FirstOrder<'l> + Equality<'l> + And<'l>,
+    Logic: FirstOrder + Equality + And,
 {
     /// Closed: ∀x ∀y ∀z. x ∘ y = z → El(x) ∧ (El(y) ∧ El(z))
     fn closed() -> thm!(
-        'l: { Logic },
+        { Logic },
         ForAll::<'x, 'y, 'z>(
             expr!('x * 'y == 'z).imply(Self::El::<'x> && Self::El::<'y> && Self::El::<'z>)
         )
     );
 }
 
-pub trait Commutative<'l, Logic>: BinOp<'l, Logic>
+pub trait Commutative<Logic>: BinOp<Logic>
 where
-    Logic: FirstOrder<'l> + Equality<'l> + And<'l>,
+    Logic: FirstOrder + Equality + And,
 {
     /// Commutative: ∀x ∀y ∀z. x ∘ y = z → y ∘ x = z
     fn comm() -> thm!(
-        'l: { Logic },
+        { Logic },
         ForAll::<'x, 'y, 'z>(expr!('x * 'y == 'z).imply(expr!('y * 'x == 'z)))
     );
 }
 
-pub trait Associative<'l, Logic>: BinOp<'l, Logic>
+pub trait Associative<Logic>: BinOp<Logic>
 where
-    Logic: FirstOrder<'l> + Equality<'l> + And<'l>,
+    Logic: FirstOrder + Equality + And,
 {
     /// Associative: (x ∘ y) ∘ z = x ∘ (y ∘ z)
     ///
     /// Relationally: `u = x∘y`, `v = y∘z`, `w = (u=x∘y)∘z`, and then `x∘v = w`.
     fn assoc() -> thm!(
-        'l: { Logic },
+        { Logic },
         ForAll::<'x, 'y, 'z>(
             Call::<'xy> = Self::Op::<'x, 'y>,
             Call::<'yz> = Self::Op::<'y, 'z>,
@@ -144,58 +144,54 @@ where
 ///
 /// Note: doesn't require e to be in the carrier.
 /// [`IdentityExists::identity_exists`] adds that conjunct.
-pub type IsUnitLike<'l, 'e, G, Logic> = pred!(
-    'l: { Logic },
-    Call::<'y> = <G as Set<'l>>::El,
-    <G as BinOp<'l, Logic>>::Op::<'e, 'y, 'y>
+pub type IsUnitLike<'e, G, Logic> = pred!(
+    { Logic },
+    Call::<'y> = <G as Set>::El,
+    <G as BinOp<Logic>>::Op::<'e, 'y, 'y>
 );
 
-pub trait IdentityExists<'l, Logic>: BinOp<'l, Logic> + Set<'l>
+pub trait IdentityExists<Logic>: BinOp<Logic> + Set
 where
-    Logic: FirstOrder<'l> + Equality<'l> + And<'l>,
+    Logic: FirstOrder + Equality + And,
 {
     /// Identity exists: ∃e. El(e) ∧ IsUnitLike(e)
-    fn identity_exists() -> thm!(
-        'l: { Logic },
-        Exists::<'e>(Self::El::<'e> && expr!('e == 1))
-    );
+    fn identity_exists() -> thm!({ Logic }, Exists::<'e>(Self::El::<'e> && expr!('e == 1)));
 }
 
-pub trait InverseExists<'l, Logic>: BinOp<'l, Logic> + IdentityExists<'l, Logic>
+pub trait InverseExists<Logic>: BinOp<Logic> + IdentityExists<Logic>
 where
-    Logic: FirstOrder<'l> + Equality<'l> + And<'l>,
+    Logic: FirstOrder + Equality + And,
 {
     /// Inverses: ∀x. El(x) → ∃y. El(y) ∧ (x ∘ y is neutral)
     fn inverse() -> thm!(
-        'l: { Logic },
+        { Logic },
         Call::<'x> = Self::El,
         Exists::<'y>(Self::El::<'y> && (Call::<'z> = Self::Op::<'x, 'y>, expr!('z == 1)))
     );
 }
 
-pub trait Monoid<'l, Eq>:
-    Total<'l, Eq> + Closed<'l, Eq> + Associative<'l, Eq> + IdentityExists<'l, Eq> + 'l
+pub trait Monoid<Eq>: Total<Eq> + Closed<Eq> + Associative<Eq> + IdentityExists<Eq>
 where
-    Eq: FirstOrder<'l> + Equality<'l> + And<'l>,
+    Eq: FirstOrder + Equality + And,
 {
 }
-impl<'l, Eq, T: 'l> Monoid<'l, Eq> for T
+impl<Eq, T> Monoid<Eq> for T
 where
-    T: Total<'l, Eq> + Closed<'l, Eq> + Associative<'l, Eq> + IdentityExists<'l, Eq> + 'l,
-    Eq: FirstOrder<'l> + Equality<'l> + And<'l>,
+    T: Total<Eq> + Closed<Eq> + Associative<Eq> + IdentityExists<Eq>,
+    Eq: FirstOrder + Equality + And,
 {
 }
 
-pub trait CommutativeMonoid<'l, Eq>
+pub trait CommutativeMonoid<Eq>
 where
-    Self: Monoid<'l, Eq> + Commutative<'l, Eq> + 'l,
-    Eq: Equality<'l> + And<'l> + FirstOrder<'l>,
+    Self: Monoid<Eq> + Commutative<Eq>,
+    Eq: Equality + And + FirstOrder,
 {
 }
-impl<'l, Eq, T: 'l> CommutativeMonoid<'l, Eq> for T
+impl<Eq, T> CommutativeMonoid<Eq> for T
 where
-    Self: Monoid<'l, Eq> + Commutative<'l, Eq> + 'l,
-    Eq: Equality<'l> + And<'l> + FirstOrder<'l>,
+    T: Monoid<Eq> + Commutative<Eq>,
+    Eq: Equality + And + FirstOrder,
 {
 }
 
@@ -204,15 +200,14 @@ where
 ///
 /// This is the only axiom separating the two, and it is exactly the one a
 /// field's multiplication fails at 0 — see the module docs.
-pub trait AbelianGroup<'l, Logic>:
-    CommutativeMonoid<'l, Logic> + InverseExists<'l, Logic> + 'l
+pub trait AbelianGroup<Logic>: CommutativeMonoid<Logic> + InverseExists<Logic>
 where
-    Logic: Equality<'l> + And<'l> + FirstOrder<'l>,
+    Logic: Equality + And + FirstOrder,
 {
 }
-impl<'l, Logic, T: 'l> AbelianGroup<'l, Logic> for T
+impl<Logic, T> AbelianGroup<Logic> for T
 where
-    T: CommutativeMonoid<'l, Logic> + InverseExists<'l, Logic> + 'l,
-    Logic: Equality<'l> + And<'l> + FirstOrder<'l>,
+    T: CommutativeMonoid<Logic> + InverseExists<Logic>,
+    Logic: Equality + And + FirstOrder,
 {
 }

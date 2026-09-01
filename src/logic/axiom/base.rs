@@ -25,18 +25,15 @@ mod sealed_cert {
     }
     impl<T> Copy for PhantomCert<T> {}
 
-    pub unsafe fn cert<'l, T>() -> Cert<'l, Axiomize, T> {
+    pub unsafe fn cert<T>() -> Cert<Axiomize, T> {
         Cert::new(PhantomCert(PhantomData))
     }
 }
 
-impl<'l> Imply<'l> for Axiomize {
-    type Imply<P: 'l, Q: 'l> = Infer<P, Q>;
-    type Cert<P: 'l> = PhantomCert<P>;
-    fn mp<P, Q: 'l>(
-        pq: Cert<'l, Self, Self::Imply<P, Q>>,
-        p: Cert<'l, Self, P>,
-    ) -> Cert<'l, Self, Q> {
+impl Imply for Axiomize {
+    type Imply<P, Q> = Infer<P, Q>;
+    type Cert<P> = PhantomCert<P>;
+    fn mp<P, Q>(pq: Cert<Self, Self::Imply<P, Q>>, p: Cert<Self, P>) -> Cert<Self, Q> {
         Cert::new(pq.into_inner().mp(p.into_inner()))
     }
 }
@@ -53,7 +50,10 @@ impl<P, Q> Infer<P, Q> {
     /// But we need to admit the axioms anyway,
     /// so why not let the compiler do another round of sanity check?
     /// Set to private so that we don't expose anything other than the axioms.
-    fn new<'l>(proof: impl FnOnce(PhantomCert<P>) -> PhantomCert<Q>) -> PhantomCert<Self> {
+    fn new<F>(proof: F) -> PhantomCert<Self>
+    where
+        F: FnOnce(PhantomCert<P>) -> PhantomCert<Q>,
+    {
         // Actually run once to make sure the proof terminates
         proof(unsafe { cert() }.into_inner());
         unsafe { cert() }.into_inner()
@@ -66,12 +66,11 @@ impl<P, Q> PhantomCert<Infer<P, Q>> {
     }
 }
 
-impl<'l> PropLogic<'l> for Axiomize {
-    fn l1<P: 'l, Q>() -> Cert<'l, Self, Self::Imply<P, Self::Imply<Q, P>>> {
+impl PropLogic for Axiomize {
+    fn l1<P, Q>() -> Cert<Self, Self::Imply<P, Self::Imply<Q, P>>> {
         Cert::new(Infer::new(|p| Infer::new(|_| p)))
     }
-    fn l2<P: 'l, Q: 'l, R: 'l>() -> Cert<
-        'l,
+    fn l2<P, Q, R>() -> Cert<
         Self,
         Self::Imply<
             Self::Imply<P, Self::Imply<Q, R>>,
@@ -84,24 +83,21 @@ impl<'l> PropLogic<'l> for Axiomize {
     }
 }
 
-impl<'l> Contraposition<'l> for Axiomize {
-    fn l3<P: 'l, Q: 'l>()
-    -> Cert<'l, Self, Self::Imply<Self::Imply<Self::Neg<P>, Self::Neg<Q>>, Self::Imply<Q, P>>> {
+impl Contraposition for Axiomize {
+    fn l3<P, Q>()
+    -> Cert<Self, Self::Imply<Self::Imply<Self::Neg<P>, Self::Neg<Q>>, Self::Imply<Q, P>>> {
         unsafe { cert() }
     }
 }
 
-impl<'l> Intuitionistic<'l> for Axiomize {
+impl Intuitionistic for Axiomize {
     type False = Infallible;
-    fn explosion<P>() -> Cert<'l, Self, Self::Imply<Self::False, P>> {
+    fn explosion<P>() -> Cert<Self, Self::Imply<Self::False, P>> {
         unsafe { cert() }
     }
     fn neg_def<P>()
-    -> Cert<'l, Self, crate::logic::prop::Iff<'l, Self, Self::Neg<P>, Self::Imply<P, Self::False>>>
-    {
-        <Self as And<'l>>::and_intro()
-            .mp(reflexive())
-            .mp(reflexive())
+    -> Cert<Self, crate::logic::prop::Iff<Self, Self::Neg<P>, Self::Imply<P, Self::False>>> {
+        <Self as And>::and_intro().mp(reflexive()).mp(reflexive())
     }
 }
 
@@ -124,35 +120,33 @@ mod sealed_fol {
     }
 }
 
-impl<'l> FirstOrder<'l> for Axiomize {
-    type ForAll<P: for<'x> View<'x> + ?Sized + 'l> = ForAll<P>;
+impl FirstOrder for Axiomize {
+    type ForAll<P: for<'x> View<'x> + ?Sized> = ForAll<P>;
     type Exists<P: for<'x> View<'x> + ?Sized> = Exists<P>;
-    fn exists_elim<'t: 'l, P: for<'x> crate::logic::prop::View<'x> + ?Sized, Q>()
-    -> Cert<'l, Self, Self::Imply<<P as crate::logic::prop::View<'t>>::Output, Self::Exists<P>>>
-    {
+    fn exists_elim<'t, P: for<'x> crate::logic::prop::View<'x> + ?Sized, Q>()
+    -> Cert<Self, Self::Imply<<P as crate::logic::prop::View<'t>>::Output, Self::Exists<P>>> {
         unsafe { cert() }
     }
     fn exists_gen<
-        P: for<'x> crate::logic::prop::View<'x> + ?Sized + 'l,
+        P: for<'x> crate::logic::prop::View<'x> + ?Sized,
         Q,
-        S: crate::logic::prop::ExistsProof<'l, Self, P, Q>,
+        S: crate::logic::prop::ExistsProof<Self, P, Q>,
     >(
         _: S,
-    ) -> Cert<'l, Self, Self::Imply<Self::Exists<P>, Q>> {
+    ) -> Cert<Self, Self::Imply<Self::Exists<P>, Q>> {
         unsafe { cert() }
     }
-    fn forall_elim<'t: 'l, P: for<'x> crate::logic::prop::View<'x> + ?Sized>()
-    -> Cert<'l, Self, Self::Imply<Self::ForAll<P>, <P as crate::logic::prop::View<'t>>::Output>>
-    {
+    fn forall_elim<'t, P: for<'x> crate::logic::prop::View<'x> + ?Sized>()
+    -> Cert<Self, Self::Imply<Self::ForAll<P>, <P as crate::logic::prop::View<'t>>::Output>> {
         unsafe { cert() }
     }
     fn forall_gen<
         P,
         Q: for<'x> crate::logic::prop::View<'x> + ?Sized,
-        S: crate::logic::prop::ForAllProof<'l, Self, P, Q>,
+        S: crate::logic::prop::ForAllProof<Self, P, Q>,
     >(
         _: S,
-    ) -> Cert<'l, Self, Self::Imply<P, Self::ForAll<Q>>> {
+    ) -> Cert<Self, Self::Imply<P, Self::ForAll<Q>>> {
         unsafe { cert() }
     }
 }

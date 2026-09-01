@@ -3,14 +3,13 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
-    Expr, ExprBlock, ExprParen, Lifetime, Token, Type,
+    Expr, ExprBlock, ExprParen, Token, Type,
     parse::{Parse, ParseStream},
     parse_quote,
     punctuated::Punctuated,
 };
 
 struct PredInfo {
-    lifetime: Lifetime,
     logic: Type,
 }
 
@@ -22,13 +21,11 @@ struct PredInput {
 
 impl Parse for PredInput {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let lifetime = input.parse()?;
-        input.parse::<Token![:]>()?;
         let def_block: Expr = input.parse()?;
         let Expr::Block(ExprBlock { mut block, .. }) = def_block else {
             return Err(syn::Error::new_spanned(
                 def_block,
-                "Expected a block after the lifetime",
+                "Expected a block with logic type",
             ));
         };
         let logic = match block.stmts.pop() {
@@ -44,7 +41,7 @@ impl Parse for PredInput {
         input.parse::<Token![,]>()?;
         let expr = Punctuated::<Expr, Token![,]>::parse_terminated(input)?;
         let expr = parse_quote!((#expr));
-        let info = PredInfo { lifetime, logic };
+        let info = PredInfo { logic };
         let expr = expand_pred_expr(&info, &expr)?;
         Ok(PredInput { expr, info })
     }
@@ -60,7 +57,7 @@ fn try_parse_call_syntax(
     pred_info: &PredInfo,
     elems: &syn::punctuated::Punctuated<Expr, syn::token::Comma>,
 ) -> syn::Result<Option<Type>> {
-    let PredInfo { lifetime, logic } = pred_info;
+    let PredInfo { logic } = pred_info;
     // Need at least 2 elements: the assignment and the body
     if elems.len() < 2 {
         return Ok(None);
@@ -170,7 +167,7 @@ fn try_parse_call_syntax(
 
     // Build implication: path_with_call.imply(consequent)
     let implication: Type = parse_quote! {
-        <#logic as crate::logic::prop::Imply<#lifetime>>::Imply<
+        <#logic as crate::logic::prop::Imply>::Imply<
             #path_with_call,
             #consequent,
         >
@@ -180,11 +177,11 @@ fn try_parse_call_syntax(
     let mut result = implication;
     for lt in call_lifetimes.iter().rev() {
         result = parse_quote! {
-            <#logic as crate::logic::prop::FirstOrder<#lifetime>>::ForAll<
+            <#logic as crate::logic::prop::FirstOrder>::ForAll<
                 dyn for<#lt> crate::logic::prop::View<
                     #lt,
                     Output = #result
-                > + #lifetime,
+                > + 'static
             >
         };
     }
@@ -195,7 +192,7 @@ fn try_parse_call_syntax(
 /// Recursively process the pattern expression
 fn expand_pred_expr2(pred_info: &PredInfo, expr: &Expr) -> syn::Result<Option<Type>> {
     use syn::*;
-    let PredInfo { lifetime, logic } = pred_info;
+    let PredInfo { logic } = pred_info;
     match expr {
         // (Call::<'x> = Path::<'y,'z>, rest)
         // translates to ForAll::<'x>(Path::<'y,'z,'x>.imply(rest))
@@ -252,11 +249,11 @@ fn expand_pred_expr2(pred_info: &PredInfo, expr: &Expr) -> syn::Result<Option<Ty
                             let mut result = inner;
                             for lt in lifetimes.iter().rev() {
                                 result = parse_quote! {
-                                    <#logic as crate::logic::prop::FirstOrder<#lifetime>>::#quantifier<
+                                    <#logic as crate::logic::prop::FirstOrder>::#quantifier<
                                         dyn for<#lt> crate::logic::prop::View<
                                             #lt,
                                             Output = #result
-                                        > + #lifetime,
+                                        > + 'static
                                     >
                                 };
                             }
@@ -284,7 +281,7 @@ fn expand_pred_expr2(pred_info: &PredInfo, expr: &Expr) -> syn::Result<Option<Ty
                 let right = expand_pred_expr(pred_info, &parse_quote!((#(#args),*)))?;
 
                 Ok(Some(parse_quote! {
-                    crate::logic::prop::Iff<#lifetime, #logic, #left, #right>
+                    crate::logic::prop::Iff<#logic, #left, #right>
                 }))
             } else if method_name == "imply" {
                 let left = expand_pred_expr(pred_info, receiver)?;
@@ -292,7 +289,7 @@ fn expand_pred_expr2(pred_info: &PredInfo, expr: &Expr) -> syn::Result<Option<Ty
                 let right = expand_pred_expr(pred_info, &parse_quote!((#(#args),*)))?;
 
                 Ok(Some(parse_quote! {
-                    <#logic as crate::logic::prop::Imply<#lifetime>>::Imply<
+                    <#logic as crate::logic::prop::Imply>::Imply<
                         #left,
                         #right,
                     >
@@ -311,7 +308,7 @@ fn expand_pred_expr2(pred_info: &PredInfo, expr: &Expr) -> syn::Result<Option<Ty
         }) => {
             let inner_expanded = expand_pred_expr(pred_info, inner)?;
             Ok(Some(parse_quote! {
-                <#logic as crate::logic::prop::Negation<#lifetime>>::Neg<#inner_expanded>
+                <#logic as crate::logic::prop::Negation>::Neg<#inner_expanded>
             }))
         }
 
@@ -331,19 +328,19 @@ fn expand_pred_expr2(pred_info: &PredInfo, expr: &Expr) -> syn::Result<Option<Ty
             let right_expanded = expand_pred_expr(pred_info, right)?;
             Ok(Some(match op {
                 syn::BinOp::And(_) => parse_quote! {
-                    <#logic as crate::logic::prop::And<#lifetime>>::And<
+                    <#logic as crate::logic::prop::And>::And<
                         #left_expanded,
                         #right_expanded,
                     >
                 },
                 syn::BinOp::Or(_) => parse_quote! {
-                    <#logic as crate::logic::prop::Or<#lifetime>>::Or<
+                    <#logic as crate::logic::prop::Or>::Or<
                         #left_expanded,
                         #right_expanded,
                     >
                 },
                 syn::BinOp::ShrAssign(_) => parse_quote!(
-                    <#logic as crate::logic::prop::Imply<#lifetime>>::Imply<
+                    <#logic as crate::logic::prop::Imply>::Imply<
                         #left_expanded,
                         #right_expanded,
                     >
@@ -369,10 +366,10 @@ pub fn pred(input: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn thm(input: TokenStream) -> TokenStream {
     let PredInput {
-        info: PredInfo { lifetime, logic },
+        info: PredInfo { logic },
         expr,
     } = syn::parse_macro_input!(input as PredInput);
-    TokenStream::from(quote! { crate::logic::prop::Cert<#lifetime, #logic, #expr> })
+    TokenStream::from(quote! { crate::logic::prop::Cert<#logic, #expr> })
 }
 
 fn paren(expr: Expr) -> Expr {

@@ -11,28 +11,28 @@ use crate::{
 
 macro_rules! expr {
     ($a:lifetime in El) => {
-        <Self::Add as Set<'l>>::El::<$a>
+        <Self::Add as Set>::El::<$a>
     };
     ($a:lifetime = $b:lifetime + $c:lifetime) => {
-        <Self::Add as BinOp<'l, Logic>>::Op::<$b, $c, $a>
+        <Self::Add as BinOp<Logic>>::Op::<$b, $c, $a>
     };
     ($a:lifetime = $b:lifetime * $c:lifetime) => {
-        <Self::Mul as BinOp<'l, Logic>>::Op::<$b, $c, $a>
+        <Self::Mul as BinOp<Logic>>::Op::<$b, $c, $a>
     };
     ($a:lifetime == 0) => {
-        IsUnitLike::<'l, $a, Self::Add, Logic>
+        IsUnitLike::<$a, Self::Add, Logic>
     };
     ($a:lifetime == 1) => {
-        IsUnitLike::<'l, $a, Self::Mul, Logic>
+        IsUnitLike::<$a, Self::Mul, Logic>
     };
 }
 
-pub trait SemiRing<'l, Logic>
+pub trait SemiRing<Logic>
 where
-    Logic: Equality<'l> + And<'l> + FirstOrder<'l>,
+    Logic: Equality + And + FirstOrder,
 {
-    type Add: Monoid<'l, Logic> + Commutative<'l, Logic>;
-    type Mul: Monoid<'l, Logic>;
+    type Add: Monoid<Logic> + Commutative<Logic>;
+    type Mul: Monoid<Logic>;
 
     /// Both operations share one carrier: ∀x. IsRat(x) ↔ IsRatMul(x)
     ///
@@ -40,12 +40,12 @@ where
     /// `El`, so nothing otherwise forces `+` and `×` to range over the same
     /// set.
     fn same_carrier() -> thm!(
-        'l: { Logic },
-        ForAll::<'x>(expr!('x in El).iff(<Self::Mul as Set<'l>>::El::<'x>))
+        { Logic },
+        ForAll::<'x>(expr!('x in El).iff(<Self::Mul as Set>::El::<'x>))
     );
 
     fn left_distributive() -> thm!(
-        'l: { Logic },
+        { Logic },
         'a: { expr!('a in El) },
         'b: { expr!('b in El) },
         'c: { expr!('c in El) },
@@ -57,7 +57,7 @@ where
     );
 
     fn right_distributive() -> thm!(
-        'l: { Logic },
+        { Logic },
         'a: { expr!('a in El) },
         'b: { expr!('b in El) },
         'c: { expr!('c in El) },
@@ -69,36 +69,36 @@ where
     );
 }
 
-pub trait Ring<'l, Logic>: SemiRing<'l, Logic, Add: AbelianGroup<'l, Logic>>
+pub trait Ring<Logic>: SemiRing<Logic, Add: AbelianGroup<Logic>>
 where
-    Logic: Equality<'l> + And<'l> + FirstOrder<'l>,
+    Logic: Equality + And + FirstOrder,
 {
 }
-impl<'l, Logic, T> Ring<'l, Logic> for T
+impl<Logic, T> Ring<Logic> for T
 where
-    Logic: Equality<'l> + And<'l> + FirstOrder<'l>,
-    T: SemiRing<'l, Logic, Add: AbelianGroup<'l, Logic>>,
-{
-}
-
-pub trait CommutativeRing<'l, Logic>: Ring<'l, Logic, Mul: Commutative<'l, Logic>>
-where
-    Logic: Equality<'l> + And<'l> + FirstOrder<'l>,
-{
-}
-impl<'l, Logic, T> CommutativeRing<'l, Logic> for T
-where
-    Logic: Equality<'l> + And<'l> + FirstOrder<'l>,
-    Self: Ring<'l, Logic, Mul: Commutative<'l, Logic>>,
+    Logic: Equality + And + FirstOrder,
+    T: SemiRing<Logic, Add: AbelianGroup<Logic>>,
 {
 }
 
-pub trait IntegralDomain<'l, Logic>: CommutativeRing<'l, Logic>
+pub trait CommutativeRing<Logic>: Ring<Logic, Mul: Commutative<Logic>>
 where
-    Logic: Equality<'l> + And<'l> + Or<'l> + FirstOrder<'l>,
+    Logic: Equality + And + FirstOrder,
+{
+}
+impl<Logic, T> CommutativeRing<Logic> for T
+where
+    Logic: Equality + And + FirstOrder,
+    T: Ring<Logic, Mul: Commutative<Logic>>,
+{
+}
+
+pub trait IntegralDomain<Logic>: CommutativeRing<Logic>
+where
+    Logic: Equality + And + Or + FirstOrder,
 {
     fn no_zero_divisors() -> thm!(
-        'l: { Logic },
+        { Logic },
         'a: { expr!('a in El) },
         'b: { expr!('b in El) },
         'ab: { expr!('ab = 'a * 'b) },
@@ -106,9 +106,9 @@ where
     );
 }
 
-pub trait NonZero<'l, Logic>: SemiRing<'l, Logic>
+pub trait NonZero<Logic>: SemiRing<Logic>
 where
-    Logic: Negation<'l> + Equality<'l> + And<'l> + FirstOrder<'l>,
+    Logic: Negation + Equality + And + FirstOrder,
 {
     /// Nontriviality: ∀x. IsOneLike(x) → ¬IsZeroLike(x), i.e. 1 ≠ 0
     ///
@@ -117,15 +117,15 @@ where
     /// together with `Mul`'s identity and [`Rationals::same_carrier`] it
     /// upgrades that identity to a full [`IsOne`].
     fn nontrivial() -> thm!(
-        'l: { Logic },
+        { Logic },
         'x: { expr!('x in El) },
         !(expr!('x == 0) && expr!('x == 1))
     );
 }
 
-pub trait Field<'l, Logic>: CommutativeRing<'l, Logic> + NonZero<'l, Logic>
+pub trait Field<Logic>: CommutativeRing<Logic> + NonZero<Logic>
 where
-    Logic: FirstOrder<'l> + Equality<'l> + And<'l> + Negation<'l>,
+    Logic: FirstOrder + Equality + And + Negation,
 {
     /// Multiplicative inverse: every *nonzero* rational has a reciprocal
     ///
@@ -135,7 +135,7 @@ where
     /// is exactly why [`Rationals::Mul`] is a monoid rather than an
     /// [`AbelianGroup`].
     fn mul_inverse() -> thm!(
-        'l: { Logic },
+        { Logic },
         'x: { expr!('x in El) && !expr!('x == 0) },
         Exists::<'y>(expr!('y in El) && ('z: { expr!('z = 'x * 'y) }, expr!('z == 1)))
     );
