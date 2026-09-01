@@ -82,7 +82,7 @@ where
     /// This is predicative and avoids Russell's paradox.
     fn induction<P>() -> thm!(
         { Logic },
-        'z: { expr!('z == 0) },
+        'z: { expr!('z == 0) && <P as View<'z>>::Output },
         (
             'n: { expr!('n in Nat) },
             Call::<'s> = <Self::SuccFn as Function<Logic>>::F::<'n>,
