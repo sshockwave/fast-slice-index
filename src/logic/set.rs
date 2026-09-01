@@ -19,8 +19,8 @@ use ::core::marker::PhantomData;
 
 use crate::logic::axiom::Axiomize;
 use crate::logic::prop::{
-    And, Cert, Deduction, DeductionUpgrade, FirstOrder, ForAllProof, Generalise, Iff, Imply, View,
-    curry, forall_intro, reflexive, syllogism,
+    And, Cert, Deduction, DeductionUpgrade, FirstOrder, ForAllProof, Generalise, Iff, Imply, Or,
+    PropLogic, View, curry, forall_intro, reflexive, syllogism,
 };
 use crate::macros::pred;
 
@@ -543,6 +543,132 @@ where
     }
 }
 
+// ---------------------------------------------------------------------------
+// What a pair contains
+// ---------------------------------------------------------------------------
+
+/// `x = x` at one particular `'x`, for use inside a proof.
+fn eq_refl_at<'x>() -> Cert<Axiomize, Eq<'x, 'x>> {
+    eq_refl().pipe(<Axiomize as FirstOrder>::forall_elim::<'x, EqReflView>())
+}
+
+/// `p = {a,b} → c ∈ p`, given that `c` is one of `a`, `b`.
+///
+/// The shared core of [`pair_left`] and [`pair_right`]: read the pair's
+/// defining biconditional right-to-left at `'c`.
+fn pair_member<'a, 'b, 'c, 'p>(
+    side: Cert<Axiomize, <Axiomize as Or>::Or<Eq<'c, 'a>, Eq<'c, 'b>>>,
+) -> Cert<Axiomize, <Axiomize as Imply>::Imply<IsPair<'p, 'a, 'b>, In<'c, 'p>>> {
+    <Axiomize as PropLogic>::l2()
+        .mp(syllogism()
+            .mp(<Axiomize as FirstOrder>::forall_elim::<'c, PairView<'p, 'a, 'b>>())
+            .mp(<Axiomize as And>::and_right()))
+        .mp(<Axiomize as PropLogic>::l1().mp(side))
+}
+
+/// `λa. ∀b ∀p. p = {a,b} → a ∈ p`
+pub type PairLeftView =
+    dyn for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<PairLeftView1<'a>>> + 'static;
+/// `λb. ∀p. p = {a,b} → a ∈ p`
+pub type PairLeftView1<'a> =
+    dyn for<'b> View<'b, Output = <Axiomize as FirstOrder>::ForAll<PairLeftView2<'a, 'b>>>
+        + 'static;
+/// `λp. p = {a,b} → a ∈ p`
+pub type PairLeftView2<'a, 'b> =
+    dyn for<'p> View<'p, Output = pred!({ Axiomize }, IsPair::<'p, 'a, 'b> >>= In::<'a, 'p>)>
+        + 'static;
+
+/// `∀a ∀b ∀p. p = {a,b} → a ∈ p` — **proved**.
+pub fn pair_left() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<PairLeftView>> {
+    forall_intro(PairLeft)
+}
+
+#[derive(Clone, Copy)]
+struct PairLeft;
+impl<Q> Generalise<Axiomize, Q> for PairLeft
+where
+    Q: for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<PairLeftView1<'a>>> + ?Sized,
+{
+    fn prove<'a>(self) -> Cert<Axiomize, <Q as View<'a>>::Output> {
+        forall_intro::<Axiomize, PairLeftView1<'a>, _>(PairLeft1(PhantomData))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct PairLeft1<'a>(PhantomData<&'a ()>);
+impl<'a, Q> Generalise<Axiomize, Q> for PairLeft1<'a>
+where
+    Q: for<'b> View<'b, Output = <Axiomize as FirstOrder>::ForAll<PairLeftView2<'a, 'b>>> + ?Sized,
+{
+    fn prove<'b>(self) -> Cert<Axiomize, <Q as View<'b>>::Output> {
+        forall_intro::<Axiomize, PairLeftView2<'a, 'b>, _>(PairLeft2(PhantomData))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct PairLeft2<'a, 'b>(PhantomData<(&'a (), &'b ())>);
+impl<'a, 'b, Q> Generalise<Axiomize, Q> for PairLeft2<'a, 'b>
+where
+    Q: for<'p> View<'p, Output = pred!({ Axiomize }, IsPair::<'p, 'a, 'b> >>= In::<'a, 'p>)>
+        + ?Sized,
+{
+    fn prove<'p>(self) -> Cert<Axiomize, <Q as View<'p>>::Output> {
+        pair_member(<Axiomize as Or>::or_left().mp(eq_refl_at::<'a>()))
+    }
+}
+
+/// `λa. ∀b ∀p. p = {a,b} → b ∈ p`
+pub type PairRightView =
+    dyn for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<PairRightView1<'a>>> + 'static;
+/// `λb. ∀p. p = {a,b} → b ∈ p`
+pub type PairRightView1<'a> =
+    dyn for<'b> View<'b, Output = <Axiomize as FirstOrder>::ForAll<PairRightView2<'a, 'b>>>
+        + 'static;
+/// `λp. p = {a,b} → b ∈ p`
+pub type PairRightView2<'a, 'b> =
+    dyn for<'p> View<'p, Output = pred!({ Axiomize }, IsPair::<'p, 'a, 'b> >>= In::<'b, 'p>)>
+        + 'static;
+
+/// `∀a ∀b ∀p. p = {a,b} → b ∈ p` — **proved**.
+pub fn pair_right() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<PairRightView>> {
+    forall_intro(PairRight)
+}
+
+#[derive(Clone, Copy)]
+struct PairRight;
+impl<Q> Generalise<Axiomize, Q> for PairRight
+where
+    Q: for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<PairRightView1<'a>>> + ?Sized,
+{
+    fn prove<'a>(self) -> Cert<Axiomize, <Q as View<'a>>::Output> {
+        forall_intro::<Axiomize, PairRightView1<'a>, _>(PairRight1(PhantomData))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct PairRight1<'a>(PhantomData<&'a ()>);
+impl<'a, Q> Generalise<Axiomize, Q> for PairRight1<'a>
+where
+    Q: for<'b> View<'b, Output = <Axiomize as FirstOrder>::ForAll<PairRightView2<'a, 'b>>>
+        + ?Sized,
+{
+    fn prove<'b>(self) -> Cert<Axiomize, <Q as View<'b>>::Output> {
+        forall_intro::<Axiomize, PairRightView2<'a, 'b>, _>(PairRight2(PhantomData))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct PairRight2<'a, 'b>(PhantomData<(&'a (), &'b ())>);
+impl<'a, 'b, Q> Generalise<Axiomize, Q> for PairRight2<'a, 'b>
+where
+    Q: for<'p> View<'p, Output = pred!({ Axiomize }, IsPair::<'p, 'a, 'b> >>= In::<'b, 'p>)>
+        + ?Sized,
+{
+    fn prove<'p>(self) -> Cert<Axiomize, <Q as View<'p>>::Output> {
+        pair_member(<Axiomize as Or>::or_right().mp(eq_refl_at::<'b>()))
+    }
+}
+
 /// Typecheck witnesses: `cargo check` is the proof checker.
 #[expect(dead_code, reason = "typecheck-only proof assertions")]
 const _: () = {
@@ -578,6 +704,8 @@ const _: () = {
         let _ = eq_symm();
         let _ = eq_trans();
         let _ = pair_unique();
+        let _ = pair_left();
+        let _ = pair_right();
     }
 
     /// The defined notions all resolve, including the Kuratowski pair and the
