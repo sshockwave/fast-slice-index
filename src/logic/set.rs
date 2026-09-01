@@ -20,8 +20,9 @@ use ::core::marker::PhantomData;
 use crate::axiom::Axiomize;
 use crate::axiom::zfc::ext;
 use crate::logic::prop::{
-    And, Cert, Deduction, DeductionUpgrade, FirstOrder, ForAllProof, Generalise, Iff, Imply, Or,
-    PropLogic, View, curry, forall_intro, reflexive, syllogism,
+    And, Cert, Deduction, DeductionUpgrade, FirstOrder, ForAllProof, Generalise, Iff, Imply,
+    Intuitionistic, Negation, Or, PropLogic, View, curry, exchange, forall_intro, reflexive,
+    syllogism,
 };
 use crate::macros::pred;
 
@@ -77,8 +78,12 @@ pub type ExtView =
 // Defined notions
 // ---------------------------------------------------------------------------
 
+/// `λz. z ∉ e` — the body of [`IsEmpty`], named so it can be eliminated.
+pub type EmptyView<'e> =
+    dyn for<'z> View<'z, Output = <Axiomize as Negation>::Neg<In<'z, 'e>>> + 'static;
+
 /// `IsEmpty(e) := ∀z. z ∉ e`
-pub type IsEmpty<'e> = pred!({ Axiomize }, ForAll::<'z>(!(In::<'z, 'e>)));
+pub type IsEmpty<'e> = <Axiomize as FirstOrder>::ForAll<EmptyView<'e>>;
 
 /// `λz. z ∈ s ↔ z = a` — the body of [`IsSingleton`].
 ///
@@ -103,10 +108,16 @@ pub type IsPair<'p, 'a, 'b> = <Axiomize as FirstOrder>::ForAll<PairView<'p, 'a, 
 /// `IsSuccOf(s, y) := ∀w. (w ∈ s ↔ (w ∈ y ∨ w = y))`, i.e. `s = y ∪ {y}`.
 ///
 /// The von Neumann successor, used only to state [`crate::axiom::zfc::infinity`].
-pub type IsSuccOf<'s, 'y> = pred!(
-    { Axiomize },
-    ForAll::<'w>((In::<'w, 's>).iff((In::<'w, 'y>) || (Eq::<'w, 'y>)))
-);
+/// `λw. w ∈ s ↔ (w ∈ y ∨ w = y)` — the body of [`IsSuccOf`].
+pub type SuccView<'s, 'y> = dyn for<'w> View<
+        'w,
+        Output = pred!(
+            { Axiomize },
+            (In::<'w, 's>).iff((In::<'w, 'y>) || (Eq::<'w, 'y>))
+        ),
+    > + 'static;
+
+pub type IsSuccOf<'s, 'y> = <Axiomize as FirstOrder>::ForAll<SuccView<'s, 'y>>;
 
 /// `IsOrderedPair(p, a, b) := p = {{a}, {a, b}}` — the Kuratowski pair.
 ///
@@ -1658,6 +1669,265 @@ where
     }
 }
 
+// ---------------------------------------------------------------------------
+// The empty set and the successor are unique
+// ---------------------------------------------------------------------------
+//
+// `infinity` asserts that *some* set contains an empty set and is closed under
+// the successor, but names neither. Going from "there is such a set" to "it is
+// *the* set" needs the description to determine its subject — which it does,
+// for the same reason pairs are unique: `Eq` is sharing members, and both sides
+// are pinned to the same membership condition. No axiom is spent here either.
+
+/// `¬A → (A → B)` — nothing follows from a member of the empty set.
+fn absurd_imply<A, B>() -> Cert<
+    Axiomize,
+    <Axiomize as Imply>::Imply<<Axiomize as Negation>::Neg<A>, <Axiomize as Imply>::Imply<A, B>>,
+> {
+    exchange()
+        .mp(syllogism())
+        .mp(<Axiomize as Intuitionistic>::explosion())
+}
+
+/// `λx. ∀y. IsEmpty(x) → IsEmpty(y) → x = y`
+pub type EmptyUniqueView =
+    dyn for<'x> View<'x, Output = <Axiomize as FirstOrder>::ForAll<EmptyUniqueView1<'x>>> + 'static;
+/// `λy. IsEmpty(x) → IsEmpty(y) → x = y`
+pub type EmptyUniqueView1<'x> = dyn for<'y> View<
+        'y,
+        Output = pred!(
+            { Axiomize },
+            IsEmpty::<'x> >>= IsEmpty::<'y> >>= Eq::<'x, 'y>
+        ),
+    > + 'static;
+
+/// `∀x ∀y. IsEmpty(x) → IsEmpty(y) → x = y` — **proved**.
+///
+/// There is at most one empty set. Both directions of the biconditional hold
+/// vacuously: neither side has a member to disagree about.
+pub fn empty_unique() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<EmptyUniqueView>> {
+    forall_intro(EmptyUnique)
+}
+
+#[derive(Clone, Copy)]
+struct EmptyUnique;
+impl<Q> Generalise<Axiomize, Q> for EmptyUnique
+where
+    Q: for<'x> View<'x, Output = <Axiomize as FirstOrder>::ForAll<EmptyUniqueView1<'x>>> + ?Sized,
+{
+    fn prove<'x>(self) -> Cert<Axiomize, <Q as View<'x>>::Output> {
+        forall_intro::<Axiomize, EmptyUniqueView1<'x>, _>(EmptyUnique1(PhantomData))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct EmptyUnique1<'x>(PhantomData<&'x ()>);
+impl<'x, Q> Generalise<Axiomize, Q> for EmptyUnique1<'x>
+where
+    Q: for<'y> View<
+            'y,
+            Output = pred!(
+                { Axiomize },
+                IsEmpty::<'x> >>= IsEmpty::<'y> >>= Eq::<'x, 'y>
+            ),
+        > + ?Sized,
+{
+    fn prove<'y>(self) -> Cert<Axiomize, <Q as View<'y>>::Output> {
+        curry().mp(<Axiomize as FirstOrder>::forall_gen(EmptyUnique2::<
+            'x,
+            'y,
+            EmptyView<'x>,
+            EmptyView<'y>,
+        >(
+            PhantomData,
+            PhantomData,
+            PhantomData,
+        )))
+    }
+}
+
+struct EmptyUnique2<'x, 'y, E1: ?Sized, E2: ?Sized>(
+    PhantomData<(&'x (), &'y ())>,
+    PhantomData<E1>,
+    PhantomData<E2>,
+);
+impl<E1: ?Sized, E2: ?Sized> Clone for EmptyUnique2<'_, '_, E1, E2> {
+    fn clone(&self) -> Self {
+        EmptyUnique2(PhantomData, PhantomData, PhantomData)
+    }
+}
+impl<'x, 'y, E1, E2, Q>
+    ForAllProof<
+        Axiomize,
+        <Axiomize as And>::And<
+            <Axiomize as FirstOrder>::ForAll<E1>,
+            <Axiomize as FirstOrder>::ForAll<E2>,
+        >,
+        Q,
+    > for EmptyUnique2<'x, 'y, E1, E2>
+where
+    E1: for<'z> View<'z, Output = <Axiomize as Negation>::Neg<In<'z, 'x>>> + ?Sized,
+    E2: for<'z> View<'z, Output = <Axiomize as Negation>::Neg<In<'z, 'y>>> + ?Sized,
+    Q: for<'z> View<'z, Output = Iff<Axiomize, In<'z, 'x>, In<'z, 'y>>> + ?Sized,
+{
+    fn prove<'z>(
+        self,
+    ) -> Cert<
+        Axiomize,
+        <Axiomize as Imply>::Imply<
+            <Axiomize as And>::And<
+                <Axiomize as FirstOrder>::ForAll<E1>,
+                <Axiomize as FirstOrder>::ForAll<E2>,
+            >,
+            <Q as View<'z>>::Output,
+        >,
+    > {
+        // z ∉ x gives z ∈ x → z ∈ y outright, and symmetrically.
+        and_map(
+            syllogism()
+                .mp(<Axiomize as FirstOrder>::forall_elim::<'z, E1>())
+                .mp(absurd_imply::<In<'z, 'x>, In<'z, 'y>>()),
+            syllogism()
+                .mp(<Axiomize as FirstOrder>::forall_elim::<'z, E2>())
+                .mp(absurd_imply::<In<'z, 'y>, In<'z, 'x>>()),
+        )
+    }
+}
+
+/// `λy. ∀s ∀t. s = y ∪ {y} → t = y ∪ {y} → s = t`
+pub type SuccUniqueView =
+    dyn for<'y> View<'y, Output = <Axiomize as FirstOrder>::ForAll<SuccUniqueView1<'y>>> + 'static;
+/// `λs. ∀t. s = y ∪ {y} → t = y ∪ {y} → s = t`
+pub type SuccUniqueView1<'y> = dyn for<'s> View<'s, Output = <Axiomize as FirstOrder>::ForAll<SuccUniqueView2<'y, 's>>>
+    + 'static;
+/// `λt. s = y ∪ {y} → t = y ∪ {y} → s = t`
+pub type SuccUniqueView2<'y, 's> = dyn for<'t> View<
+        't,
+        Output = pred!(
+            { Axiomize },
+            IsSuccOf::<'s, 'y> >>= IsSuccOf::<'t, 'y> >>= Eq::<'s, 't>
+        ),
+    > + 'static;
+
+/// `∀y ∀s ∀t. IsSuccOf(s, y) → IsSuccOf(t, y) → s = t` — **proved**.
+///
+/// Each set has at most one successor. With [`crate::axiom::zfc::infinity`]
+/// supplying existence, this is what lets a successor be spoken of as *the*
+/// successor.
+pub fn succ_unique() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<SuccUniqueView>> {
+    forall_intro(SuccUnique)
+}
+
+#[derive(Clone, Copy)]
+struct SuccUnique;
+impl<Q> Generalise<Axiomize, Q> for SuccUnique
+where
+    Q: for<'y> View<'y, Output = <Axiomize as FirstOrder>::ForAll<SuccUniqueView1<'y>>> + ?Sized,
+{
+    fn prove<'y>(self) -> Cert<Axiomize, <Q as View<'y>>::Output> {
+        forall_intro::<Axiomize, SuccUniqueView1<'y>, _>(SuccUnique1(PhantomData))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct SuccUnique1<'y>(PhantomData<&'y ()>);
+impl<'y, Q> Generalise<Axiomize, Q> for SuccUnique1<'y>
+where
+    Q: for<'s> View<'s, Output = <Axiomize as FirstOrder>::ForAll<SuccUniqueView2<'y, 's>>>
+        + ?Sized,
+{
+    fn prove<'s>(self) -> Cert<Axiomize, <Q as View<'s>>::Output> {
+        forall_intro::<Axiomize, SuccUniqueView2<'y, 's>, _>(SuccUnique2(PhantomData))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct SuccUnique2<'y, 's>(PhantomData<(&'y (), &'s ())>);
+impl<'y, 's, Q> Generalise<Axiomize, Q> for SuccUnique2<'y, 's>
+where
+    Q: for<'t> View<
+            't,
+            Output = pred!(
+                { Axiomize },
+                IsSuccOf::<'s, 'y> >>= IsSuccOf::<'t, 'y> >>= Eq::<'s, 't>
+            ),
+        > + ?Sized,
+{
+    fn prove<'t>(self) -> Cert<Axiomize, <Q as View<'t>>::Output> {
+        curry().mp(<Axiomize as FirstOrder>::forall_gen(SuccUnique3::<
+            'y,
+            's,
+            't,
+            SuccView<'s, 'y>,
+            SuccView<'t, 'y>,
+        >(
+            PhantomData,
+            PhantomData,
+            PhantomData,
+        )))
+    }
+}
+
+struct SuccUnique3<'y, 's, 't, E1: ?Sized, E2: ?Sized>(
+    PhantomData<(&'y (), &'s (), &'t ())>,
+    PhantomData<E1>,
+    PhantomData<E2>,
+);
+impl<E1: ?Sized, E2: ?Sized> Clone for SuccUnique3<'_, '_, '_, E1, E2> {
+    fn clone(&self) -> Self {
+        SuccUnique3(PhantomData, PhantomData, PhantomData)
+    }
+}
+impl<'y, 's, 't, E1, E2, Q>
+    ForAllProof<
+        Axiomize,
+        <Axiomize as And>::And<
+            <Axiomize as FirstOrder>::ForAll<E1>,
+            <Axiomize as FirstOrder>::ForAll<E2>,
+        >,
+        Q,
+    > for SuccUnique3<'y, 's, 't, E1, E2>
+where
+    E1: for<'w> View<
+            'w,
+            Output = pred!(
+                { Axiomize },
+                (In::<'w, 's>).iff((In::<'w, 'y>) || (Eq::<'w, 'y>))
+            ),
+        > + ?Sized,
+    E2: for<'w> View<
+            'w,
+            Output = pred!(
+                { Axiomize },
+                (In::<'w, 't>).iff((In::<'w, 'y>) || (Eq::<'w, 'y>))
+            ),
+        > + ?Sized,
+    Q: for<'w> View<'w, Output = Iff<Axiomize, In<'w, 's>, In<'w, 't>>> + ?Sized,
+{
+    fn prove<'w>(
+        self,
+    ) -> Cert<
+        Axiomize,
+        <Axiomize as Imply>::Imply<
+            <Axiomize as And>::And<
+                <Axiomize as FirstOrder>::ForAll<E1>,
+                <Axiomize as FirstOrder>::ForAll<E2>,
+            >,
+            <Q as View<'w>>::Output,
+        >,
+    > {
+        // (w∈s ↔ D) and (w∈t ↔ D) give (w∈s ↔ D) and (D ↔ w∈t), which compose.
+        syllogism()
+            .mp(and_map(
+                <Axiomize as FirstOrder>::forall_elim::<'w, E1>(),
+                syllogism()
+                    .mp(<Axiomize as FirstOrder>::forall_elim::<'w, E2>())
+                    .mp(and_comm()),
+            ))
+            .mp(iff_trans())
+    }
+}
+
 /// Typecheck witnesses: `cargo check` is the proof checker.
 #[expect(dead_code, reason = "typecheck-only proof assertions")]
 const _: () = {
@@ -1762,6 +2032,33 @@ const _: () = {
     fn singleton_view_is_the_definition<'s, 'a>(
         c: Cert<Axiomize, pred!({ Axiomize }, ForAll::<'z>((In::<'z, 's>).iff(Eq::<'z, 'a>)))>,
     ) -> Cert<Axiomize, IsSingleton<'s, 'a>> {
+        c
+    }
+
+    /// Descriptions determine their subject.
+    fn descriptions_are_unique() {
+        let _ = empty_unique();
+        let _ = succ_unique();
+    }
+
+    /// Naming the body of [`IsEmpty`] as [`EmptyView`] must not have changed
+    /// what it says.
+    fn empty_view_is_the_definition<'e>(
+        c: Cert<Axiomize, pred!({ Axiomize }, ForAll::<'z>(!(In::<'z, 'e>)))>,
+    ) -> Cert<Axiomize, IsEmpty<'e>> {
+        c
+    }
+
+    /// Likewise for [`SuccView`].
+    fn succ_view_is_the_definition<'s, 'y>(
+        c: Cert<
+            Axiomize,
+            pred!(
+                { Axiomize },
+                ForAll::<'w>((In::<'w, 's>).iff((In::<'w, 'y>) || (Eq::<'w, 'y>)))
+            ),
+        >,
+    ) -> Cert<Axiomize, IsSuccOf<'s, 'y>> {
         c
     }
 
