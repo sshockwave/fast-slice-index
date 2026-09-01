@@ -17,8 +17,10 @@
 
 use super::Axiomize;
 use super::base::sealed_cert::cert;
-use crate::logic::prop::View;
-use crate::logic::set::{Applies, Eq, In, IsEmpty, IsFunction, IsPair, IsSuccOf, Rel2, Subset};
+use crate::logic::prop::{Cert, FirstOrder, View};
+use crate::logic::set::{
+    Applies, Eq, ExtView, In, IsEmpty, IsFunction, IsPair, IsSuccOf, Rel2, Subset,
+};
 use crate::macros::thm;
 
 // ---------------------------------------------------------------------------
@@ -34,10 +36,11 @@ use crate::macros::thm;
 ///
 /// [`Eq`] is *defined* as having the same members, so the usual other direction
 /// is free and this congruence is the axiom's entire content.
-pub fn ext() -> thm!(
-    { Axiomize },
-    ForAll::<'x, 'y>((Eq::<'x, 'y>).imply(ForAll::<'w>((In::<'x, 'w>).iff(In::<'y, 'w>))))
-) {
+///
+/// Stated against [`ExtView`] rather than an inline `pred!` body so the
+/// quantifiers can be eliminated at a use site; `set.rs` carries a witness that
+/// the two spellings are the same proposition.
+pub fn ext() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<ExtView>> {
     unsafe { cert() }
 }
 

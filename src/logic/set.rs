@@ -18,6 +18,7 @@
 use ::core::marker::PhantomData;
 
 use crate::axiom::Axiomize;
+use crate::axiom::zfc::ext;
 use crate::logic::prop::{
     And, Cert, Deduction, DeductionUpgrade, FirstOrder, ForAllProof, Generalise, Iff, Imply, Or,
     PropLogic, View, curry, forall_intro, reflexive, syllogism,
@@ -50,6 +51,27 @@ pub type SubsetView<'x, 'y> =
 
 /// `'x ⊆ 'y`.
 pub type Subset<'x, 'y> = <Axiomize as FirstOrder>::ForAll<SubsetView<'x, 'y>>;
+
+/// `λw. x ∈ w ↔ y ∈ w` — the congruence [`crate::axiom::zfc::ext`] hands back.
+pub type ExtCongrView<'x, 'y> =
+    dyn for<'w> View<'w, Output = Iff<Axiomize, In<'x, 'w>, In<'y, 'w>>> + 'static;
+
+/// `λy. x = y → ∀w. (x ∈ w ↔ y ∈ w)`
+pub type ExtView1<'x> = dyn for<'y> View<
+        'y,
+        Output = <Axiomize as Imply>::Imply<
+            Eq<'x, 'y>,
+            <Axiomize as FirstOrder>::ForAll<ExtCongrView<'x, 'y>>,
+        >,
+    > + 'static;
+
+/// `λx. ∀y. x = y → ∀w. (x ∈ w ↔ y ∈ w)` — the body of extensionality.
+///
+/// Named here rather than left anonymous inside the axiom so that the axiom's
+/// quantifiers can actually be eliminated: [`FirstOrder::forall_elim`] needs
+/// the view as a type argument, and a `pred!` body gives it no name.
+pub type ExtView =
+    dyn for<'x> View<'x, Output = <Axiomize as FirstOrder>::ForAll<ExtView1<'x>>> + 'static;
 
 // ---------------------------------------------------------------------------
 // Defined notions
@@ -1227,6 +1249,153 @@ where
     }
 }
 
+// ---------------------------------------------------------------------------
+// Equals may be substituted for equals
+// ---------------------------------------------------------------------------
+//
+// Two directions, and only one of them costs anything. `Eq` is *defined* as
+// sharing members, so substituting on the right of `∈` is immediate. On the
+// left it is not derivable at all — a set's members do not determine which sets
+// contain it — and that is exactly what extensionality is assumed for.
+
+/// `x = y → z ∈ x → z ∈ y`, at fixed points. Free from the definition of [`Eq`].
+fn eq_in_right_at<'x, 'y, 'z>() -> Cert<
+    Axiomize,
+    <Axiomize as Imply>::Imply<Eq<'x, 'y>, <Axiomize as Imply>::Imply<In<'z, 'x>, In<'z, 'y>>>,
+> {
+    syllogism()
+        .mp(<Axiomize as FirstOrder>::forall_elim::<'z, EqView<'x, 'y>>())
+        .mp(<Axiomize as And>::and_left())
+}
+
+/// `x = y → x ∈ w → y ∈ w`, at fixed points. This is [`crate::axiom::zfc::ext`]
+/// with all three quantifiers eliminated.
+fn eq_in_left_at<'x, 'y, 'w>() -> Cert<
+    Axiomize,
+    <Axiomize as Imply>::Imply<Eq<'x, 'y>, <Axiomize as Imply>::Imply<In<'x, 'w>, In<'y, 'w>>>,
+> {
+    let congr = ext()
+        .pipe(<Axiomize as FirstOrder>::forall_elim::<'x, ExtView>())
+        .pipe(<Axiomize as FirstOrder>::forall_elim::<'y, ExtView1<'x>>());
+    syllogism().mp(congr).mp(syllogism()
+        .mp(<Axiomize as FirstOrder>::forall_elim::<
+            'w,
+            ExtCongrView<'x, 'y>,
+        >())
+        .mp(<Axiomize as And>::and_left()))
+}
+
+/// `λx. ∀y ∀z. x = y → z ∈ x → z ∈ y`
+pub type EqInRightView =
+    dyn for<'x> View<'x, Output = <Axiomize as FirstOrder>::ForAll<EqInRightView1<'x>>> + 'static;
+/// `λy. ∀z. x = y → z ∈ x → z ∈ y`
+pub type EqInRightView1<'x> = dyn for<'y> View<'y, Output = <Axiomize as FirstOrder>::ForAll<EqInRightView2<'x, 'y>>>
+    + 'static;
+/// `λz. x = y → z ∈ x → z ∈ y`
+pub type EqInRightView2<'x, 'y> = dyn for<'z> View<'z, Output = pred!({ Axiomize }, Eq::<'x, 'y> >>= In::<'z, 'x> >>= In::<'z, 'y>)>
+    + 'static;
+
+/// `∀x ∀y ∀z. x = y → z ∈ x → z ∈ y` — **proved**, no axiom.
+///
+/// Equal sets have the same members. That is what [`Eq`] *says*, so this is
+/// really just the definition with its quantifier stripped; see
+/// [`eq_in_left`] for the direction that is not free.
+pub fn eq_in_right() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<EqInRightView>> {
+    forall_intro(EqInRight)
+}
+
+#[derive(Clone, Copy)]
+struct EqInRight;
+impl<Q> Generalise<Axiomize, Q> for EqInRight
+where
+    Q: for<'x> View<'x, Output = <Axiomize as FirstOrder>::ForAll<EqInRightView1<'x>>> + ?Sized,
+{
+    fn prove<'x>(self) -> Cert<Axiomize, <Q as View<'x>>::Output> {
+        forall_intro::<Axiomize, EqInRightView1<'x>, _>(EqInRight1(PhantomData))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct EqInRight1<'x>(PhantomData<&'x ()>);
+impl<'x, Q> Generalise<Axiomize, Q> for EqInRight1<'x>
+where
+    Q: for<'y> View<'y, Output = <Axiomize as FirstOrder>::ForAll<EqInRightView2<'x, 'y>>> + ?Sized,
+{
+    fn prove<'y>(self) -> Cert<Axiomize, <Q as View<'y>>::Output> {
+        forall_intro::<Axiomize, EqInRightView2<'x, 'y>, _>(EqInRight2(PhantomData))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct EqInRight2<'x, 'y>(PhantomData<(&'x (), &'y ())>);
+impl<'x, 'y, Q> Generalise<Axiomize, Q> for EqInRight2<'x, 'y>
+where
+    Q: for<'z> View<
+            'z,
+            Output = pred!({ Axiomize }, Eq::<'x, 'y> >>= In::<'z, 'x> >>= In::<'z, 'y>),
+        > + ?Sized,
+{
+    fn prove<'z>(self) -> Cert<Axiomize, <Q as View<'z>>::Output> {
+        eq_in_right_at::<'x, 'y, 'z>()
+    }
+}
+
+/// `λx. ∀y ∀w. x = y → x ∈ w → y ∈ w`
+pub type EqInLeftView =
+    dyn for<'x> View<'x, Output = <Axiomize as FirstOrder>::ForAll<EqInLeftView1<'x>>> + 'static;
+/// `λy. ∀w. x = y → x ∈ w → y ∈ w`
+pub type EqInLeftView1<'x> = dyn for<'y> View<'y, Output = <Axiomize as FirstOrder>::ForAll<EqInLeftView2<'x, 'y>>>
+    + 'static;
+/// `λw. x = y → x ∈ w → y ∈ w`
+pub type EqInLeftView2<'x, 'y> = dyn for<'w> View<'w, Output = pred!({ Axiomize }, Eq::<'x, 'y> >>= In::<'x, 'w> >>= In::<'y, 'w>)>
+    + 'static;
+
+/// `∀x ∀y ∀w. x = y → x ∈ w → y ∈ w` — **proved from
+/// [`crate::axiom::zfc::ext`]**.
+///
+/// The first theorem in this module that spends an axiom. Everything before it
+/// followed from the definitions alone; this one cannot, because nothing about
+/// a set's own members constrains which sets contain it.
+pub fn eq_in_left() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<EqInLeftView>> {
+    forall_intro(EqInLeft)
+}
+
+#[derive(Clone, Copy)]
+struct EqInLeft;
+impl<Q> Generalise<Axiomize, Q> for EqInLeft
+where
+    Q: for<'x> View<'x, Output = <Axiomize as FirstOrder>::ForAll<EqInLeftView1<'x>>> + ?Sized,
+{
+    fn prove<'x>(self) -> Cert<Axiomize, <Q as View<'x>>::Output> {
+        forall_intro::<Axiomize, EqInLeftView1<'x>, _>(EqInLeft1(PhantomData))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct EqInLeft1<'x>(PhantomData<&'x ()>);
+impl<'x, Q> Generalise<Axiomize, Q> for EqInLeft1<'x>
+where
+    Q: for<'y> View<'y, Output = <Axiomize as FirstOrder>::ForAll<EqInLeftView2<'x, 'y>>> + ?Sized,
+{
+    fn prove<'y>(self) -> Cert<Axiomize, <Q as View<'y>>::Output> {
+        forall_intro::<Axiomize, EqInLeftView2<'x, 'y>, _>(EqInLeft2(PhantomData))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct EqInLeft2<'x, 'y>(PhantomData<(&'x (), &'y ())>);
+impl<'x, 'y, Q> Generalise<Axiomize, Q> for EqInLeft2<'x, 'y>
+where
+    Q: for<'w> View<
+            'w,
+            Output = pred!({ Axiomize }, Eq::<'x, 'y> >>= In::<'x, 'w> >>= In::<'y, 'w>),
+        > + ?Sized,
+{
+    fn prove<'w>(self) -> Cert<Axiomize, <Q as View<'w>>::Output> {
+        eq_in_left_at::<'x, 'y, 'w>()
+    }
+}
+
 /// Typecheck witnesses: `cargo check` is the proof checker.
 #[expect(dead_code, reason = "typecheck-only proof assertions")]
 const _: () = {
@@ -1270,6 +1439,27 @@ const _: () = {
         let _ = pair_is_singleton();
         let _ = singleton_injective();
         let _ = pair_collapses();
+        let _ = eq_in_right();
+    }
+
+    /// The one theorem so far that spends an axiom.
+    fn congruence_needs_extensionality() {
+        let _ = eq_in_left();
+    }
+
+    /// Restating [`crate::axiom::zfc::ext`] against [`ExtView`] must not have
+    /// changed what it asserts, so the named form and the original inline
+    /// spelling have to be the same proposition.
+    fn ext_view_is_the_statement(
+        c: Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<ExtView>>,
+    ) -> Cert<
+        Axiomize,
+        pred!(
+            { Axiomize },
+            ForAll::<'x, 'y>((Eq::<'x, 'y>).imply(ForAll::<'w>((In::<'x, 'w>).iff(In::<'y, 'w>))))
+        ),
+    > {
+        c
     }
 
     /// [`IsSingleton`] is still the proposition its doc comment claims: naming
