@@ -119,6 +119,29 @@ pub type SuccView<'s, 'y> = dyn for<'w> View<
 
 pub type IsSuccOf<'s, 'y> = <Axiomize as FirstOrder>::ForAll<SuccView<'s, 'y>>;
 
+/// `λz. z ∈ s ↔ (z ∈ a ∧ Q(z))` — the body of [`IsSeparated`].
+pub type SeparatedView<'s, 'a, Q> = dyn for<'z> View<
+        'z,
+        Output = Iff<
+            Axiomize,
+            In<'z, 's>,
+            <Axiomize as And>::And<In<'z, 'a>, <Q as View<'z>>::Output>,
+        >,
+    > + 'static;
+
+/// `IsSeparated(s, a, Q) := ∀z. (z ∈ s ↔ (z ∈ a ∧ Q(z)))`
+///
+/// "`s` is the subset of `a` carved out by `Q`" — what
+/// [`crate::axiom::zfc::separation`] promises to exist.
+pub type IsSeparated<'s, 'a, Q> = <Axiomize as FirstOrder>::ForAll<SeparatedView<'s, 'a, Q>>;
+
+/// `λs. IsSeparated(s, a, Q)`
+pub type SeparationInnerView<'a, Q> =
+    dyn for<'s> View<'s, Output = IsSeparated<'s, 'a, Q>> + 'static;
+/// `λa. ∃s. IsSeparated(s, a, Q)` — the body of [`crate::axiom::zfc::separation`].
+pub type SeparationView<Q> = dyn for<'a> View<'a, Output = <Axiomize as FirstOrder>::Exists<SeparationInnerView<'a, Q>>>
+    + 'static;
+
 /// `λe. e ∈ i ∧ IsEmpty(e)` — the body of [`HasEmpty`].
 pub type HasEmptyView<'i> =
     dyn for<'e> View<'e, Output = pred!({ Axiomize }, (In::<'e, 'i>) && (IsEmpty::<'e>))> + 'static;
@@ -2308,6 +2331,21 @@ const _: () = {
     fn singleton_view_is_the_definition<'s, 'a>(
         c: Cert<Axiomize, pred!({ Axiomize }, ForAll::<'z>((In::<'z, 's>).iff(Eq::<'z, 'a>)))>,
     ) -> Cert<Axiomize, IsSingleton<'s, 'a>> {
+        c
+    }
+
+    /// Likewise for [`crate::axiom::zfc::separation`] and [`SeparationView`].
+    fn separation_view_is_the_statement<P: for<'z> View<'z> + ?Sized>(
+        c: Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<SeparationView<P>>>,
+    ) -> Cert<
+        Axiomize,
+        pred!(
+            { Axiomize },
+            ForAll::<'a>(Exists::<'s>(ForAll::<'z>(
+                (In::<'z, 's>).iff((In::<'z, 'a>) && (<P as View<'z>>::Output))
+            )))
+        ),
+    > {
         c
     }
 

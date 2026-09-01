@@ -19,7 +19,7 @@ use super::Axiomize;
 use super::base::sealed_cert::cert;
 use crate::logic::prop::{Cert, FirstOrder, View};
 use crate::logic::set::{
-    Applies, Eq, ExtView, In, InductiveView, IsEmpty, IsFunction, IsPair, IsSuccOf, Rel2, Subset,
+    Applies, Eq, ExtView, In, InductiveView, IsFunction, IsPair, Rel2, SeparationView, Subset,
 };
 use crate::macros::thm;
 
@@ -69,14 +69,9 @@ pub fn union() -> thm!(
 /// [`crate::logic::nat::NaturalNumbers::induction`]. Carving only out of an
 /// existing `a` is what keeps this from being naive comprehension, which would
 /// be inconsistent.
-pub fn separation<P>() -> thm!(
-    { Axiomize },
-    ForAll::<'a>(Exists::<'s>(ForAll::<'z>(
-        (In::<'z, 's>).iff((In::<'z, 'a>) && (<P as View<'z>>::Output))
-    )))
-)
+pub fn separation<P>() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<SeparationView<P>>>
 where
-    P: for<'z> View<'z>,
+    P: for<'z> View<'z> + ?Sized,
 {
     unsafe { cert() }
 }
