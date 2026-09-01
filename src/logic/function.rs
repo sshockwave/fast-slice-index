@@ -96,37 +96,13 @@ where
 
     /// Functional (single-valued): ∀x ∀y ∀z. F(x,y) ∧ F(x,z) → y = z
     /// Each input maps to at most one output
-    fn functional() -> Cert<
-        Eq,
-        &'static dyn for<'x> View<
-            'x,
-            Output = &'static dyn for<'y> View<
-                'y,
-                Output = &'static dyn for<'z> View<
-                    'z,
-                    Output = Eq::Imply<Self::F<'x, 'y>, Eq::Imply<Self::F<'x, 'z>, Eq::Eq<'y, 'z>>>,
-                >,
-            >,
-        >,
-    >
-    where
-        Eq: 'static,
-        Self: 'static;
-
-    /// Well-typed: ∀x ∀y. F(x,y) → Dom(x) ∧ Codom(y)
-    fn well_typed() -> Cert<
-        Eq,
-        &'static dyn for<'x> View<
-            'x,
-            Output = &'static dyn for<'y> View<
-                'y,
-                Output = Eq::Imply<Self::F<'x, 'y>, Eq::Imply<Self::Dom<'x>, Self::Codom<'y>>>,
-            >,
-        >,
-    >
-    where
-        Eq: 'static,
-        Self: 'static;
+    fn functional() -> thm!(
+        { Eq },
+        'x: { Self::Dom::<'x> },
+        'y: { Self::F::<'x, 'y> },
+        'z: { Self::F::<'x, 'z> },
+        Eq::Eq::<'y, 'z>
+    );
 }
 
 /// Injection trait: A function that is injective

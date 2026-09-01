@@ -63,6 +63,14 @@ where
     /// SuccFn::F<'x, 'y> means "y is the successor of x"
     type SuccFn: Function<Logic> + Injection<Logic>;
 
+    /// Succ of a natural number should be a natural number as well.
+    fn nat_dom() -> thm!(
+        { Logic },
+        'x: { expr!('x in Nat) },
+        'succ: { <Self::SuccFn as Function<Logic>>::F::<'x, 'succ> },
+        expr!('succ in Nat)
+    );
+
     /// Zero is defined existentially: ∃z. IsNat(z) ∧ IsZeroLike(z)
     /// "There exists a natural number such that no natural's successor equals it"
     fn zero_exists() -> thm!({ Logic }, Exists::<'z>(expr!('z == 0)));
@@ -114,29 +122,31 @@ where
     type El<'a> = <<T as NaturalNumbers<Logic>>::SuccFn as Function<Logic>>::Dom<'a>;
 }
 
-// impl<'l, Logic, T: 'l> group::BinOp<'l, Logic> for AddMonoid<Logic, T>
-// where
-//     T: NaturalNumbers<'l, Logic>,
-//     Logic: Equality<'l> + FirstOrder<'l> + And<'l> + Negation<'l>,
-// {
-//     type Op<'a: 'l, 'b: 'l, 'c: 'l> = pred!(
-//         { Logic },
-//         (expr!(T, 'b == 0) && expr!('a == 'c)) // (
-//                                                //     'succ_b: { <T::SuccFn as Function<'l, Logic>>::F::<'b, 'succ_b> },
-//                                                //     expr!('a . 'succ_b == 'c)
-//                                                // )
-//     );
-//     fn single_valued() -> thm!(
-//         { Logic },
-//         ForAll::<'x, 'y>(
-//             Call::<'z> = Self::Op::<'x, 'y>,
-//             Call::<'w> = Self::Op::<'x, 'y>,
-//             expr!('z == 'w)
-//         )
-//     ) {
-//         todo!()
-//     }
-// }
+impl<Logic, T> group::BinOp<Logic> for AddMonoid<Logic, T>
+where
+    T: NaturalNumbers<Logic>,
+    Logic: Equality + FirstOrder + And + Negation,
+{
+    type Op<'a, 'b, 'c> = pred!(
+        { Logic },
+        // (expr!(T, 'b == 0) && expr!('a == 'c)) ||
+        (
+            'succ_b: { <T::SuccFn as Function<Logic>>::F::<'b, 'succ_b> },
+            usize,
+            // expr!('a . 'succ_b == 'c)
+        )
+    );
+    fn single_valued() -> thm!(
+        { Logic },
+        ForAll::<'x, 'y>(
+            Call::<'z> = Self::Op::<'x, 'y>,
+            Call::<'w> = Self::Op::<'x, 'y>,
+            expr!('z == 'w)
+        )
+    ) {
+        todo!()
+    }
+}
 
 // impl<'l, Logic, T> group::Total<'l, Logic> for AddMonoid<Logic, T>
 // where
