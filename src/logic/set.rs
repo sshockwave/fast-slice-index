@@ -20,8 +20,8 @@ use ::core::marker::PhantomData;
 use crate::axiom::Axiomize;
 use crate::axiom::zfc::ext;
 use crate::logic::prop::{
-    And, Cert, Deduction, DeductionUpgrade, FirstOrder, ForAllProof, Generalise, Iff, Imply,
-    Intuitionistic, Negation, Or, PropLogic, View, curry, exchange, forall_intro, reflexive,
+    And, Cert, Deduction, DeductionUpgrade, ExistsProof, FirstOrder, ForAllProof, Generalise, Iff,
+    Imply, Intuitionistic, Negation, Or, PropLogic, View, curry, exchange, forall_intro, reflexive,
     syllogism,
 };
 use crate::macros::pred;
@@ -118,6 +118,50 @@ pub type SuccView<'s, 'y> = dyn for<'w> View<
     > + 'static;
 
 pub type IsSuccOf<'s, 'y> = <Axiomize as FirstOrder>::ForAll<SuccView<'s, 'y>>;
+
+/// `λe. e ∈ i ∧ IsEmpty(e)` — the body of [`HasEmpty`].
+pub type HasEmptyView<'i> =
+    dyn for<'e> View<'e, Output = pred!({ Axiomize }, (In::<'e, 'i>) && (IsEmpty::<'e>))> + 'static;
+
+/// `HasEmpty(i) := ∃e. e ∈ i ∧ IsEmpty(e)`
+pub type HasEmpty<'i> = <Axiomize as FirstOrder>::Exists<HasEmptyView<'i>>;
+
+/// `λs. s ∈ i ∧ IsSuccOf(s, y)` — the witness [`ClosedUnderSucc`] demands.
+pub type SuccStepView<'i, 'y> = dyn for<'s> View<'s, Output = pred!({ Axiomize }, (In::<'s, 'i>) && (IsSuccOf::<'s, 'y>))>
+    + 'static;
+
+/// `λy. y ∈ i → ∃s. s ∈ i ∧ IsSuccOf(s, y)` — the body of [`ClosedUnderSucc`].
+pub type ClosedUnderSuccView<'i> = dyn for<'y> View<
+        'y,
+        Output = <Axiomize as Imply>::Imply<
+            In<'y, 'i>,
+            <Axiomize as FirstOrder>::Exists<SuccStepView<'i, 'y>>,
+        >,
+    > + 'static;
+
+/// `ClosedUnderSucc(i) := ∀y. y ∈ i → ∃s. s ∈ i ∧ IsSuccOf(s, y)`
+pub type ClosedUnderSucc<'i> = <Axiomize as FirstOrder>::ForAll<ClosedUnderSuccView<'i>>;
+
+/// `IsInductive(i) := HasEmpty(i) ∧ ClosedUnderSucc(i)`
+///
+/// Exactly what [`crate::axiom::zfc::infinity`] asserts of some set. Naming it
+/// is what lets that existential be eliminated at a use site.
+pub type IsInductive<'i> = <Axiomize as And>::And<HasEmpty<'i>, ClosedUnderSucc<'i>>;
+
+/// `λi. IsInductive(i)` — the body of [`crate::axiom::zfc::infinity`].
+pub type InductiveView = dyn for<'i> View<'i, Output = IsInductive<'i>> + 'static;
+
+/// `λi. IsInductive(i) → n ∈ i` — the body of [`IsNat`].
+pub type IsNatView<'n> = dyn for<'i> View<'i, Output = <Axiomize as Imply>::Imply<IsInductive<'i>, In<'n, 'i>>>
+    + 'static;
+
+/// `IsNat(n) := ∀i. IsInductive(i) → n ∈ i`
+///
+/// A natural number is what every inductive set is obliged to contain. This is
+/// first-order here — `i` ranges over sets, which are ordinary elements — so no
+/// second-order quantification sneaks in, and ω need not exist yet for the
+/// predicate to be stated.
+pub type IsNat<'n> = <Axiomize as FirstOrder>::ForAll<IsNatView<'n>>;
 
 /// `IsOrderedPair(p, a, b) := p = {{a}, {a, b}}` — the Kuratowski pair.
 ///
@@ -1928,6 +1972,238 @@ where
     }
 }
 
+// ---------------------------------------------------------------------------
+// Zero and successor are natural numbers
+// ---------------------------------------------------------------------------
+//
+// [`IsNat`] says "belongs to every inductive set", so proving something is a
+// natural number means producing it inside an arbitrary inductive `i`. The
+// inductive set only promises *some* empty set and *some* successor, never the
+// one we are holding — which is what [`empty_unique`] and [`succ_unique`] are
+// for. Extensionality then carries membership across that identification.
+
+/// `IsEmpty(x) → IsEmpty(y) → x = y`, at fixed points.
+fn empty_unique_at<'x, 'y>() -> Cert<
+    Axiomize,
+    <Axiomize as Imply>::Imply<IsEmpty<'x>, <Axiomize as Imply>::Imply<IsEmpty<'y>, Eq<'x, 'y>>>,
+> {
+    empty_unique()
+        .pipe(<Axiomize as FirstOrder>::forall_elim::<'x, EmptyUniqueView>())
+        .pipe(<Axiomize as FirstOrder>::forall_elim::<
+            'y,
+            EmptyUniqueView1<'x>,
+        >())
+}
+
+/// `IsSuccOf(s, y) → IsSuccOf(t, y) → s = t`, at fixed points.
+fn succ_unique_at<'y, 's, 't>() -> Cert<
+    Axiomize,
+    <Axiomize as Imply>::Imply<
+        IsSuccOf<'s, 'y>,
+        <Axiomize as Imply>::Imply<IsSuccOf<'t, 'y>, Eq<'s, 't>>,
+    >,
+> {
+    succ_unique()
+        .pipe(<Axiomize as FirstOrder>::forall_elim::<'y, SuccUniqueView>())
+        .pipe(<Axiomize as FirstOrder>::forall_elim::<
+            's,
+            SuccUniqueView1<'y>,
+        >())
+        .pipe(<Axiomize as FirstOrder>::forall_elim::<
+            't,
+            SuccUniqueView2<'y, 's>,
+        >())
+}
+
+/// `λe. IsEmpty(e) → IsNat(e)`
+pub type ZeroIsNatView =
+    dyn for<'e> View<'e, Output = <Axiomize as Imply>::Imply<IsEmpty<'e>, IsNat<'e>>> + 'static;
+
+/// `∀e. IsEmpty(e) → IsNat(e)` — **proved**.
+///
+/// Zero is a natural number. Every inductive set contains an empty set, and
+/// there is only one empty set to contain.
+pub fn zero_is_nat() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<ZeroIsNatView>> {
+    forall_intro(ZeroIsNat)
+}
+
+#[derive(Clone, Copy)]
+struct ZeroIsNat;
+impl<Q> Generalise<Axiomize, Q> for ZeroIsNat
+where
+    Q: for<'e> View<'e, Output = <Axiomize as Imply>::Imply<IsEmpty<'e>, IsNat<'e>>> + ?Sized,
+{
+    fn prove<'e>(self) -> Cert<Axiomize, <Q as View<'e>>::Output> {
+        <Axiomize as FirstOrder>::forall_gen(ZeroIsNat1::<'e>(PhantomData))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct ZeroIsNat1<'e>(PhantomData<&'e ()>);
+impl<'e, Q> ForAllProof<Axiomize, IsEmpty<'e>, Q> for ZeroIsNat1<'e>
+where
+    Q: for<'i> View<'i, Output = <Axiomize as Imply>::Imply<IsInductive<'i>, In<'e, 'i>>> + ?Sized,
+{
+    fn prove<'i>(
+        self,
+    ) -> Cert<Axiomize, <Axiomize as Imply>::Imply<IsEmpty<'e>, <Q as View<'i>>::Output>> {
+        // Inductive(i) ⊢ HasEmpty(i) ⊢ (IsEmpty(e) → e ∈ i); exchange puts the
+        // hypothesis back on the outside.
+        exchange().mp(syllogism().mp(<Axiomize as And>::and_left()).mp(
+            <Axiomize as FirstOrder>::exists_gen(ZeroIsNat2::<'e, 'i>(PhantomData)),
+        ))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct ZeroIsNat2<'e, 'i>(PhantomData<(&'e (), &'i ())>);
+impl<'e, 'i>
+    ExistsProof<Axiomize, HasEmptyView<'i>, <Axiomize as Imply>::Imply<IsEmpty<'e>, In<'e, 'i>>>
+    for ZeroIsNat2<'e, 'i>
+{
+    fn prove<'t>(
+        self,
+    ) -> Cert<
+        Axiomize,
+        <Axiomize as Imply>::Imply<
+            <HasEmptyView<'i> as View<'t>>::Output,
+            <Axiomize as Imply>::Imply<IsEmpty<'e>, In<'e, 'i>>,
+        >,
+    > {
+        let h =
+            Deduction::<pred!({ Axiomize }, (In::<'t, 'i>) && (IsEmpty::<'t>)), Axiomize>::assume();
+        let t_in_i = h.clone().pipe(<Axiomize as And>::and_left().upgrade());
+        let t_empty = h.pipe(<Axiomize as And>::and_right().upgrade());
+        // t and e are both empty, so t = e; and t ∈ i, so e ∈ i.
+        let to_eq = t_empty.pipe(empty_unique_at::<'t, 'e>().upgrade());
+        let eq_to_in = t_in_i.pipe(exchange().mp(eq_in_left_at::<'t, 'e, 'i>()).upgrade());
+        syllogism().upgrade().mp(to_eq).mp(eq_to_in).cast()
+    }
+}
+
+/// `λy. ∀s. IsNat(y) → IsSuccOf(s, y) → IsNat(s)`
+pub type SuccIsNatView =
+    dyn for<'y> View<'y, Output = <Axiomize as FirstOrder>::ForAll<SuccIsNatView1<'y>>> + 'static;
+/// `λs. IsNat(y) → IsSuccOf(s, y) → IsNat(s)`
+pub type SuccIsNatView1<'y> = dyn for<'s> View<
+        's,
+        Output = pred!(
+            { Axiomize },
+            IsNat::<'y> >>= IsSuccOf::<'s, 'y> >>= IsNat::<'s>
+        ),
+    > + 'static;
+
+/// `∀y ∀s. IsNat(y) → IsSuccOf(s, y) → IsNat(s)` — **proved**.
+///
+/// The naturals are closed under the successor. With [`zero_is_nat`] this is
+/// the introduction half of arithmetic; induction, the elimination half, needs
+/// ω to exist and so needs [`crate::axiom::zfc::separation`].
+pub fn succ_is_nat() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<SuccIsNatView>> {
+    forall_intro(SuccIsNat)
+}
+
+#[derive(Clone, Copy)]
+struct SuccIsNat;
+impl<Q> Generalise<Axiomize, Q> for SuccIsNat
+where
+    Q: for<'y> View<'y, Output = <Axiomize as FirstOrder>::ForAll<SuccIsNatView1<'y>>> + ?Sized,
+{
+    fn prove<'y>(self) -> Cert<Axiomize, <Q as View<'y>>::Output> {
+        forall_intro::<Axiomize, SuccIsNatView1<'y>, _>(SuccIsNat1(PhantomData))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct SuccIsNat1<'y>(PhantomData<&'y ()>);
+impl<'y, Q> Generalise<Axiomize, Q> for SuccIsNat1<'y>
+where
+    Q: for<'s> View<
+            's,
+            Output = pred!(
+                { Axiomize },
+                IsNat::<'y> >>= IsSuccOf::<'s, 'y> >>= IsNat::<'s>
+            ),
+        > + ?Sized,
+{
+    fn prove<'s>(self) -> Cert<Axiomize, <Q as View<'s>>::Output> {
+        curry().mp(<Axiomize as FirstOrder>::forall_gen(SuccIsNat2::<'y, 's>(
+            PhantomData,
+        )))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct SuccIsNat2<'y, 's>(PhantomData<(&'y (), &'s ())>);
+impl<'y, 's, Q> ForAllProof<Axiomize, <Axiomize as And>::And<IsNat<'y>, IsSuccOf<'s, 'y>>, Q>
+    for SuccIsNat2<'y, 's>
+where
+    Q: for<'i> View<'i, Output = <Axiomize as Imply>::Imply<IsInductive<'i>, In<'s, 'i>>> + ?Sized,
+{
+    fn prove<'i>(
+        self,
+    ) -> Cert<
+        Axiomize,
+        <Axiomize as Imply>::Imply<
+            <Axiomize as And>::And<IsNat<'y>, IsSuccOf<'s, 'y>>,
+            <Q as View<'i>>::Output,
+        >,
+    > {
+        let h =
+            Deduction::<<Axiomize as And>::And<IsNat<'y>, IsSuccOf<'s, 'y>>, Axiomize>::assume();
+        let nat_y = h.clone().pipe(<Axiomize as And>::and_left().upgrade());
+        let succ_s = h.pipe(<Axiomize as And>::and_right().upgrade());
+        // Inductive(i) → y ∈ i, from the hypothesis that y is a natural number.
+        let y_in =
+            nat_y.pipe(<Axiomize as FirstOrder>::forall_elim::<'i, IsNatView<'y>>().upgrade());
+        // Inductive(i) → (y ∈ i → some successor of y is in i).
+        let closed = syllogism().mp(<Axiomize as And>::and_right()).mp(
+            <Axiomize as FirstOrder>::forall_elim::<'y, ClosedUnderSuccView<'i>>(),
+        );
+        // Distribute to drop the y ∈ i premise, then read the witness back out.
+        let step = <Axiomize as PropLogic>::l2()
+            .upgrade()
+            .mp(closed.upgrade())
+            .mp(y_in);
+        let unpack = <Axiomize as FirstOrder>::exists_gen(SuccIsNat3::<'y, 's, 'i>(PhantomData));
+        succ_s
+            .pipe(
+                exchange()
+                    .upgrade()
+                    .mp(syllogism().upgrade().mp(step).mp(unpack.upgrade())),
+            )
+            .cast()
+    }
+}
+
+#[derive(Clone, Copy)]
+struct SuccIsNat3<'y, 's, 'i>(PhantomData<(&'y (), &'s (), &'i ())>);
+impl<'y, 's, 'i>
+    ExistsProof<
+        Axiomize,
+        SuccStepView<'i, 'y>,
+        <Axiomize as Imply>::Imply<IsSuccOf<'s, 'y>, In<'s, 'i>>,
+    > for SuccIsNat3<'y, 's, 'i>
+{
+    fn prove<'t>(
+        self,
+    ) -> Cert<
+        Axiomize,
+        <Axiomize as Imply>::Imply<
+            <SuccStepView<'i, 'y> as View<'t>>::Output,
+            <Axiomize as Imply>::Imply<IsSuccOf<'s, 'y>, In<'s, 'i>>,
+        >,
+    > {
+        let h =
+            Deduction::<pred!({ Axiomize }, (In::<'t, 'i>) && (IsSuccOf::<'t, 'y>)), Axiomize>::assume();
+        let t_in_i = h.clone().pipe(<Axiomize as And>::and_left().upgrade());
+        let t_succ = h.pipe(<Axiomize as And>::and_right().upgrade());
+        // t and s are both successors of y, so t = s; and t ∈ i, so s ∈ i.
+        let to_eq = t_succ.pipe(succ_unique_at::<'y, 't, 's>().upgrade());
+        let eq_to_in = t_in_i.pipe(exchange().mp(eq_in_left_at::<'t, 's, 'i>()).upgrade());
+        syllogism().upgrade().mp(to_eq).mp(eq_to_in).cast()
+    }
+}
+
 /// Typecheck witnesses: `cargo check` is the proof checker.
 #[expect(dead_code, reason = "typecheck-only proof assertions")]
 const _: () = {
@@ -2035,6 +2311,25 @@ const _: () = {
         c
     }
 
+    /// Restating [`crate::axiom::zfc::infinity`] against [`InductiveView`]
+    /// must not have changed what it asserts.
+    fn inductive_view_is_the_statement(
+        c: Cert<Axiomize, <Axiomize as FirstOrder>::Exists<InductiveView>>,
+    ) -> Cert<
+        Axiomize,
+        pred!(
+            { Axiomize },
+            Exists::<'i>(
+                (Exists::<'e>((In::<'e, 'i>) && (IsEmpty::<'e>)))
+                    && (ForAll::<'y>(
+                        (In::<'y, 'i>).imply(Exists::<'s>((In::<'s, 'i>) && (IsSuccOf::<'s, 'y>)))
+                    ))
+            )
+        ),
+    > {
+        c
+    }
+
     /// Descriptions determine their subject.
     fn descriptions_are_unique() {
         let _ = empty_unique();
@@ -2059,6 +2354,32 @@ const _: () = {
             ),
         >,
     ) -> Cert<Axiomize, IsSuccOf<'s, 'y>> {
+        c
+    }
+
+    /// The two introduction rules for natural numbers.
+    fn zero_and_successor_are_natural() {
+        let _ = zero_is_nat();
+        let _ = succ_is_nat();
+    }
+
+    /// [`IsNat`] is the proposition its doc comment claims.
+    fn nat_view_is_the_definition<'n>(
+        c: Cert<
+            Axiomize,
+            pred!(
+                { Axiomize },
+                ForAll::<'i>(
+                    ((Exists::<'e>((In::<'e, 'i>) && (IsEmpty::<'e>)))
+                        && (ForAll::<'w>(
+                            (In::<'w, 'i>)
+                                .imply(Exists::<'v>((In::<'v, 'i>) && (IsSuccOf::<'v, 'w>)))
+                        )))
+                    .imply(In::<'n, 'i>)
+                )
+            ),
+        >,
+    ) -> Cert<Axiomize, IsNat<'n>> {
         c
     }
 

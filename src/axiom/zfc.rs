@@ -19,7 +19,7 @@ use super::Axiomize;
 use super::base::sealed_cert::cert;
 use crate::logic::prop::{Cert, FirstOrder, View};
 use crate::logic::set::{
-    Applies, Eq, ExtView, In, IsEmpty, IsFunction, IsPair, IsSuccOf, Rel2, Subset,
+    Applies, Eq, ExtView, In, InductiveView, IsEmpty, IsFunction, IsPair, IsSuccOf, Rel2, Subset,
 };
 use crate::macros::thm;
 
@@ -102,15 +102,11 @@ pub fn regularity() -> thm!(
 }
 
 /// **Infinity**: some set contains ∅ and is closed under `y ↦ y ∪ {y}`.
-pub fn infinity() -> thm!(
-    { Axiomize },
-    Exists::<'i>(
-        (Exists::<'e>((In::<'e, 'i>) && (IsEmpty::<'e>)))
-            && (ForAll::<'y>(
-                (In::<'y, 'i>).imply(Exists::<'s>((In::<'s, 'i>) && (IsSuccOf::<'s, 'y>)))
-            ))
-    )
-) {
+///
+/// Stated against [`InductiveView`] for the same reason as [`ext`]: an inline
+/// body is anonymous, and this existential has to be eliminated to be of any
+/// use. `set.rs` witnesses that the two spellings are the same proposition.
+pub fn infinity() -> Cert<Axiomize, <Axiomize as FirstOrder>::Exists<InductiveView>> {
     unsafe { cert() }
 }
 
