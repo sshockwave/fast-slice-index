@@ -1,4 +1,5 @@
 pub mod algebra;
+pub mod axiom;
 pub mod logic;
 pub mod rel;
 

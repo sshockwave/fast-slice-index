@@ -1,13 +1,13 @@
 //! The language of set theory, and what can be derived in it.
 //!
-//! The assumptions live in [`crate::logic::axiom::zfc`] and nothing else in
+//! The assumptions live in [`crate::axiom::zfc`] and nothing else in
 //! this module may add to them: everything here is safe code, so a theorem
 //! below is either a definition or a derivation. That split is the point —
 //! `axiom` stays small enough to audit by reading it, and no `unsafe` sits next
 //! to a proof where it could be mistaken for one.
 //!
 //! [`In`] is the sole primitive. Equality is *defined* ([`Eq`]) as having the
-//! same members, which is why [`crate::logic::axiom::zfc::ext`] only has to
+//! same members, which is why [`crate::axiom::zfc::ext`] only has to
 //! assume the converse congruence.
 #![expect(
     unused_parens,
@@ -17,14 +17,14 @@
 
 use ::core::marker::PhantomData;
 
-use crate::logic::axiom::Axiomize;
+use crate::axiom::Axiomize;
 use crate::logic::prop::{
     And, Cert, Deduction, DeductionUpgrade, FirstOrder, ForAllProof, Generalise, Iff, Imply, Or,
     PropLogic, View, curry, forall_intro, reflexive, syllogism,
 };
 use crate::macros::pred;
 
-/// A binary relation as a type-level schema parameter, for [`replacement`].
+/// A binary relation as a type-level schema parameter, for [`crate::axiom::zfc::replacement`].
 ///
 /// [`View`] carries one lifetime and replacement needs two, so this is its
 /// two-argument counterpart. Like every schema here it is instantiated per
@@ -73,7 +73,7 @@ pub type IsPair<'p, 'a, 'b> = <Axiomize as FirstOrder>::ForAll<PairView<'p, 'a, 
 
 /// `IsSuccOf(s, y) := ∀w. (w ∈ s ↔ (w ∈ y ∨ w = y))`, i.e. `s = y ∪ {y}`.
 ///
-/// The von Neumann successor, used only to state [`infinity`].
+/// The von Neumann successor, used only to state [`crate::axiom::zfc::infinity`].
 pub type IsSuccOf<'s, 'y> = pred!(
     { Axiomize },
     ForAll::<'w>((In::<'w, 's>).iff((In::<'w, 'y>) || (Eq::<'w, 'y>)))
@@ -82,7 +82,7 @@ pub type IsSuccOf<'s, 'y> = pred!(
 /// `IsOrderedPair(p, a, b) := p = {{a}, {a, b}}` — the Kuratowski pair.
 ///
 /// Stated as an existential over the two layers because this logic has no term
-/// formers: `u` is `{a}`, `v` is `{a, b}`, `p` is `{u, v}`. [`pairing`] is what
+/// formers: `u` is `{a}`, `v` is `{a, b}`, `p` is `{u, v}`. [`crate::axiom::zfc::pairing`] is what
 /// makes all three exist. This is the construction
 /// [`crate::algebra::group`]'s module docs call unavailable at the level of
 /// lifetimes alone — it becomes available once sets are the elements.
@@ -419,7 +419,7 @@ pub type PairUniqueView3<'a, 'b, 'p> = dyn for<'q> View<
 
 /// `∀a ∀b ∀p ∀q. p = {a,b} → q = {a,b} → p = q` — **proved**.
 ///
-/// Together with [`crate::logic::axiom::zfc::pairing`] this pins the pair down:
+/// Together with [`crate::axiom::zfc::pairing`] this pins the pair down:
 /// it exists and is unique. Still no axiom — `Eq` is *defined* as sharing
 /// members, and both sets share the membership condition `z = a ∨ z = b`.
 pub fn pair_unique() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<PairUniqueView>> {
@@ -670,7 +670,7 @@ where
 /// Typecheck witnesses: `cargo check` is the proof checker.
 #[expect(dead_code, reason = "typecheck-only proof assertions")]
 const _: () = {
-    use crate::logic::axiom::zfc::{
+    use crate::axiom::zfc::{
         choice, ext, infinity, pairing, power_set, regularity, replacement, separation, union,
     };
 
