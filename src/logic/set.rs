@@ -138,17 +138,35 @@ pub type IsRelation<'r> = pred!(
     ForAll::<'z>((In::<'z, 'r>).imply(Exists::<'a, 'b>(IsOrderedPair::<'z, 'a, 'b>)))
 );
 
+/// `λc. (f(a)=b ∧ f(a)=c) → b = c`
+pub type SingleValuedView2<'f, 'a, 'b> = dyn for<'c> View<
+        'c,
+        Output = pred!(
+            { Axiomize },
+            ((Applies::<'f, 'a, 'b>) && (Applies::<'f, 'a, 'c>)) >>= Eq::<'b, 'c>
+        ),
+    > + 'static;
+/// `λb. ∀c. (f(a)=b ∧ f(a)=c) → b = c`
+pub type SingleValuedView1<'f, 'a> = dyn for<'b> View<'b, Output = <Axiomize as FirstOrder>::ForAll<SingleValuedView2<'f, 'a, 'b>>>
+    + 'static;
+/// `λa. ∀b ∀c. (f(a)=b ∧ f(a)=c) → b = c`
+pub type SingleValuedView<'f> = dyn for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<SingleValuedView1<'f, 'a>>>
+    + 'static;
+
+/// `IsSingleValued(f) := ∀a ∀b ∀c. (f(a)=b ∧ f(a)=c) → b = c`
+///
+/// Split out of [`IsFunction`] and named so its quantifiers can be eliminated;
+/// [`func_apply_unique`] is what that buys.
+pub type IsSingleValued<'f> = <Axiomize as FirstOrder>::ForAll<SingleValuedView<'f>>;
+
 /// `IsFunction(f) := IsRelation(f) ∧ f is single-valued`
-pub type IsFunction<'f> = pred!(
-    { Axiomize },
-    (IsRelation::<'f>)
-        && (ForAll::<'a, 'b, 'c>(
-            ((Applies::<'f, 'a, 'b>) && (Applies::<'f, 'a, 'c>)).imply(Eq::<'b, 'c>)
-        ))
-);
+pub type IsFunction<'f> = pred!({ Axiomize }, (IsRelation::<'f>) && (IsSingleValued::<'f>));
+
+/// `λb. f(a) = b` — the body of [`InDomain`].
+pub type InDomainView<'f, 'a> = dyn for<'b> View<'b, Output = Applies<'f, 'a, 'b>> + 'static;
 
 /// `InDomain(f, a) := ∃b. f(a) = b`
-pub type InDomain<'f, 'a> = pred!({ Axiomize }, Exists::<'b>(Applies::<'f, 'a, 'b>));
+pub type InDomain<'f, 'a> = <Axiomize as FirstOrder>::Exists<InDomainView<'f, 'a>>;
 
 // ---------------------------------------------------------------------------
 // Theorems: equality is an equivalence
@@ -1396,6 +1414,250 @@ where
     }
 }
 
+// ---------------------------------------------------------------------------
+// Functions
+// ---------------------------------------------------------------------------
+//
+// A function here is not a type-level mapping but an ordinary element: its
+// graph, a set of Kuratowski pairs. That is the whole point of reifying it —
+// `'f` can be quantified over, so "there exists a function such that ..." is a
+// first-order statement rather than a schema.
+//
+// These are the elimination rules. They unpack [`IsFunction`] and say nothing
+// about which functions exist; that needs the axioms and comes later.
+
+/// `IsFunction(f) → f is single-valued`, at a fixed `'f`.
+fn func_single_valued_at<'f>()
+-> Cert<Axiomize, <Axiomize as Imply>::Imply<IsFunction<'f>, IsSingleValued<'f>>> {
+    <Axiomize as And>::and_right()
+}
+
+/// `IsFunction(f) → IsRelation(f)`, at a fixed `'f`.
+fn func_is_relation_at<'f>()
+-> Cert<Axiomize, <Axiomize as Imply>::Imply<IsFunction<'f>, IsRelation<'f>>> {
+    <Axiomize as And>::and_left()
+}
+
+/// `IsFunction(f) → (f(a)=b ∧ f(a)=c) → b = c`, at fixed points.
+fn func_apply_unique_at<'f, 'a, 'b, 'c>() -> Cert<
+    Axiomize,
+    <Axiomize as Imply>::Imply<
+        IsFunction<'f>,
+        <Axiomize as Imply>::Imply<
+            <Axiomize as And>::And<Applies<'f, 'a, 'b>, Applies<'f, 'a, 'c>>,
+            Eq<'b, 'c>,
+        >,
+    >,
+> {
+    syllogism().mp(func_single_valued_at::<'f>()).mp(syllogism()
+        .mp(<Axiomize as FirstOrder>::forall_elim::<
+            'a,
+            SingleValuedView<'f>,
+        >())
+        .mp(syllogism()
+            .mp(<Axiomize as FirstOrder>::forall_elim::<
+                'b,
+                SingleValuedView1<'f, 'a>,
+            >())
+            .mp(<Axiomize as FirstOrder>::forall_elim::<
+                'c,
+                SingleValuedView2<'f, 'a, 'b>,
+            >())))
+}
+
+/// `f(a) = b → a ∈ dom f`, at fixed points.
+fn applies_in_domain_at<'f, 'a, 'b>()
+-> Cert<Axiomize, <Axiomize as Imply>::Imply<Applies<'f, 'a, 'b>, InDomain<'f, 'a>>> {
+    <Axiomize as FirstOrder>::exists_elim::<'b, InDomainView<'f, 'a>, InDomain<'f, 'a>>()
+}
+
+/// `λf. IsFunction(f) → IsSingleValued(f)`
+pub type FuncSingleValuedView = dyn for<'f> View<'f, Output = pred!({ Axiomize }, IsFunction::<'f> >>= IsSingleValued::<'f>)>
+    + 'static;
+
+/// `∀f. IsFunction(f) → f is single-valued` — **proved**.
+pub fn func_single_valued() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<FuncSingleValuedView>>
+{
+    forall_intro(FuncSingleValued)
+}
+
+#[derive(Clone, Copy)]
+struct FuncSingleValued;
+impl<Q> Generalise<Axiomize, Q> for FuncSingleValued
+where
+    Q: for<'f> View<'f, Output = pred!({ Axiomize }, IsFunction::<'f> >>= IsSingleValued::<'f>)>
+        + ?Sized,
+{
+    fn prove<'f>(self) -> Cert<Axiomize, <Q as View<'f>>::Output> {
+        func_single_valued_at::<'f>()
+    }
+}
+
+/// `λf. IsFunction(f) → IsRelation(f)`
+pub type FuncIsRelationView = dyn for<'f> View<'f, Output = pred!({ Axiomize }, IsFunction::<'f> >>= IsRelation::<'f>)>
+    + 'static;
+
+/// `∀f. IsFunction(f) → IsRelation(f)` — **proved**.
+///
+/// Every function is a set of ordered pairs, so anything proved about relations
+/// applies to it.
+pub fn func_is_relation() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<FuncIsRelationView>> {
+    forall_intro(FuncIsRelation)
+}
+
+#[derive(Clone, Copy)]
+struct FuncIsRelation;
+impl<Q> Generalise<Axiomize, Q> for FuncIsRelation
+where
+    Q: for<'f> View<'f, Output = pred!({ Axiomize }, IsFunction::<'f> >>= IsRelation::<'f>)>
+        + ?Sized,
+{
+    fn prove<'f>(self) -> Cert<Axiomize, <Q as View<'f>>::Output> {
+        func_is_relation_at::<'f>()
+    }
+}
+
+/// `λf. ∀a ∀b ∀c. IsFunction(f) → (f(a)=b ∧ f(a)=c) → b = c`
+pub type FuncApplyUniqueView = dyn for<'f> View<'f, Output = <Axiomize as FirstOrder>::ForAll<FuncApplyUniqueView1<'f>>>
+    + 'static;
+/// `λa. ∀b ∀c. IsFunction(f) → (f(a)=b ∧ f(a)=c) → b = c`
+pub type FuncApplyUniqueView1<'f> = dyn for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<FuncApplyUniqueView2<'f, 'a>>>
+    + 'static;
+/// `λb. ∀c. IsFunction(f) → (f(a)=b ∧ f(a)=c) → b = c`
+pub type FuncApplyUniqueView2<'f, 'a> = dyn for<'b> View<'b, Output = <Axiomize as FirstOrder>::ForAll<FuncApplyUniqueView3<'f, 'a, 'b>>>
+    + 'static;
+/// `λc. IsFunction(f) → (f(a)=b ∧ f(a)=c) → b = c`
+pub type FuncApplyUniqueView3<'f, 'a, 'b> = dyn for<'c> View<
+        'c,
+        Output = pred!(
+            { Axiomize },
+            IsFunction::<'f> >>=
+                ((Applies::<'f, 'a, 'b>) && (Applies::<'f, 'a, 'c>)) >>= Eq::<'b, 'c>
+        ),
+    > + 'static;
+
+/// `∀f ∀a ∀b ∀c. IsFunction(f) → (f(a)=b ∧ f(a)=c) → b = c` — **proved**.
+///
+/// A function has at most one value at each argument. This is the defining
+/// property unpacked into usable form: [`IsFunction`] states it behind three
+/// quantifiers, and this is that statement with them eliminated.
+pub fn func_apply_unique() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<FuncApplyUniqueView>>
+{
+    forall_intro(FuncApplyUnique)
+}
+
+#[derive(Clone, Copy)]
+struct FuncApplyUnique;
+impl<Q> Generalise<Axiomize, Q> for FuncApplyUnique
+where
+    Q: for<'f> View<'f, Output = <Axiomize as FirstOrder>::ForAll<FuncApplyUniqueView1<'f>>>
+        + ?Sized,
+{
+    fn prove<'f>(self) -> Cert<Axiomize, <Q as View<'f>>::Output> {
+        forall_intro::<Axiomize, FuncApplyUniqueView1<'f>, _>(FuncApplyUnique1(PhantomData))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct FuncApplyUnique1<'f>(PhantomData<&'f ()>);
+impl<'f, Q> Generalise<Axiomize, Q> for FuncApplyUnique1<'f>
+where
+    Q: for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<FuncApplyUniqueView2<'f, 'a>>>
+        + ?Sized,
+{
+    fn prove<'a>(self) -> Cert<Axiomize, <Q as View<'a>>::Output> {
+        forall_intro::<Axiomize, FuncApplyUniqueView2<'f, 'a>, _>(FuncApplyUnique2(PhantomData))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct FuncApplyUnique2<'f, 'a>(PhantomData<(&'f (), &'a ())>);
+impl<'f, 'a, Q> Generalise<Axiomize, Q> for FuncApplyUnique2<'f, 'a>
+where
+    Q: for<'b> View<
+            'b,
+            Output = <Axiomize as FirstOrder>::ForAll<FuncApplyUniqueView3<'f, 'a, 'b>>,
+        > + ?Sized,
+{
+    fn prove<'b>(self) -> Cert<Axiomize, <Q as View<'b>>::Output> {
+        forall_intro::<Axiomize, FuncApplyUniqueView3<'f, 'a, 'b>, _>(FuncApplyUnique3(PhantomData))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct FuncApplyUnique3<'f, 'a, 'b>(PhantomData<(&'f (), &'a (), &'b ())>);
+impl<'f, 'a, 'b, Q> Generalise<Axiomize, Q> for FuncApplyUnique3<'f, 'a, 'b>
+where
+    Q: for<'c> View<
+            'c,
+            Output = pred!(
+                { Axiomize },
+                IsFunction::<'f> >>=
+                    ((Applies::<'f, 'a, 'b>) && (Applies::<'f, 'a, 'c>)) >>= Eq::<'b, 'c>
+            ),
+        > + ?Sized,
+{
+    fn prove<'c>(self) -> Cert<Axiomize, <Q as View<'c>>::Output> {
+        func_apply_unique_at::<'f, 'a, 'b, 'c>()
+    }
+}
+
+/// `λf. ∀a ∀b. f(a) = b → a ∈ dom f`
+pub type AppliesInDomainView = dyn for<'f> View<'f, Output = <Axiomize as FirstOrder>::ForAll<AppliesInDomainView1<'f>>>
+    + 'static;
+/// `λa. ∀b. f(a) = b → a ∈ dom f`
+pub type AppliesInDomainView1<'f> = dyn for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<AppliesInDomainView2<'f, 'a>>>
+    + 'static;
+/// `λb. f(a) = b → a ∈ dom f`
+pub type AppliesInDomainView2<'f, 'a> = dyn for<'b> View<'b, Output = pred!({ Axiomize }, Applies::<'f, 'a, 'b> >>= InDomain::<'f, 'a>)>
+    + 'static;
+
+/// `∀f ∀a ∀b. f(a) = b → a ∈ dom f` — **proved**.
+///
+/// Anything a function maps somewhere is in its domain. The witness for the
+/// existential is the value itself, so this is [`FirstOrder::exists_elim`] and
+/// nothing more.
+pub fn applies_in_domain() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<AppliesInDomainView>>
+{
+    forall_intro(AppliesInDomain)
+}
+
+#[derive(Clone, Copy)]
+struct AppliesInDomain;
+impl<Q> Generalise<Axiomize, Q> for AppliesInDomain
+where
+    Q: for<'f> View<'f, Output = <Axiomize as FirstOrder>::ForAll<AppliesInDomainView1<'f>>>
+        + ?Sized,
+{
+    fn prove<'f>(self) -> Cert<Axiomize, <Q as View<'f>>::Output> {
+        forall_intro::<Axiomize, AppliesInDomainView1<'f>, _>(AppliesInDomain1(PhantomData))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct AppliesInDomain1<'f>(PhantomData<&'f ()>);
+impl<'f, Q> Generalise<Axiomize, Q> for AppliesInDomain1<'f>
+where
+    Q: for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<AppliesInDomainView2<'f, 'a>>>
+        + ?Sized,
+{
+    fn prove<'a>(self) -> Cert<Axiomize, <Q as View<'a>>::Output> {
+        forall_intro::<Axiomize, AppliesInDomainView2<'f, 'a>, _>(AppliesInDomain2(PhantomData))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct AppliesInDomain2<'f, 'a>(PhantomData<(&'f (), &'a ())>);
+impl<'f, 'a, Q> Generalise<Axiomize, Q> for AppliesInDomain2<'f, 'a>
+where
+    Q: for<'b> View<'b, Output = pred!({ Axiomize }, Applies::<'f, 'a, 'b> >>= InDomain::<'f, 'a>)>
+        + ?Sized,
+{
+    fn prove<'b>(self) -> Cert<Axiomize, <Q as View<'b>>::Output> {
+        applies_in_domain_at::<'f, 'a, 'b>()
+    }
+}
+
 /// Typecheck witnesses: `cargo check` is the proof checker.
 #[expect(dead_code, reason = "typecheck-only proof assertions")]
 const _: () = {
@@ -1440,6 +1702,38 @@ const _: () = {
         let _ = singleton_injective();
         let _ = pair_collapses();
         let _ = eq_in_right();
+    }
+
+    /// The function elimination rules.
+    fn functions_can_be_unpacked() {
+        let _ = func_single_valued();
+        let _ = func_is_relation();
+        let _ = func_apply_unique();
+        let _ = applies_in_domain();
+    }
+
+    /// Splitting [`IsSingleValued`] out of [`IsFunction`] must leave the
+    /// proposition unchanged.
+    fn is_function_is_the_definition<'f>(
+        f: Cert<
+            Axiomize,
+            pred!(
+                { Axiomize },
+                (IsRelation::<'f>)
+                    && (ForAll::<'x, 'y, 'z>(
+                        ((Applies::<'f, 'x, 'y>) && (Applies::<'f, 'x, 'z>)).imply(Eq::<'y, 'z>)
+                    ))
+            ),
+        >,
+    ) -> Cert<Axiomize, IsFunction<'f>> {
+        f
+    }
+
+    /// Likewise for naming [`InDomain`]'s body as [`InDomainView`].
+    fn in_domain_is_the_definition<'f, 'q>(
+        d: Cert<Axiomize, pred!({ Axiomize }, Exists::<'b>(Applies::<'f, 'q, 'b>))>,
+    ) -> Cert<Axiomize, InDomain<'f, 'q>> {
+        d
     }
 
     /// The one theorem so far that spends an axiom.
