@@ -18,9 +18,7 @@
 use super::Axiomize;
 use super::base::sealed_cert::cert;
 use crate::logic::prop::View;
-use crate::logic::set::{
-    Applies, Eq, In, IsEmpty, IsFunction, IsPair, IsSuccOf, Rel2, Subset,
-};
+use crate::logic::set::{Applies, Eq, In, IsEmpty, IsFunction, IsPair, IsSuccOf, Rel2, Subset};
 use crate::macros::thm;
 
 // ---------------------------------------------------------------------------

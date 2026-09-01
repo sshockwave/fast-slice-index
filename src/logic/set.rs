@@ -65,10 +65,8 @@ pub type IsSingleton<'s, 'a> = pred!({ Axiomize }, ForAll::<'z>((In::<'z, 's>).i
 ///
 /// Named separately because a proof about pairs has to pin this view in an
 /// impl header, and the `pred!` form gives it no name.
-pub type PairView<'p, 'a, 'b> = dyn for<'z> View<
-    'z,
-    Output = pred!({ Axiomize }, In::<'z, 'p>.iff(Eq::<'z, 'a> || Eq::<'z, 'b>)),
-> + 'static;
+pub type PairView<'p, 'a, 'b> = dyn for<'z> View<'z, Output = pred!({ Axiomize }, In::<'z, 'p>.iff(Eq::<'z, 'a> || Eq::<'z, 'b>))>
+    + 'static;
 
 /// `IsPair(p, a, b) := ∀z. (z ∈ p ↔ (z = a ∨ z = b))`, i.e. `p = {a, b}`.
 pub type IsPair<'p, 'a, 'b> = <Axiomize as FirstOrder>::ForAll<PairView<'p, 'a, 'b>>;
@@ -281,12 +279,12 @@ pub type EqTransView1<'x> =
     dyn for<'y> View<'y, Output = <Axiomize as FirstOrder>::ForAll<EqTransView2<'x, 'y>>> + 'static;
 /// `λw. x = y → y = w → x = w`
 pub type EqTransView2<'x, 'y> = dyn for<'w> View<
-    'w,
-    Output = <Axiomize as Imply>::Imply<
-        Eq<'x, 'y>,
-        <Axiomize as Imply>::Imply<Eq<'y, 'w>, Eq<'x, 'w>>,
-    >,
-> + 'static;
+        'w,
+        Output = <Axiomize as Imply>::Imply<
+            Eq<'x, 'y>,
+            <Axiomize as Imply>::Imply<Eq<'y, 'w>, Eq<'x, 'w>>,
+        >,
+    > + 'static;
 
 /// `∀x ∀y ∀w. x = y → y = w → x = w` — **proved**.
 ///
@@ -340,7 +338,9 @@ where
             EqView<'x, 'y>,
             EqView<'y, 'w>,
         >(
-            PhantomData, PhantomData, PhantomData
+            PhantomData,
+            PhantomData,
+            PhantomData,
         )))
     }
 }
@@ -403,21 +403,19 @@ where
 pub type PairUniqueView =
     dyn for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<PairUniqueView1<'a>>> + 'static;
 /// `λb. ∀p ∀q. p = {a,b} → q = {a,b} → p = q`
-pub type PairUniqueView1<'a> =
-    dyn for<'b> View<'b, Output = <Axiomize as FirstOrder>::ForAll<PairUniqueView2<'a, 'b>>>
-        + 'static;
+pub type PairUniqueView1<'a> = dyn for<'b> View<'b, Output = <Axiomize as FirstOrder>::ForAll<PairUniqueView2<'a, 'b>>>
+    + 'static;
 /// `λp. ∀q. p = {a,b} → q = {a,b} → p = q`
-pub type PairUniqueView2<'a, 'b> =
-    dyn for<'p> View<'p, Output = <Axiomize as FirstOrder>::ForAll<PairUniqueView3<'a, 'b, 'p>>>
-        + 'static;
+pub type PairUniqueView2<'a, 'b> = dyn for<'p> View<'p, Output = <Axiomize as FirstOrder>::ForAll<PairUniqueView3<'a, 'b, 'p>>>
+    + 'static;
 /// `λq. p = {a,b} → q = {a,b} → p = q`
 pub type PairUniqueView3<'a, 'b, 'p> = dyn for<'q> View<
-    'q,
-    Output = pred!(
-        { Axiomize },
-        IsPair::<'p, 'a, 'b> >>= IsPair::<'q, 'a, 'b> >>= Eq::<'p, 'q>
-    ),
-> + 'static;
+        'q,
+        Output = pred!(
+            { Axiomize },
+            IsPair::<'p, 'a, 'b> >>= IsPair::<'q, 'a, 'b> >>= Eq::<'p, 'q>
+        ),
+    > + 'static;
 
 /// `∀a ∀b ∀p ∀q. p = {a,b} → q = {a,b} → p = q` — **proved**.
 ///
@@ -484,7 +482,9 @@ where
             PairView<'p, 'a, 'b>,
             PairView<'q, 'a, 'b>,
         >(
-            PhantomData, PhantomData, PhantomData
+            PhantomData,
+            PhantomData,
+            PhantomData,
         )))
     }
 }
@@ -561,7 +561,10 @@ fn pair_member<'a, 'b, 'c, 'p>(
 ) -> Cert<Axiomize, <Axiomize as Imply>::Imply<IsPair<'p, 'a, 'b>, In<'c, 'p>>> {
     <Axiomize as PropLogic>::l2()
         .mp(syllogism()
-            .mp(<Axiomize as FirstOrder>::forall_elim::<'c, PairView<'p, 'a, 'b>>())
+            .mp(<Axiomize as FirstOrder>::forall_elim::<
+                'c,
+                PairView<'p, 'a, 'b>,
+            >())
             .mp(<Axiomize as And>::and_right()))
         .mp(<Axiomize as PropLogic>::l1().mp(side))
 }
@@ -570,13 +573,11 @@ fn pair_member<'a, 'b, 'c, 'p>(
 pub type PairLeftView =
     dyn for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<PairLeftView1<'a>>> + 'static;
 /// `λb. ∀p. p = {a,b} → a ∈ p`
-pub type PairLeftView1<'a> =
-    dyn for<'b> View<'b, Output = <Axiomize as FirstOrder>::ForAll<PairLeftView2<'a, 'b>>>
-        + 'static;
+pub type PairLeftView1<'a> = dyn for<'b> View<'b, Output = <Axiomize as FirstOrder>::ForAll<PairLeftView2<'a, 'b>>>
+    + 'static;
 /// `λp. p = {a,b} → a ∈ p`
-pub type PairLeftView2<'a, 'b> =
-    dyn for<'p> View<'p, Output = pred!({ Axiomize }, IsPair::<'p, 'a, 'b> >>= In::<'a, 'p>)>
-        + 'static;
+pub type PairLeftView2<'a, 'b> = dyn for<'p> View<'p, Output = pred!({ Axiomize }, IsPair::<'p, 'a, 'b> >>= In::<'a, 'p>)>
+    + 'static;
 
 /// `∀a ∀b ∀p. p = {a,b} → a ∈ p` — **proved**.
 pub fn pair_left() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<PairLeftView>> {
@@ -621,13 +622,11 @@ where
 pub type PairRightView =
     dyn for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<PairRightView1<'a>>> + 'static;
 /// `λb. ∀p. p = {a,b} → b ∈ p`
-pub type PairRightView1<'a> =
-    dyn for<'b> View<'b, Output = <Axiomize as FirstOrder>::ForAll<PairRightView2<'a, 'b>>>
-        + 'static;
+pub type PairRightView1<'a> = dyn for<'b> View<'b, Output = <Axiomize as FirstOrder>::ForAll<PairRightView2<'a, 'b>>>
+    + 'static;
 /// `λp. p = {a,b} → b ∈ p`
-pub type PairRightView2<'a, 'b> =
-    dyn for<'p> View<'p, Output = pred!({ Axiomize }, IsPair::<'p, 'a, 'b> >>= In::<'b, 'p>)>
-        + 'static;
+pub type PairRightView2<'a, 'b> = dyn for<'p> View<'p, Output = pred!({ Axiomize }, IsPair::<'p, 'a, 'b> >>= In::<'b, 'p>)>
+    + 'static;
 
 /// `∀a ∀b ∀p. p = {a,b} → b ∈ p` — **proved**.
 pub fn pair_right() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<PairRightView>> {
@@ -649,8 +648,7 @@ where
 struct PairRight1<'a>(PhantomData<&'a ()>);
 impl<'a, Q> Generalise<Axiomize, Q> for PairRight1<'a>
 where
-    Q: for<'b> View<'b, Output = <Axiomize as FirstOrder>::ForAll<PairRightView2<'a, 'b>>>
-        + ?Sized,
+    Q: for<'b> View<'b, Output = <Axiomize as FirstOrder>::ForAll<PairRightView2<'a, 'b>>> + ?Sized,
 {
     fn prove<'b>(self) -> Cert<Axiomize, <Q as View<'b>>::Output> {
         forall_intro::<Axiomize, PairRightView2<'a, 'b>, _>(PairRight2(PhantomData))
