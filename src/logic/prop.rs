@@ -1,5 +1,3 @@
-#![forbid(unsafe_code)]
-
 pub mod il;
 pub mod neg;
 mod rust;

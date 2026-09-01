@@ -1,7 +1,6 @@
 pub mod algebra;
 pub mod logic;
 pub mod rel;
-pub mod utils;
 
 mod macros {
     // Re-export pred procedural macro from the logic-macros crate
