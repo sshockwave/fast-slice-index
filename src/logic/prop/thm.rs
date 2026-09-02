@@ -1,5 +1,5 @@
 use super::{
-    And, Cert, ExistsProof, FirstOrder, ForAllProof, Iff, Imply, Negation, PropLogic, View,
+    And, Cert, ExistsProof, FirstOrder, ForAllProof, Iff, Imply, Negation, Or, PropLogic, View,
 };
 use ::core::marker::PhantomData;
 
@@ -184,6 +184,27 @@ pub fn iff_trans<A, B, C, Prop: And>()
         .mp(syllogism().mp(ab).mp(bc))
         .mp(syllogism().mp(cb).mp(ba))
         .cast()
+}
+
+/// `(B ↔ C) → ((A ↔ B) → (A ↔ C))`
+///
+/// [`iff_trans`] with the right-hand biconditional already in hand, which is
+/// the shape needed to rewrite one side of a biconditional under a quantifier.
+pub fn iff_extend<A, B, C, Prop: And>(
+    bc: Cert<Prop, Iff<Prop, B, C>>,
+) -> Cert<Prop, Prop::Imply<Iff<Prop, A, B>, Iff<Prop, A, C>>> {
+    let h = Deduction::<Iff<Prop, A, B>, Prop>::assume();
+    iff_trans::<A, B, C, Prop>()
+        .upgrade()
+        .mp(Prop::and_intro().upgrade().mp(h).mp(bc.upgrade()))
+        .cast()
+}
+
+/// `P ↔ (P ∨ P)`, at any logic with conjunction and disjunction.
+pub fn or_idem<P, Prop: And + Or>() -> Cert<Prop, Iff<Prop, P, Prop::Or<P, P>>> {
+    Prop::and_intro()
+        .mp(Prop::or_left())
+        .mp(Prop::or_elim().mp(reflexive()).mp(reflexive()))
 }
 
 /// Conjunction survives an assumption: every axiom is closed, so `upgrade`

@@ -14,7 +14,7 @@ use ::core::marker::PhantomData;
 
 use crate::logic::prop::{
     And, Cert, FirstOrder, ForAllProof, Generalise, Iff, PropLogic, View, and_comm, and_map, curry,
-    forall_intro, iff_trans, syllogism,
+    forall_intro, iff_extend, iff_trans, syllogism,
 };
 use crate::macros::{pred, thm};
 use crate::rel::ext::{ExtEq, ExtView, Membership};
@@ -41,6 +41,105 @@ pub type DescView<'s, Logic, M, D> = dyn for<'z> View<
 
 /// `Describes(s) := ∀z. (z ∈ s ↔ D(z))`, i.e. `s` is *the* set of `D`s.
 pub type Describes<'s, Logic, M, D> = <Logic as FirstOrder>::ForAll<DescView<'s, Logic, M, D>>;
+
+/// `Describes(s) → D(z) → z ∈ s` — reading the definition right-to-left.
+///
+/// The evidence `D(z)` is taken as an argument rather than as a hypothesis
+/// because the notions instantiating this supply it in different ways: a
+/// singleton offers `a = a`, a pair a choice of side.
+pub fn desc_intro_at<'s, 'z, Logic, M, D>(
+    d: Cert<Logic, D::Holds<'z>>,
+) -> Cert<Logic, Logic::Imply<Describes<'s, Logic, M, D>, M::In<'z, 's>>>
+where
+    Logic: PropLogic + And + FirstOrder,
+    M: Membership<Logic> + ?Sized,
+    D: Description<Logic> + ?Sized,
+{
+    Logic::l2()
+        .mp(syllogism()
+            .mp(Logic::forall_elim::<'z, DescView<'s, Logic, M, D>>())
+            .mp(Logic::and_right()))
+        .mp(Logic::l1().mp(d))
+}
+
+/// `Describes(s) → z ∈ s → D(z)` — reading it left-to-right.
+///
+/// The converse of [`desc_intro_at`]: a description says what its set
+/// contains, so a member of it satisfies the condition.
+pub fn desc_elim_at<'s, 'z, Logic, M, D>()
+-> Cert<Logic, Logic::Imply<Describes<'s, Logic, M, D>, Logic::Imply<M::In<'z, 's>, D::Holds<'z>>>>
+where
+    Logic: PropLogic + And + FirstOrder,
+    M: Membership<Logic> + ?Sized,
+    D: Description<Logic> + ?Sized,
+{
+    syllogism()
+        .mp(Logic::forall_elim::<'z, DescView<'s, Logic, M, D>>())
+        .mp(Logic::and_left())
+}
+
+/// Two conditions that hold of exactly the same things.
+///
+/// Stated pointwise, as an obligation rather than a quantified hypothesis, so
+/// that [`desc_congr_at`]'s proof term stays a unit struct — the same shape
+/// [`Extensional`](crate::rel::ext::Extensional) uses.
+pub trait SameAs<Logic, D>: Description<Logic>
+where
+    Logic: PropLogic + And,
+    D: Description<Logic> + ?Sized,
+{
+    /// `D₁(z) ↔ D₂(z)`
+    fn iff_at<'z>() -> Cert<Logic, Iff<Logic, Self::Holds<'z>, D::Holds<'z>>>;
+}
+
+/// `Describes(s, D₁) → Describes(s, D₂)`, for conditions that agree pointwise.
+///
+/// A set is named by *what* its members satisfy, not by how the condition is
+/// written, so an equivalent condition describes the same set.
+pub fn desc_congr_at<'s, Logic, M, D1, D2>()
+-> Cert<Logic, Logic::Imply<Describes<'s, Logic, M, D1>, Describes<'s, Logic, M, D2>>>
+where
+    Logic: PropLogic + And + FirstOrder,
+    M: Membership<Logic> + ?Sized,
+    D1: SameAs<Logic, D2> + ?Sized,
+    D2: Description<Logic> + ?Sized,
+{
+    Logic::forall_gen(DescCongr::<'s, Logic, M, D1, D2, DescView<'s, Logic, M, D1>>(
+        PhantomData,
+    ))
+}
+
+struct DescCongr<'s, Logic, M: ?Sized, D1: ?Sized, D2: ?Sized, E: ?Sized>(
+    PhantomData<(&'s (), Logic, *const M, *const D1, *const D2, *const E)>,
+);
+
+impl<'s, Logic, M: ?Sized, D1: ?Sized, D2: ?Sized, E: ?Sized> Clone
+    for DescCongr<'s, Logic, M, D1, D2, E>
+{
+    fn clone(&self) -> Self {
+        DescCongr(PhantomData)
+    }
+}
+
+impl<'s, Logic, M, D1, D2, E, Q> ForAllProof<Logic, Logic::ForAll<E>, Q>
+    for DescCongr<'s, Logic, M, D1, D2, E>
+where
+    Logic: PropLogic + And + FirstOrder,
+    M: Membership<Logic> + ?Sized,
+    D1: SameAs<Logic, D2> + ?Sized,
+    D2: Description<Logic> + ?Sized,
+    E: for<'z> View<'z, Output = Iff<Logic, M::In<'z, 's>, D1::Holds<'z>>> + ?Sized,
+    Q: for<'z> View<'z, Output = Iff<Logic, M::In<'z, 's>, D2::Holds<'z>>> + ?Sized,
+{
+    fn prove<'z>(
+        self,
+    ) -> Cert<Logic, Logic::Imply<Logic::ForAll<E>, <Q as View<'z>>::Output>> {
+        // (z∈s ↔ D₁ z), then rewrite the right side with D₁ z ↔ D₂ z.
+        syllogism()
+            .mp(Logic::forall_elim::<'z, E>())
+            .mp(iff_extend(D1::iff_at::<'z>()))
+    }
+}
 
 /// `Describes(p) → Describes(q) → p = q`, at fixed points.
 ///

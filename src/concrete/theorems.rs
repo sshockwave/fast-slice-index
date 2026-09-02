@@ -20,9 +20,12 @@ use super::lang::*;
 use crate::logic::prop::{
     And, Cert, Deduction, DeductionUpgrade, ExistsProof, FirstOrder, ForAllProof, Generalise, Iff,
     Imply, Intuitionistic, Negation, Or, PropLogic, View, and_comm, and_map, curry, exchange,
-    forall_intro, iff_trans, reflexive, syllogism,
+    forall_intro, or_idem, syllogism,
 };
-use crate::rel::desc::{DescUniqueView, DescUniqueView1, desc_unique};
+use crate::rel::desc::{
+    DescUniqueView, DescUniqueView1, SameAs, desc_congr_at, desc_elim_at, desc_intro_at,
+    desc_unique,
+};
 use crate::rel::eq::ClosedEq;
 use crate::rel::ext::{ExtReflView, Extensional, in_left, in_right};
 use crate::macros::pred;
@@ -100,14 +103,7 @@ fn eq_refl_at<'x>() -> Cert<Axiomize, Eq<'x, 'x>> {
 fn pair_member<'a, 'b, 'c, 'p>(
     side: Cert<Axiomize, <Axiomize as Or>::Or<Eq<'c, 'a>, Eq<'c, 'b>>>,
 ) -> Cert<Axiomize, <Axiomize as Imply>::Imply<IsPair<'p, 'a, 'b>, In<'c, 'p>>> {
-    <Axiomize as PropLogic>::l2()
-        .mp(syllogism()
-            .mp(<Axiomize as FirstOrder>::forall_elim::<
-                'c,
-                PairView<'p, 'a, 'b>,
-            >())
-            .mp(<Axiomize as And>::and_right()))
-        .mp(<Axiomize as PropLogic>::l1().mp(side))
+    desc_intro_at::<'p, 'c, Axiomize, SetIn, PairCond<'a, 'b>>(side)
 }
 
 /// `λa. ∀b ∀p. p = {a,b} → a ∈ p`
@@ -222,14 +218,7 @@ where
 /// disjunction to choose a side of, only `a = a`.
 fn singleton_member_at<'a, 's>()
 -> Cert<Axiomize, <Axiomize as Imply>::Imply<IsSingleton<'s, 'a>, In<'a, 's>>> {
-    <Axiomize as PropLogic>::l2()
-        .mp(syllogism()
-            .mp(<Axiomize as FirstOrder>::forall_elim::<
-                'a,
-                SingletonView<'s, 'a>,
-            >())
-            .mp(<Axiomize as And>::and_right()))
-        .mp(<Axiomize as PropLogic>::l1().mp(eq_refl_at::<'a>()))
+    desc_intro_at::<'s, 'a, Axiomize, SetIn, SingletonCond<'a>>(eq_refl_at::<'a>())
 }
 
 /// `λa. ∀s. s = {a} → a ∈ s`
@@ -304,26 +293,27 @@ where
 // ---------------------------------------------------------------------------
 // A singleton is a pair of one thing with itself
 // ---------------------------------------------------------------------------
+//
+// The two directions are the same lemma — [`desc_congr_at`] — read each way.
+// All that is specific to singletons and pairs is that `z = a` and `z = a ∨
+// z = a` hold of the same things, which is `or_idem`.
 
-/// `P ↔ (P ∨ P)`, at any logic with conjunction and disjunction.
-fn or_idem<P, L: And + Or>() -> Cert<L, Iff<L, P, L::Or<P, P>>> {
-    L::and_intro()
-        .mp(L::or_left())
-        .mp(L::or_elim().mp(reflexive()).mp(reflexive()))
+impl<'a> SameAs<Axiomize, PairCond<'a, 'a>> for SingletonCond<'a> {
+    fn iff_at<'z>() -> Cert<
+        Axiomize,
+        Iff<Axiomize, Eq<'z, 'a>, pred!({ Axiomize }, (Eq::<'z, 'a>) || (Eq::<'z, 'a>))>,
+    > {
+        or_idem::<Eq<'z, 'a>, Axiomize>()
+    }
 }
 
-/// `(B ↔ C) → ((A ↔ B) → (A ↔ C))`
-///
-/// [`iff_trans`] with the right-hand biconditional already in hand, which is
-/// the shape needed to rewrite one side of a biconditional under a quantifier.
-fn iff_extend<A, B, C, L: And>(
-    bc: Cert<L, Iff<L, B, C>>,
-) -> Cert<L, L::Imply<Iff<L, A, B>, Iff<L, A, C>>> {
-    let h = Deduction::<Iff<L, A, B>, L>::assume();
-    iff_trans::<A, B, C, L>()
-        .upgrade()
-        .mp(L::and_intro().upgrade().mp(h).mp(bc.upgrade()))
-        .cast()
+impl<'a> SameAs<Axiomize, SingletonCond<'a>> for PairCond<'a, 'a> {
+    fn iff_at<'z>() -> Cert<
+        Axiomize,
+        Iff<Axiomize, pred!({ Axiomize }, (Eq::<'z, 'a>) || (Eq::<'z, 'a>)), Eq<'z, 'a>>,
+    > {
+        and_comm().mp(or_idem::<Eq<'z, 'a>, Axiomize>())
+    }
 }
 
 /// `λa. ∀s. s = {a} → s = {a,a}`
@@ -365,38 +355,7 @@ where
         > + ?Sized,
 {
     fn prove<'s>(self) -> Cert<Axiomize, <Q as View<'s>>::Output> {
-        <Axiomize as FirstOrder>::forall_gen(SingletonIsPair2::<'a, 's, SingletonView<'s, 'a>>(
-            PhantomData,
-            PhantomData,
-        ))
-    }
-}
-
-struct SingletonIsPair2<'a, 's, E: ?Sized>(PhantomData<(&'a (), &'s ())>, PhantomData<E>);
-impl<E: ?Sized> Clone for SingletonIsPair2<'_, '_, E> {
-    fn clone(&self) -> Self {
-        SingletonIsPair2(PhantomData, PhantomData)
-    }
-}
-impl<'a, 's, E, Q> ForAllProof<Axiomize, <Axiomize as FirstOrder>::ForAll<E>, Q>
-    for SingletonIsPair2<'a, 's, E>
-where
-    E: for<'z> View<'z, Output = Iff<Axiomize, In<'z, 's>, Eq<'z, 'a>>> + ?Sized,
-    Q: for<'z> View<
-            'z,
-            Output = pred!({ Axiomize }, In::<'z, 's>.iff(Eq::<'z, 'a> || Eq::<'z, 'a>)),
-        > + ?Sized,
-{
-    fn prove<'z>(
-        self,
-    ) -> Cert<
-        Axiomize,
-        <Axiomize as Imply>::Imply<<Axiomize as FirstOrder>::ForAll<E>, <Q as View<'z>>::Output>,
-    > {
-        // (z∈s ↔ z=a), then rewrite the right side with z=a ↔ (z=a ∨ z=a).
-        syllogism()
-            .mp(<Axiomize as FirstOrder>::forall_elim::<'z, E>())
-            .mp(iff_extend(or_idem::<Eq<'z, 'a>, Axiomize>()))
+        desc_congr_at::<'s, Axiomize, SetIn, SingletonCond<'a>, PairCond<'a, 'a>>()
     }
 }
 
@@ -436,38 +395,7 @@ where
         > + ?Sized,
 {
     fn prove<'s>(self) -> Cert<Axiomize, <Q as View<'s>>::Output> {
-        <Axiomize as FirstOrder>::forall_gen(PairIsSingleton2::<'a, 's, PairView<'s, 'a, 'a>>(
-            PhantomData,
-            PhantomData,
-        ))
-    }
-}
-
-struct PairIsSingleton2<'a, 's, E: ?Sized>(PhantomData<(&'a (), &'s ())>, PhantomData<E>);
-impl<E: ?Sized> Clone for PairIsSingleton2<'_, '_, E> {
-    fn clone(&self) -> Self {
-        PairIsSingleton2(PhantomData, PhantomData)
-    }
-}
-impl<'a, 's, E, Q> ForAllProof<Axiomize, <Axiomize as FirstOrder>::ForAll<E>, Q>
-    for PairIsSingleton2<'a, 's, E>
-where
-    E: for<'z> View<
-            'z,
-            Output = pred!({ Axiomize }, In::<'z, 's>.iff(Eq::<'z, 'a> || Eq::<'z, 'a>)),
-        > + ?Sized,
-    Q: for<'z> View<'z, Output = Iff<Axiomize, In<'z, 's>, Eq<'z, 'a>>> + ?Sized,
-{
-    fn prove<'z>(
-        self,
-    ) -> Cert<
-        Axiomize,
-        <Axiomize as Imply>::Imply<<Axiomize as FirstOrder>::ForAll<E>, <Q as View<'z>>::Output>,
-    > {
-        // Same rewrite as `singleton_is_pair`, with the biconditional flipped.
-        syllogism()
-            .mp(<Axiomize as FirstOrder>::forall_elim::<'z, E>())
-            .mp(iff_extend(and_comm().mp(or_idem::<Eq<'z, 'a>, Axiomize>())))
+        desc_congr_at::<'s, Axiomize, SetIn, PairCond<'a, 'a>, SingletonCond<'a>>()
     }
 }
 
@@ -495,13 +423,11 @@ fn singleton_injective_at<'a, 'c, 's>() -> Cert<
                 .upgrade()
                 .pipe(singleton_member_at::<'a, 's>().upgrade().upgrade());
             // ... and everything in `{c}` equals `c`.
-            let to_c = sc
-                .pipe(
-                    <Axiomize as FirstOrder>::forall_elim::<'a, SingletonView<'s, 'c>>()
-                        .upgrade()
-                        .upgrade(),
-                )
-                .pipe(<Axiomize as And>::and_left().upgrade().upgrade());
+            let to_c = sc.pipe(
+                desc_elim_at::<'s, 'a, Axiomize, SetIn, SingletonCond<'c>>()
+                    .upgrade()
+                    .upgrade(),
+            );
             a_in_s.pipe(to_c)
         })
     })
@@ -592,13 +518,11 @@ fn pair_collapses_at<'a, 'b, 'p>() -> Cert<
                     .upgrade(),
             );
             // ... and everything in `{a}` equals `a`.
-            let to_a = pa
-                .pipe(
-                    <Axiomize as FirstOrder>::forall_elim::<'b, SingletonView<'p, 'a>>()
-                        .upgrade()
-                        .upgrade(),
-                )
-                .pipe(<Axiomize as And>::and_left().upgrade().upgrade());
+            let to_a = pa.pipe(
+                desc_elim_at::<'p, 'b, Axiomize, SetIn, SingletonCond<'a>>()
+                    .upgrade()
+                    .upgrade(),
+            );
             b_in_p.pipe(to_a)
         })
     })
