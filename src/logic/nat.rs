@@ -1,7 +1,6 @@
 use std::marker::PhantomData;
 
-use crate::algebra::group::{self, BinOp};
-use crate::algebra::ring::SemiRing;
+use crate::algebra::group;
 use crate::logic::function::{Equality, Function, Injection};
 use crate::logic::prop::{And, FirstOrder, Negation, View};
 use crate::macros::{pred, thm};
