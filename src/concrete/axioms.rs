@@ -4,7 +4,7 @@
 //! from nothing, which is exactly what an axiom is. Keeping them alone in one
 //! file means the trusted base of the whole development can be audited by
 //! reading it end to end — the language they are stated in, and everything
-//! derived from them, lives in [`crate::logic::set`].
+//! derived from them, lives in [`super::theorems`].
 //!
 //! `cert` is reachable here and nowhere outside `axiom`, so this is the only
 //! place new assumptions can enter.
@@ -17,10 +17,10 @@
 
 use super::Axiomize;
 use super::base::sealed_cert::cert;
-use crate::logic::prop::{Cert, FirstOrder, View};
-use crate::logic::set::{
+use super::lang::{
     Applies, Eq, ExtView, In, InductiveView, IsFunction, IsPair, Rel2, SeparationView, Subset,
 };
+use crate::logic::prop::{Cert, FirstOrder, View};
 use crate::macros::thm;
 
 // ---------------------------------------------------------------------------
@@ -66,7 +66,7 @@ pub fn union() -> thm!(
 ///
 /// `P` is a type parameter instantiated per predicate, not a quantified
 /// variable — the same predicativity discipline as
-/// [`crate::logic::nat::NaturalNumbers::induction`]. Carving only out of an
+/// [`super::theorems::induction`]. Carving only out of an
 /// existing `a` is what keeps this from being naive comprehension, which would
 /// be inconsistent.
 pub fn separation<P>() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<SeparationView<P>>>

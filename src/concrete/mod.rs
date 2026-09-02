@@ -4,7 +4,7 @@
 //! answer different questions. `logic` is generic: its derivations are
 //! parameterised over a `Logic` and hold in *any* system meeting the stated
 //! bounds. [`Axiomize`] instead commits — it picks the classical connectives,
-//! and [`zfc`] asserts nine set-theoretic axioms outright.
+//! and [`axioms`] asserts nine set-theoretic axioms outright.
 //!
 //! The plan is to migrate proofs in the other direction over time: generalise a
 //! theorem into `logic` where it only needs bounds, then have the axiomatised
@@ -16,8 +16,10 @@
 
 use crate::logic::prop::{And, Cert, Imply, Intuitionistic, Negation, Or, neg::ProofRing};
 
+pub mod axioms;
 mod base;
-pub mod zfc;
+pub mod lang;
+pub mod theorems;
 
 pub struct Axiomize;
 
