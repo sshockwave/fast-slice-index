@@ -1,4 +1,6 @@
-use super::{And, Cert, ExistsProof, FirstOrder, ForAllProof, Imply, Negation, PropLogic, View};
+use super::{
+    And, Cert, ExistsProof, FirstOrder, ForAllProof, Iff, Imply, Negation, PropLogic, View,
+};
 use ::core::marker::PhantomData;
 
 impl<PQ, Prop: Imply + ?Sized> Cert<Prop, PQ> {
@@ -141,6 +143,46 @@ pub fn uncurry<A, B, C, Prop: And>()
     f.upgrade()
         .mp(ab.clone().pipe(Prop::and_left().upgrade().upgrade()))
         .mp(ab.pipe(Prop::and_right().upgrade().upgrade()))
+        .cast()
+}
+
+/// Commutativity of conjunction: `(A ∧ B) → (B ∧ A)`
+pub fn and_comm<A, B, Prop: And>() -> Cert<Prop, Prop::Imply<Prop::And<A, B>, Prop::And<B, A>>> {
+    let h = Deduction::<Prop::And<A, B>, Prop>::assume();
+    Prop::and_intro()
+        .upgrade()
+        .mp(h.clone().pipe(Prop::and_right().upgrade()))
+        .mp(h.pipe(Prop::and_left().upgrade()))
+        .cast()
+}
+
+/// Conjunction is a functor: `(A → A') → (B → B') → ((A ∧ B) → (A' ∧ B'))`
+pub fn and_map<A, B, A2, B2, Prop: And>(
+    f: Cert<Prop, Prop::Imply<A, A2>>,
+    g: Cert<Prop, Prop::Imply<B, B2>>,
+) -> Cert<Prop, Prop::Imply<Prop::And<A, B>, Prop::And<A2, B2>>> {
+    let h = Deduction::<Prop::And<A, B>, Prop>::assume();
+    Prop::and_intro()
+        .upgrade()
+        .mp(h.clone().pipe(Prop::and_left().upgrade()).pipe(f.upgrade()))
+        .mp(h.pipe(Prop::and_right().upgrade()).pipe(g.upgrade()))
+        .cast()
+}
+
+/// Transitivity of the biconditional: `((A ↔ B) ∧ (B ↔ C)) → (A ↔ C)`
+pub fn iff_trans<A, B, C, Prop: And>()
+-> Cert<Prop, Prop::Imply<Prop::And<Iff<Prop, A, B>, Iff<Prop, B, C>>, Iff<Prop, A, C>>> {
+    let h = Deduction::<Prop::And<Iff<Prop, A, B>, Iff<Prop, B, C>>, Prop>::assume();
+    let left = h.clone().pipe(Prop::and_left().upgrade());
+    let right = h.pipe(Prop::and_right().upgrade());
+    let ab = left.clone().pipe(Prop::and_left().upgrade());
+    let ba = left.pipe(Prop::and_right().upgrade());
+    let bc = right.clone().pipe(Prop::and_left().upgrade());
+    let cb = right.pipe(Prop::and_right().upgrade());
+    Prop::and_intro()
+        .upgrade()
+        .mp(syllogism().mp(ab).mp(bc))
+        .mp(syllogism().mp(cb).mp(ba))
         .cast()
 }
 

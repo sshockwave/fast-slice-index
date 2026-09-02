@@ -1,4 +1,5 @@
 pub mod eq;
+pub mod ext;
 pub mod poset;
 pub mod set;
 

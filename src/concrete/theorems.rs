@@ -16,283 +16,16 @@ use ::core::marker::PhantomData;
 
 use super::Axiomize;
 use super::axioms::ext;
+use super::equality::{SetEq, SetIn};
 use super::lang::*;
 use crate::logic::prop::{
     And, Cert, Deduction, DeductionUpgrade, ExistsProof, FirstOrder, ForAllProof, Generalise, Iff,
-    Imply, Intuitionistic, Negation, Or, PropLogic, View, curry, exchange, forall_intro, reflexive,
-    syllogism,
+    Imply, Intuitionistic, Negation, Or, PropLogic, View, and_comm, and_map, curry, exchange,
+    forall_intro, iff_trans, reflexive, syllogism,
 };
+use crate::rel::eq::ClosedEq;
+use crate::rel::ext::ExtReflView;
 use crate::macros::pred;
-
-// ---------------------------------------------------------------------------
-// Theorems: equality is an equivalence
-// ---------------------------------------------------------------------------
-//
-// These need no axiom at all. `Eq` unfolds to a biconditional, and `↔` is
-// reflexive and symmetric already from `PropLogic` + `And`. They are the first
-// evidence that the encoding carries content rather than merely typechecking.
-
-/// `λx. x = x`
-pub type EqReflView = dyn for<'x> View<'x, Output = Eq<'x, 'x>> + 'static;
-
-/// `∀x. x = x` — **proved**, not assumed.
-pub fn eq_refl() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<EqReflView>> {
-    forall_intro(EqRefl)
-}
-
-#[derive(Clone, Copy)]
-struct EqRefl;
-impl<Q> Generalise<Axiomize, Q> for EqRefl
-where
-    Q: for<'x> View<'x, Output = Eq<'x, 'x>> + ?Sized,
-{
-    fn prove<'x>(self) -> Cert<Axiomize, <Q as View<'x>>::Output> {
-        forall_intro::<Axiomize, EqView<'x, 'x>, _>(IffRefl(PhantomData))
-    }
-}
-
-#[derive(Clone, Copy)]
-struct IffRefl<'x>(PhantomData<&'x ()>);
-impl<'x, Q> Generalise<Axiomize, Q> for IffRefl<'x>
-where
-    Q: for<'z> View<'z, Output = Iff<Axiomize, In<'z, 'x>, In<'z, 'x>>> + ?Sized,
-{
-    fn prove<'z>(self) -> Cert<Axiomize, <Q as View<'z>>::Output> {
-        <Axiomize as And>::and_intro()
-            .mp(reflexive::<In<'z, 'x>, Axiomize>())
-            .mp(reflexive::<In<'z, 'x>, Axiomize>())
-    }
-}
-
-/// `(P ∧ Q) → (Q ∧ P)`, at any logic with conjunction.
-///
-/// Purely propositional, so it is a plain function: no `dyn` reaches an impl
-/// header and the nested-binder hazard does not arise.
-fn and_comm<P, Q, L: And>() -> Cert<L, L::Imply<L::And<P, Q>, L::And<Q, P>>> {
-    let h = Deduction::<L::And<P, Q>, L>::assume();
-    L::and_intro()
-        .upgrade()
-        .mp(h.clone().pipe(L::and_right().upgrade()))
-        .mp(h.pipe(L::and_left().upgrade()))
-        .cast()
-}
-
-/// `λx. ∀y. x = y → y = x`
-pub type EqSymmView =
-    dyn for<'x> View<'x, Output = <Axiomize as FirstOrder>::ForAll<EqSymmView1<'x>>> + 'static;
-/// `λy. x = y → y = x`
-pub type EqSymmView1<'x> =
-    dyn for<'y> View<'y, Output = <Axiomize as Imply>::Imply<Eq<'x, 'y>, Eq<'y, 'x>>> + 'static;
-
-/// `∀x ∀y. x = y → y = x` — **proved**.
-///
-/// Still no axiom: unfolding `Eq` turns this into commuting the two halves of a
-/// biconditional underneath a quantifier.
-pub fn eq_symm() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<EqSymmView>> {
-    forall_intro(EqSymm)
-}
-
-#[derive(Clone, Copy)]
-struct EqSymm;
-impl<Q> Generalise<Axiomize, Q> for EqSymm
-where
-    Q: for<'x> View<'x, Output = <Axiomize as FirstOrder>::ForAll<EqSymmView1<'x>>> + ?Sized,
-{
-    fn prove<'x>(self) -> Cert<Axiomize, <Q as View<'x>>::Output> {
-        forall_intro::<Axiomize, EqSymmView1<'x>, _>(EqSymm1(PhantomData))
-    }
-}
-
-#[derive(Clone, Copy)]
-struct EqSymm1<'x>(PhantomData<&'x ()>);
-impl<'x, Q> Generalise<Axiomize, Q> for EqSymm1<'x>
-where
-    Q: for<'y> View<'y, Output = <Axiomize as Imply>::Imply<Eq<'x, 'y>, Eq<'y, 'x>>> + ?Sized,
-{
-    fn prove<'y>(self) -> Cert<Axiomize, <Q as View<'y>>::Output> {
-        // `forall_gen` produces exactly `P → ∀z. Q z`; take `P` to be the
-        // hypothesis `x = y`, so no `Deduction` scope is needed here.
-        <Axiomize as FirstOrder>::forall_gen(EqSymm2::<'x, 'y, EqView<'x, 'y>>(
-            PhantomData,
-            PhantomData,
-        ))
-    }
-}
-
-struct EqSymm2<'x, 'y, E: ?Sized>(PhantomData<(&'x (), &'y ())>, PhantomData<E>);
-impl<E: ?Sized> Clone for EqSymm2<'_, '_, E> {
-    fn clone(&self) -> Self {
-        EqSymm2(PhantomData, PhantomData)
-    }
-}
-impl<'x, 'y, E, Q> ForAllProof<Axiomize, <Axiomize as FirstOrder>::ForAll<E>, Q>
-    for EqSymm2<'x, 'y, E>
-where
-    E: for<'z> View<'z, Output = Iff<Axiomize, In<'z, 'x>, In<'z, 'y>>> + ?Sized,
-    Q: for<'z> View<'z, Output = Iff<Axiomize, In<'z, 'y>, In<'z, 'x>>> + ?Sized,
-{
-    fn prove<'z>(
-        self,
-    ) -> Cert<
-        Axiomize,
-        <Axiomize as Imply>::Imply<<Axiomize as FirstOrder>::ForAll<E>, <Q as View<'z>>::Output>,
-    > {
-        // x = y  ⊢  (z ∈ x ↔ z ∈ y)  ⊢  (z ∈ y ↔ z ∈ x)
-        syllogism()
-            .mp(<Axiomize as FirstOrder>::forall_elim::<'z, E>())
-            .mp(and_comm())
-    }
-}
-
-/// `(A → A') → (B → B') → ((A ∧ B) → (A' ∧ B'))`
-fn and_map<A, B, A2, B2, L: And>(
-    f: Cert<L, L::Imply<A, A2>>,
-    g: Cert<L, L::Imply<B, B2>>,
-) -> Cert<L, L::Imply<L::And<A, B>, L::And<A2, B2>>> {
-    let h = Deduction::<L::And<A, B>, L>::assume();
-    L::and_intro()
-        .upgrade()
-        .mp(h.clone().pipe(L::and_left().upgrade()).pipe(f.upgrade()))
-        .mp(h.pipe(L::and_right().upgrade()).pipe(g.upgrade()))
-        .cast()
-}
-
-/// `((A ↔ B) ∧ (B ↔ C)) → (A ↔ C)`
-fn iff_trans<A, B, C, L: And>()
--> Cert<L, L::Imply<L::And<Iff<L, A, B>, Iff<L, B, C>>, Iff<L, A, C>>> {
-    let h = Deduction::<L::And<Iff<L, A, B>, Iff<L, B, C>>, L>::assume();
-    let left = h.clone().pipe(L::and_left().upgrade());
-    let right = h.pipe(L::and_right().upgrade());
-    let ab = left.clone().pipe(L::and_left().upgrade());
-    let ba = left.pipe(L::and_right().upgrade());
-    let bc = right.clone().pipe(L::and_left().upgrade());
-    let cb = right.pipe(L::and_right().upgrade());
-    L::and_intro()
-        .upgrade()
-        .mp(syllogism().mp(ab).mp(bc))
-        .mp(syllogism().mp(cb).mp(ba))
-        .cast()
-}
-
-/// `λx. ∀y ∀w. x = y → y = w → x = w`
-pub type EqTransView =
-    dyn for<'x> View<'x, Output = <Axiomize as FirstOrder>::ForAll<EqTransView1<'x>>> + 'static;
-/// `λy. ∀w. x = y → y = w → x = w`
-pub type EqTransView1<'x> =
-    dyn for<'y> View<'y, Output = <Axiomize as FirstOrder>::ForAll<EqTransView2<'x, 'y>>> + 'static;
-/// `λw. x = y → y = w → x = w`
-pub type EqTransView2<'x, 'y> = dyn for<'w> View<
-        'w,
-        Output = <Axiomize as Imply>::Imply<
-            Eq<'x, 'y>,
-            <Axiomize as Imply>::Imply<Eq<'y, 'w>, Eq<'x, 'w>>,
-        >,
-    > + 'static;
-
-/// `∀x ∀y ∀w. x = y → y = w → x = w` — **proved**.
-///
-/// With [`eq_refl`] and [`eq_symm`], defined equality is an equivalence, and
-/// none of the three costs an axiom.
-pub fn eq_trans() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<EqTransView>> {
-    forall_intro(EqTrans)
-}
-
-#[derive(Clone, Copy)]
-struct EqTrans;
-impl<Q> Generalise<Axiomize, Q> for EqTrans
-where
-    Q: for<'x> View<'x, Output = <Axiomize as FirstOrder>::ForAll<EqTransView1<'x>>> + ?Sized,
-{
-    fn prove<'x>(self) -> Cert<Axiomize, <Q as View<'x>>::Output> {
-        forall_intro::<Axiomize, EqTransView1<'x>, _>(EqTrans1(PhantomData))
-    }
-}
-
-#[derive(Clone, Copy)]
-struct EqTrans1<'x>(PhantomData<&'x ()>);
-impl<'x, Q> Generalise<Axiomize, Q> for EqTrans1<'x>
-where
-    Q: for<'y> View<'y, Output = <Axiomize as FirstOrder>::ForAll<EqTransView2<'x, 'y>>> + ?Sized,
-{
-    fn prove<'y>(self) -> Cert<Axiomize, <Q as View<'y>>::Output> {
-        forall_intro::<Axiomize, EqTransView2<'x, 'y>, _>(EqTrans2(PhantomData))
-    }
-}
-
-#[derive(Clone, Copy)]
-struct EqTrans2<'x, 'y>(PhantomData<(&'x (), &'y ())>);
-impl<'x, 'y, Q> Generalise<Axiomize, Q> for EqTrans2<'x, 'y>
-where
-    Q: for<'w> View<
-            'w,
-            Output = <Axiomize as Imply>::Imply<
-                Eq<'x, 'y>,
-                <Axiomize as Imply>::Imply<Eq<'y, 'w>, Eq<'x, 'w>>,
-            >,
-        > + ?Sized,
-{
-    fn prove<'w>(self) -> Cert<Axiomize, <Q as View<'w>>::Output> {
-        // `forall_gen` takes one antecedent, so the two hypotheses go in
-        // conjoined and `curry` splits them again afterwards.
-        curry().mp(<Axiomize as FirstOrder>::forall_gen(EqTrans3::<
-            'x,
-            'y,
-            'w,
-            EqView<'x, 'y>,
-            EqView<'y, 'w>,
-        >(
-            PhantomData,
-            PhantomData,
-            PhantomData,
-        )))
-    }
-}
-
-struct EqTrans3<'x, 'y, 'w, E1: ?Sized, E2: ?Sized>(
-    PhantomData<(&'x (), &'y (), &'w ())>,
-    PhantomData<E1>,
-    PhantomData<E2>,
-);
-impl<E1: ?Sized, E2: ?Sized> Clone for EqTrans3<'_, '_, '_, E1, E2> {
-    fn clone(&self) -> Self {
-        EqTrans3(PhantomData, PhantomData, PhantomData)
-    }
-}
-impl<'x, 'y, 'w, E1, E2, Q>
-    ForAllProof<
-        Axiomize,
-        <Axiomize as And>::And<
-            <Axiomize as FirstOrder>::ForAll<E1>,
-            <Axiomize as FirstOrder>::ForAll<E2>,
-        >,
-        Q,
-    > for EqTrans3<'x, 'y, 'w, E1, E2>
-where
-    E1: for<'z> View<'z, Output = Iff<Axiomize, In<'z, 'x>, In<'z, 'y>>> + ?Sized,
-    E2: for<'z> View<'z, Output = Iff<Axiomize, In<'z, 'y>, In<'z, 'w>>> + ?Sized,
-    Q: for<'z> View<'z, Output = Iff<Axiomize, In<'z, 'x>, In<'z, 'w>>> + ?Sized,
-{
-    fn prove<'z>(
-        self,
-    ) -> Cert<
-        Axiomize,
-        <Axiomize as Imply>::Imply<
-            <Axiomize as And>::And<
-                <Axiomize as FirstOrder>::ForAll<E1>,
-                <Axiomize as FirstOrder>::ForAll<E2>,
-            >,
-            <Q as View<'z>>::Output,
-        >,
-    > {
-        // (x = y ∧ y = w) ⊢ ((z∈x ↔ z∈y) ∧ (z∈y ↔ z∈w)) ⊢ (z∈x ↔ z∈w)
-        syllogism()
-            .mp(and_map(
-                <Axiomize as FirstOrder>::forall_elim::<'z, E1>(),
-                <Axiomize as FirstOrder>::forall_elim::<'z, E2>(),
-            ))
-            .mp(iff_trans())
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Pairs are unique
@@ -451,8 +184,13 @@ where
 // ---------------------------------------------------------------------------
 
 /// `x = x` at one particular `'x`, for use inside a proof.
+///
+/// Reflexivity itself is not proved here any more: it holds of the equality
+/// *any* membership relation induces, so it lives in [`crate::rel::ext`] and
+/// [`SetEq`] is the instance at [`In`].
 fn eq_refl_at<'x>() -> Cert<Axiomize, Eq<'x, 'x>> {
-    eq_refl().pipe(<Axiomize as FirstOrder>::forall_elim::<'x, EqReflView>())
+    <SetEq as ClosedEq<Axiomize>>::refl()
+        .pipe(<Axiomize as FirstOrder>::forall_elim::<'x, ExtReflView<Axiomize, SetIn>>())
 }
 
 /// `p = {a,b} → c ∈ p`, given that `c` is one of `a`, `b`.
@@ -2779,12 +2517,13 @@ const _: () = {
         let _ = choice();
     }
 
-    /// Reflexivity and symmetry of equality are derived from nothing at all —
-    /// no axiom is invoked anywhere in their proofs.
+    /// Equality is an equivalence, derived from nothing at all — no axiom is
+    /// invoked anywhere in those three proofs, which is why they are generic
+    /// and live in [`crate::rel::ext`] rather than here.
     fn equality_is_an_equivalence() {
-        let _ = eq_refl();
-        let _ = eq_symm();
-        let _ = eq_trans();
+        let _ = <SetEq as ClosedEq<Axiomize>>::refl();
+        let _ = <SetEq as ClosedEq<Axiomize>>::sym();
+        let _ = <SetEq as ClosedEq<Axiomize>>::trans();
         let _ = pair_unique();
         let _ = pair_left();
         let _ = pair_right();

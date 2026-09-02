@@ -1,0 +1,313 @@
+//! Extensional equality: the equality a membership relation induces.
+//!
+//! `x = y` is *defined* as `∀z. z ∈ x ↔ z ∈ y`, and with that definition the
+//! three equivalence laws cost no axiom whatsoever. Reflexivity is reflexivity
+//! of `↔`, symmetry is commuting the two halves of a biconditional under a
+//! quantifier, transitivity is [`iff_trans`] under a quantifier. None of it
+//! mentions a set-theoretic assumption, so none of it belongs in an
+//! axiomatised system: an [`Ext`] over any [`Membership`] is a [`ClosedEq`],
+//! and [`crate::rel::eq::Closed`] then makes it an
+//! [`Equivalence`](super::poset::Equivalence).
+//!
+//! Only `In` is opaque here, so the proof terms below name
+//! `M::In<'z, 'x>` — a rigid projection — where the concrete versions named the
+//! eight-node `Eq` tree at every occurrence. That is the whole reason this is
+//! generic; see [`crate::rel::set`] for the measurement.
+#![forbid(unsafe_code)]
+
+use ::core::marker::PhantomData;
+
+use super::eq::ClosedEq;
+use crate::logic::prop::{
+    And, Cert, FirstOrder, ForAllProof, Generalise, Iff, Imply, PropLogic, View, and_comm, and_map,
+    curry, forall_intro, iff_trans, reflexive, syllogism,
+};
+use crate::macros::thm;
+
+/// A membership relation, and the domain it ranges over.
+///
+/// This is the *only* primitive extensional equality needs. Everything in this
+/// module is derived from it.
+pub trait Membership<Logic>: 'static {
+    /// `'a` is an object of the domain.
+    type El<'a>;
+
+    /// `'a ∈ 'b`
+    type In<'a, 'b>;
+}
+
+/// The equality induced by [`Membership`]: `x = y ≡ ∀z. z ∈ x ↔ z ∈ y`.
+pub struct Ext<Logic, M: ?Sized>(PhantomData<(Logic, *const M)>);
+
+/// `λz. z ∈ x ↔ z ∈ y`
+pub type ExtView<'x, 'y, Logic, M> = dyn for<'z> View<
+        'z,
+        Output = Iff<
+            Logic,
+            <M as Membership<Logic>>::In<'z, 'x>,
+            <M as Membership<Logic>>::In<'z, 'y>,
+        >,
+    > + 'static;
+
+/// `λx. x = x` — the body of [`ClosedEq::refl`], named so a use site can
+/// eliminate the quantifier at a particular object.
+pub type ExtReflView<Logic, M> =
+    dyn for<'x> View<'x, Output = ExtEq<'x, 'x, Logic, M>> + 'static;
+
+/// `x = y`, unfolded exactly one level.
+pub type ExtEq<'x, 'y, Logic, M> =
+    <Logic as FirstOrder>::ForAll<ExtView<'x, 'y, Logic, M>>;
+
+impl<Logic, M> ClosedEq<Logic> for Ext<Logic, M>
+where
+    Logic: PropLogic + And + FirstOrder,
+    M: Membership<Logic> + ?Sized,
+{
+    type El<'a> = M::El<'a>;
+    type Rel<'a, 'b> = ExtEq<'a, 'b, Logic, M>;
+
+    fn refl() -> thm!({ Logic }, ForAll::<'a>(Self::Rel::<'a, 'a>)) {
+        forall_intro(Refl::<Logic, M>(PhantomData))
+    }
+
+    fn sym() -> thm!(
+        { Logic },
+        ForAll::<'a, 'b>(Self::Rel::<'a, 'b> >>= Self::Rel::<'b, 'a>)
+    ) {
+        forall_intro(Sym::<Logic, M>(PhantomData))
+    }
+
+    fn trans() -> thm!(
+        { Logic },
+        ForAll::<'a, 'b, 'c>(
+            Self::Rel::<'a, 'b> >>= Self::Rel::<'b, 'c> >>= Self::Rel::<'a, 'c>
+        )
+    ) {
+        forall_intro(Trans::<Logic, M>(PhantomData))
+    }
+}
+
+/// `PhantomData<*const M>` is not `Clone`-derivable, and every prover below is
+/// a unit, so the impls are written out rather than derived.
+macro_rules! unit_clone {
+    ($name:ident<$($lt:lifetime),*> $(, $view:ident)*) => {
+        impl<$($lt,)* Logic, M: ?Sized $(, $view: ?Sized)*> Clone
+            for $name<$($lt,)* Logic, M $(, $view)*>
+        {
+            fn clone(&self) -> Self {
+                $name(PhantomData)
+            }
+        }
+    };
+}
+
+// ---------------------------------------------------------------------------
+// Reflexivity: `∀x. x = x`
+// ---------------------------------------------------------------------------
+
+struct Refl<Logic, M: ?Sized>(PhantomData<(Logic, *const M)>);
+unit_clone!(Refl<>);
+
+impl<Logic, M, Q> Generalise<Logic, Q> for Refl<Logic, M>
+where
+    Logic: PropLogic + And + FirstOrder,
+    M: Membership<Logic> + ?Sized,
+    Q: for<'x> View<'x, Output = ExtEq<'x, 'x, Logic, M>> + ?Sized,
+{
+    fn prove<'x>(self) -> Cert<Logic, <Q as View<'x>>::Output> {
+        forall_intro::<Logic, ExtView<'x, 'x, Logic, M>, _>(ReflAt::<'x, Logic, M>(PhantomData))
+    }
+}
+
+struct ReflAt<'x, Logic, M: ?Sized>(PhantomData<(&'x (), Logic, *const M)>);
+unit_clone!(ReflAt<'x>);
+
+impl<'x, Logic, M, Q> Generalise<Logic, Q> for ReflAt<'x, Logic, M>
+where
+    Logic: PropLogic + And + FirstOrder,
+    M: Membership<Logic> + ?Sized,
+    Q: for<'z> View<'z, Output = Iff<Logic, M::In<'z, 'x>, M::In<'z, 'x>>> + ?Sized,
+{
+    fn prove<'z>(self) -> Cert<Logic, <Q as View<'z>>::Output> {
+        Logic::and_intro()
+            .mp(reflexive::<M::In<'z, 'x>, Logic>())
+            .mp(reflexive::<M::In<'z, 'x>, Logic>())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Symmetry: `∀x ∀y. x = y → y = x`
+// ---------------------------------------------------------------------------
+
+/// `λy. x = y → y = x`
+type SymView<'x, Logic, M> = dyn for<'y> View<
+        'y,
+        Output = <Logic as Imply>::Imply<
+            ExtEq<'x, 'y, Logic, M>,
+            ExtEq<'y, 'x, Logic, M>,
+        >,
+    > + 'static;
+
+struct Sym<Logic, M: ?Sized>(PhantomData<(Logic, *const M)>);
+unit_clone!(Sym<>);
+
+impl<Logic, M, Q> Generalise<Logic, Q> for Sym<Logic, M>
+where
+    Logic: PropLogic + And + FirstOrder,
+    M: Membership<Logic> + ?Sized,
+    Q: for<'x> View<'x, Output = Logic::ForAll<SymView<'x, Logic, M>>> + ?Sized,
+{
+    fn prove<'x>(self) -> Cert<Logic, <Q as View<'x>>::Output> {
+        forall_intro::<Logic, SymView<'x, Logic, M>, _>(Sym1::<'x, Logic, M>(PhantomData))
+    }
+}
+
+struct Sym1<'x, Logic, M: ?Sized>(PhantomData<(&'x (), Logic, *const M)>);
+unit_clone!(Sym1<'x>);
+
+impl<'x, Logic, M, Q> Generalise<Logic, Q> for Sym1<'x, Logic, M>
+where
+    Logic: PropLogic + And + FirstOrder,
+    M: Membership<Logic> + ?Sized,
+    Q: for<'y> View<'y, Output = Logic::Imply<ExtEq<'x, 'y, Logic, M>, ExtEq<'y, 'x, Logic, M>>>
+        + ?Sized,
+{
+    fn prove<'y>(self) -> Cert<Logic, <Q as View<'y>>::Output> {
+        // `forall_gen` produces exactly `P → ∀z. Q z`; take `P` to be the
+        // hypothesis `x = y`, so no `Deduction` scope is needed here.
+        Logic::forall_gen(Sym2::<'x, 'y, Logic, M, ExtView<'x, 'y, Logic, M>>(PhantomData))
+    }
+}
+
+/// The hypothesis `x = y` is taken as the *parameter* `E` rather than written
+/// out as `ForAll<ExtView<..>>`. Naming a nested `dyn for<..> View<..>` in an
+/// impl header loses the boundness of its lifetime; pinning `E` in a
+/// where-clause does not.
+struct Sym2<'x, 'y, Logic, M: ?Sized, E: ?Sized>(
+    PhantomData<(&'x (), &'y (), Logic, *const M, *const E)>,
+);
+unit_clone!(Sym2<'x, 'y>, E);
+
+impl<'x, 'y, Logic, M, E, Q> ForAllProof<Logic, Logic::ForAll<E>, Q> for Sym2<'x, 'y, Logic, M, E>
+where
+    Logic: PropLogic + And + FirstOrder,
+    M: Membership<Logic> + ?Sized,
+    E: for<'z> View<'z, Output = Iff<Logic, M::In<'z, 'x>, M::In<'z, 'y>>> + ?Sized,
+    Q: for<'z> View<'z, Output = Iff<Logic, M::In<'z, 'y>, M::In<'z, 'x>>> + ?Sized,
+{
+    fn prove<'z>(self) -> Cert<Logic, Logic::Imply<Logic::ForAll<E>, <Q as View<'z>>::Output>> {
+        // x = y  ⊢  (z ∈ x ↔ z ∈ y)  ⊢  (z ∈ y ↔ z ∈ x)
+        syllogism().mp(Logic::forall_elim::<'z, E>()).mp(and_comm())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Transitivity: `∀x ∀y ∀w. x = y → y = w → x = w`
+// ---------------------------------------------------------------------------
+
+/// `λw. x = y → y = w → x = w`
+type TransView<'x, 'y, Logic, M> = dyn for<'w> View<
+        'w,
+        Output = <Logic as Imply>::Imply<
+            ExtEq<'x, 'y, Logic, M>,
+            <Logic as Imply>::Imply<ExtEq<'y, 'w, Logic, M>, ExtEq<'x, 'w, Logic, M>>,
+        >,
+    > + 'static;
+
+/// `λy. ∀w. …`
+type TransView1<'x, Logic, M> = dyn for<'y> View<
+        'y,
+        Output = <Logic as FirstOrder>::ForAll<TransView<'x, 'y, Logic, M>>,
+    > + 'static;
+
+struct Trans<Logic, M: ?Sized>(PhantomData<(Logic, *const M)>);
+unit_clone!(Trans<>);
+
+impl<Logic, M, Q> Generalise<Logic, Q> for Trans<Logic, M>
+where
+    Logic: PropLogic + And + FirstOrder,
+    M: Membership<Logic> + ?Sized,
+    Q: for<'x> View<'x, Output = Logic::ForAll<TransView1<'x, Logic, M>>> + ?Sized,
+{
+    fn prove<'x>(self) -> Cert<Logic, <Q as View<'x>>::Output> {
+        forall_intro::<Logic, TransView1<'x, Logic, M>, _>(Trans1::<'x, Logic, M>(PhantomData))
+    }
+}
+
+struct Trans1<'x, Logic, M: ?Sized>(PhantomData<(&'x (), Logic, *const M)>);
+unit_clone!(Trans1<'x>);
+
+impl<'x, Logic, M, Q> Generalise<Logic, Q> for Trans1<'x, Logic, M>
+where
+    Logic: PropLogic + And + FirstOrder,
+    M: Membership<Logic> + ?Sized,
+    Q: for<'y> View<'y, Output = Logic::ForAll<TransView<'x, 'y, Logic, M>>> + ?Sized,
+{
+    fn prove<'y>(self) -> Cert<Logic, <Q as View<'y>>::Output> {
+        forall_intro::<Logic, TransView<'x, 'y, Logic, M>, _>(Trans2::<'x, 'y, Logic, M>(
+            PhantomData,
+        ))
+    }
+}
+
+struct Trans2<'x, 'y, Logic, M: ?Sized>(PhantomData<(&'x (), &'y (), Logic, *const M)>);
+unit_clone!(Trans2<'x, 'y>);
+
+impl<'x, 'y, Logic, M, Q> Generalise<Logic, Q> for Trans2<'x, 'y, Logic, M>
+where
+    Logic: PropLogic + And + FirstOrder,
+    M: Membership<Logic> + ?Sized,
+    Q: for<'w> View<
+            'w,
+            Output = Logic::Imply<
+                ExtEq<'x, 'y, Logic, M>,
+                Logic::Imply<ExtEq<'y, 'w, Logic, M>, ExtEq<'x, 'w, Logic, M>>,
+            >,
+        > + ?Sized,
+{
+    fn prove<'w>(self) -> Cert<Logic, <Q as View<'w>>::Output> {
+        // `forall_gen` takes one antecedent, so the two hypotheses go in
+        // conjoined and `curry` splits them again afterwards.
+        curry().mp(Logic::forall_gen(Trans3::<
+            'x,
+            'y,
+            'w,
+            Logic,
+            M,
+            ExtView<'x, 'y, Logic, M>,
+            ExtView<'y, 'w, Logic, M>,
+        >(PhantomData)))
+    }
+}
+
+/// Both hypotheses are parameters, for the reason given on [`Sym2`].
+struct Trans3<'x, 'y, 'w, Logic, M: ?Sized, E1: ?Sized, E2: ?Sized>(
+    PhantomData<(&'x (), &'y (), &'w (), Logic, *const M, *const E1, *const E2)>,
+);
+unit_clone!(Trans3<'x, 'y, 'w>, E1, E2);
+
+impl<'x, 'y, 'w, Logic, M, E1, E2, Q>
+    ForAllProof<Logic, Logic::And<Logic::ForAll<E1>, Logic::ForAll<E2>>, Q>
+    for Trans3<'x, 'y, 'w, Logic, M, E1, E2>
+where
+    Logic: PropLogic + And + FirstOrder,
+    M: Membership<Logic> + ?Sized,
+    E1: for<'z> View<'z, Output = Iff<Logic, M::In<'z, 'x>, M::In<'z, 'y>>> + ?Sized,
+    E2: for<'z> View<'z, Output = Iff<Logic, M::In<'z, 'y>, M::In<'z, 'w>>> + ?Sized,
+    Q: for<'z> View<'z, Output = Iff<Logic, M::In<'z, 'x>, M::In<'z, 'w>>> + ?Sized,
+{
+    fn prove<'z>(
+        self,
+    ) -> Cert<
+        Logic,
+        Logic::Imply<Logic::And<Logic::ForAll<E1>, Logic::ForAll<E2>>, <Q as View<'z>>::Output>,
+    > {
+        // (x = y ∧ y = w) ⊢ ((z∈x ↔ z∈y) ∧ (z∈y ↔ z∈w)) ⊢ (z∈x ↔ z∈w)
+        syllogism()
+            .mp(and_map(
+                Logic::forall_elim::<'z, E1>(),
+                Logic::forall_elim::<'z, E2>(),
+            ))
+            .mp(iff_trans())
+    }
+}

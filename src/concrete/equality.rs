@@ -1,55 +1,54 @@
 //! [`Axiomize`]'s equality, packaged as a structure.
 //!
-//! Nothing is proved here. The mathematics is in [`super::theorems`]
-//! ([`eq_refl`], [`eq_symm`], [`eq_trans`]); the bridge from those closed
-//! theorems to the guarded shape [`crate::rel::poset`] asks for is in
-//! [`crate::rel::eq`], generic over the logic. This module only names the two and lets them meet, which is the
-//! delegation pattern the whole `concrete` layer is headed for.
+//! Nothing is proved here, and that is the point. `=` in this development is
+//! *defined* — `x = y ≡ ∀z. z ∈ x ↔ z ∈ y` — and every property it has as an
+//! equivalence relation follows from that definition alone, for any membership
+//! relation whatsoever. So the mathematics is in [`crate::rel::ext`], the
+//! bridge to [`poset`](crate::rel::poset)'s guarded shape is in
+//! [`crate::rel::eq`], and both are generic over the logic. All this module
+//! does is say which relation [`Axiomize`] means by `∈`.
 //!
-//! Keeping the bridge generic is not tidiness. Its proof terms mention
-//! `S::Rel<'a, 'b>` at a type parameter, which rustc cannot expand; written
-//! here against the defined [`Eq`] they would mention a 116 KB type instead,
-//! and `mir_borrowck` cost scales with that. See [`crate::rel::set`].
+//! Keeping those generic is not tidiness. Their proof terms mention
+//! `M::In<'z, 'x>` at a type parameter, which rustc cannot expand; written
+//! here against the defined [`Eq`] they would mention a 116 KB type at every
+//! occurrence, and `mir_borrowck` cost scales with that. See
+//! [`crate::rel::set`].
 #![forbid(unsafe_code)]
 
 use super::Axiomize;
-use super::lang::{Eq, IsSet};
-use super::theorems::{eq_refl, eq_symm, eq_trans};
+use super::lang::{Eq, In, IsSet};
 use crate::logic::function::EqualityDef;
-use crate::macros::thm;
-use crate::rel::eq::{Closed, ClosedEq};
+use crate::logic::prop::Cert;
+use crate::rel::eq::Closed;
+use crate::rel::ext::{Ext, ExtEq, Membership};
 
-/// `=` on the universe of sets, as closed theorems.
-pub struct SetEq;
+/// `∈` on the universe of sets.
+pub struct SetIn;
 
-impl ClosedEq<Axiomize> for SetEq {
+impl Membership<Axiomize> for SetIn {
+    /// In ZFC every object is a set, so the domain is everything.
     type El<'a> = IsSet<'a>;
-    type Rel<'a, 'b> = Eq<'a, 'b>;
-
-    fn refl() -> thm!({ Axiomize }, ForAll::<'a>(Self::Rel::<'a, 'a>)) {
-        eq_refl()
-    }
-
-    fn sym() -> thm!(
-        { Axiomize },
-        ForAll::<'a, 'b>(Self::Rel::<'a, 'b> >>= Self::Rel::<'b, 'a>)
-    ) {
-        eq_symm()
-    }
-
-    fn trans() -> thm!(
-        { Axiomize },
-        ForAll::<'a, 'b, 'c>(
-            Self::Rel::<'a, 'b> >>= Self::Rel::<'b, 'c> >>= Self::Rel::<'a, 'c>
-        )
-    ) {
-        eq_trans()
-    }
+    type In<'a, 'b> = In<'a, 'b>;
 }
 
-/// The universe of sets under `=`, as a [`poset`](crate::rel::poset) relation.
+/// `=` on the universe of sets: the equality [`SetIn`] induces.
+pub type SetEq = Ext<Axiomize, SetIn>;
+
+/// [`SetEq`] presented on its domain, so it is an
+/// [`Equivalence`](crate::rel::poset::Equivalence).
 pub type SetEqRel = Closed<Axiomize, SetEq>;
 
 impl EqualityDef for Axiomize {
     type EqRel = SetEqRel;
+}
+
+/// [`lang::Eq`](Eq) and the induced [`ExtEq`] are the same proposition — the
+/// alias is what the axioms are stated against, the projection is what the
+/// generic proofs produce, and the delegation above is only sound if a
+/// certificate for one is a certificate for the other.
+#[expect(dead_code, reason = "typecheck-only proof assertion")]
+fn eq_is_extensional<'x, 'y>(
+    c: Cert<Axiomize, Eq<'x, 'y>>,
+) -> Cert<Axiomize, ExtEq<'x, 'y, Axiomize, SetIn>> {
+    c
 }
