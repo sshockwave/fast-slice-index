@@ -13,3 +13,6 @@ unfulfilled_lint_expectations = "forbid"
 
 [lints.clippy]
 allow_attributes = "forbid"
+
+[profile.dev]
+debug = false
