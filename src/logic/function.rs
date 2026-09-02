@@ -40,8 +40,8 @@ pub trait EqualityDef: Imply + FirstOrder {
 ///
 /// [`Eq`](Equality::Eq) is an *associated type*, never a type alias, so
 /// `<L as Equality>::Eq<'a, 'b>` at a type parameter `L` is a rigid projection
-/// rustc cannot normalise. That is what keeps proof terms small; see
-/// [`crate::rel::set`] for the measurement.
+/// rustc cannot normalise. That is what keeps proof terms small; the same
+/// device is used for set-theoretic notions in [`crate::rel::func`].
 pub trait Equality: EqualityDef {
     /// `'a` is an object of this logic -- what equality ranges over.
     type El<'a>;

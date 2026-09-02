@@ -15,7 +15,7 @@
 //! one-line delegations to its own theorems and pays no borrow-checking for
 //! the bridge; see
 //! [`crate::concrete::equality`]. Writing the same bridge against a *defined*
-//! equality instead costs about twenty times the MIR — see [`super::set`].
+//! equality instead costs about twenty times the MIR — see [`super::func`].
 #![forbid(unsafe_code)]
 
 use ::core::marker::PhantomData;

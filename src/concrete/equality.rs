@@ -12,7 +12,7 @@
 //! `M::In<'z, 'x>` at a type parameter, which rustc cannot expand; written
 //! here against the defined [`Eq`] they would mention a 116 KB type at every
 //! occurrence, and `mir_borrowck` cost scales with that. See
-//! [`crate::rel::set`].
+//! [`crate::rel::func`].
 #![forbid(unsafe_code)]
 
 use super::Axiomize;

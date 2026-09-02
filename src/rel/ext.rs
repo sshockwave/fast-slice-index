@@ -12,7 +12,7 @@
 //! Only `In` is opaque here, so the proof terms below name
 //! `M::In<'z, 'x>` — a rigid projection — where the concrete versions named the
 //! eight-node `Eq` tree at every occurrence. That is the whole reason this is
-//! generic; see [`crate::rel::set`] for the measurement.
+//! generic; [`crate::rel::func`] makes the same trade one layer up.
 #![forbid(unsafe_code)]
 
 use ::core::marker::PhantomData;
