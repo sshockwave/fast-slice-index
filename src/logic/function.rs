@@ -1,68 +1,41 @@
-use crate::logic::prop::{And, Cert, FirstOrder, Imply, View};
+use crate::logic::prop::{And, FirstOrder, Imply, View};
 use crate::macros::thm;
 
-/// Equality trait - axiomatizes equality relation
-pub trait Equality: Imply {
-    /// Equality relation between two terms at lifetimes 'a and 'b
+/// Equality: an axiomatised congruence on the domain.
+///
+/// [`Eq`](Equality::Eq) stays an *associated type*, never a type alias, so
+/// `<L as Equality>::Eq<'a, 'b>` at a type parameter `L` is a rigid projection
+/// rustc cannot normalise. That is what keeps proof terms small; see
+/// [`crate::rel::set`] for the measurement.
+pub trait Equality: Imply + FirstOrder {
+    /// Equality relation between two terms at lifetimes `'a` and `'b`
     type Eq<'a, 'b>;
 
-    /// Reflexivity: ∀x. x = x
-    fn eq_refl() -> Cert<Self, &'static dyn for<'x> View<'x, Output = Self::Eq<'x, 'x>>>
-    where
-        Self: 'static;
+    /// Reflexivity: forall x. x = x
+    fn eq_refl() -> thm!({ Self }, ForAll::<'x>(Self::Eq::<'x, 'x>));
 
-    /// Symmetry: ∀x ∀y. x = y → y = x
-    fn eq_symm() -> Cert<
-        Self,
-        &'static dyn for<'x> View<
-            'x,
-            Output = &'static dyn for<'y> View<
-                'y,
-                Output = Self::Imply<Self::Eq<'x, 'y>, Self::Eq<'y, 'x>>,
-            >,
-        >,
-    >
-    where
-        Self: 'static;
+    /// Symmetry: forall x y. x = y -> y = x
+    fn eq_symm() -> thm!(
+        { Self },
+        ForAll::<'x, 'y>(Self::Eq::<'x, 'y> >>= Self::Eq::<'y, 'x>)
+    );
 
-    /// Transitivity: ∀x ∀y ∀z. x = y → y = z → x = z
-    fn eq_trans() -> Cert<
-        Self,
-        &'static dyn for<'x> View<
-            'x,
-            Output = &'static dyn for<'y> View<
-                'y,
-                Output = &'static dyn for<'z> View<
-                    'z,
-                    Output = Self::Imply<
-                        Self::Eq<'x, 'y>,
-                        Self::Imply<Self::Eq<'y, 'z>, Self::Eq<'x, 'z>>,
-                    >,
-                >,
-            >,
-        >,
-    >
-    where
-        Self: 'static;
+    /// Transitivity: forall x y z. x = y -> y = z -> x = z
+    fn eq_trans() -> thm!(
+        { Self },
+        ForAll::<'x, 'y, 'z>(Self::Eq::<'x, 'y> >>= Self::Eq::<'y, 'z> >>= Self::Eq::<'x, 'z>)
+    );
 
-    /// Substitution (Leibniz's law): ∀x ∀y. x = y → (P(x) → P(y))
-    /// For any predicate P
-    fn eq_subst<P>() -> Cert<
-        Self,
-        &'static dyn for<'x> View<
-            'x,
-            Output = &'static dyn for<'y> View<
-                'y,
-                Output = Self::Imply<
-                    Self::Eq<'x, 'y>,
-                    Self::Imply<<P as View<'x>>::Output, <P as View<'y>>::Output>,
-                >,
-            >,
-        >,
-    >
+    /// Substitution (Leibniz's law): forall x y. x = y -> (P(x) -> P(y)),
+    /// as a schema in the predicate `P`.
+    fn eq_subst<P>() -> thm!(
+        { Self },
+        ForAll::<'x, 'y>(
+            Self::Eq::<'x, 'y> >>= <P as View<'x>>::Output >>= <P as View<'y>>::Output
+        )
+    )
     where
-        P: for<'a> View<'a> + 'static,
-        Self: 'static;
+        P: for<'a> View<'a> + 'static;
 }
 
 /// Function trait: A binary relation F that is total and functional
