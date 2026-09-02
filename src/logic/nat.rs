@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use crate::algebra::group::{self, BinOp};
 use crate::algebra::ring::SemiRing;
-use crate::logic::function::{Equality, Function, Injection};
+use crate::logic::function::{Eq, Equality, Function, Injection};
 use crate::logic::prop::{And, FirstOrder, Negation, View};
 use crate::macros::{pred, thm};
 use crate::rel::Set;
@@ -42,7 +42,7 @@ macro_rules! expr {
         <Self as BinOp<Logic>>::Op::<$x, $y, $z>
     };
     ($x:lifetime == $y:lifetime) => {
-        <Logic as Equality>::Eq::<$x, $y>
+        Eq::<$x, $y, Logic>
     };
 }
 
@@ -98,7 +98,7 @@ where
         { Logic },
         'x: { expr!('x in Nat) && expr!('x == 0) },
         'y: { expr!('y in Nat) && expr!('y == 0) },
-        Logic::Eq::<'x, 'y>,
+        Eq::<'x, 'y, Logic>,
     );
 }
 

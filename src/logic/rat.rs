@@ -1,5 +1,5 @@
 use crate::algebra::group::{AbelianGroup, BinOp, CommutativeMonoid, IsUnitLike};
-use crate::logic::function::Equality;
+use crate::logic::function::{Eq, Equality};
 use crate::logic::prop::{And, Cert, FirstOrder, Negation, Or, View};
 use crate::macros::thm;
 use crate::rel::Set;
@@ -193,7 +193,7 @@ where
                     IsRat<'x, Self>,
                     Self::Imply<
                         IsRat<'y, Self>,
-                        Self::Or<Self::Lt<'x, 'y>, Self::Or<Self::Eq<'x, 'y>, Self::Lt<'y, 'x>>>,
+                        Self::Or<Self::Lt<'x, 'y>, Self::Or<Eq<'x, 'y, Self>, Self::Lt<'y, 'x>>>,
                     >,
                 >,
             >,

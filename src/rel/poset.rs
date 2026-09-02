@@ -1,5 +1,5 @@
 use super::Set;
-use crate::logic::function::Equality;
+use crate::logic::function::{Eq, Equality};
 use crate::logic::prop::{FirstOrder, Imply};
 use crate::macros::thm;
 
@@ -14,6 +14,18 @@ where
     fn refl() -> thm!({ Logic }, 'a: { Self::El::<'a> }, Self::Rel::<'a, 'a>);
 }
 
+pub trait Symmetric<Logic>: Set + BinRel
+where
+    Logic: Imply + FirstOrder,
+{
+    fn sym() -> thm!(
+        { Logic },
+        'a: { Self::El::<'a> },
+        'b: { Self::El::<'b> },
+        Self::Rel::<'a, 'b> >>= Self::Rel::<'b, 'a>
+    );
+}
+
 pub trait Antisymmetric<Logic>: Set + BinRel
 where
     Logic: Imply + FirstOrder + Equality,
@@ -22,7 +34,7 @@ where
         { Logic },
         'a: { Self::El::<'a> },
         'b: { Self::El::<'b> },
-        Self::Rel::<'a, 'b>.imply(Self::Rel::<'b, 'a>.imply(Logic::Eq::<'a, 'b>))
+        Self::Rel::<'a, 'b>.imply(Self::Rel::<'b, 'a>.imply(Eq::<'a, 'b, Logic>))
     );
 }
 
@@ -48,5 +60,17 @@ impl<Logic, T> Poset<Logic> for T
 where
     T: Reflexive<Logic> + Antisymmetric<Logic> + Transitive<Logic>,
     Logic: Imply + FirstOrder + Equality,
+{
+}
+
+pub trait Equivalence<Logic>: Reflexive<Logic> + Transitive<Logic> + Symmetric<Logic>
+where
+    Logic: Imply + FirstOrder,
+{
+}
+impl<Logic, T> Equivalence<Logic> for T
+where
+    Self: Reflexive<Logic> + Transitive<Logic> + Symmetric<Logic>,
+    Logic: Imply + FirstOrder,
 {
 }
