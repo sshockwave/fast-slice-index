@@ -9,8 +9,11 @@
 //! So it is done once, here, at *generic* types. Everything below is
 //! parameterised over the logic and over an opaque [`ClosedEq`], so every
 //! `Rel<'a, 'b>` in these proofs is a rigid projection rustc cannot expand.
-//! An axiomatised system implements [`ClosedEq`] with one-line delegations to
-//! its own theorems and pays no borrow-checking for the bridge; see
+//! Substitution is not here. It is not a property of an equivalence relation
+//! at all, and as a schema over every `P: View` it is not provable either --
+//! see [`ClosedEq`]. An axiomatised system implements [`ClosedEq`] with
+//! one-line delegations to its own theorems and pays no borrow-checking for
+//! the bridge; see
 //! [`crate::concrete::equality`]. Writing the same bridge against a *defined*
 //! equality instead costs about twenty times the MIR — see [`super::set`].
 #![forbid(unsafe_code)]
@@ -24,9 +27,9 @@ use crate::logic::prop::{
 };
 use crate::macros::thm;
 
-/// An equivalence relation stated as closed theorems, with substitution.
+/// An equivalence relation stated as closed theorems.
 ///
-/// The four statements carry no `El` guard. That is the normal shape for a
+/// The three statements carry no `El` guard. That is the normal shape for a
 /// logic's own equality, and [`Closed`] adds the guards.
 pub trait ClosedEq<Logic>
 where
@@ -54,16 +57,6 @@ where
             Self::Rel::<'a, 'b> >>= Self::Rel::<'b, 'c> >>= Self::Rel::<'a, 'c>
         )
     );
-
-    /// `∀x ∀y. x ~ y → (P(x) → P(y))`
-    fn subst<P>() -> thm!(
-        { Logic },
-        ForAll::<'x, 'y>(
-            Self::Rel::<'x, 'y> >>= <P as View<'x>>::Output >>= <P as View<'y>>::Output
-        )
-    )
-    where
-        P: for<'a> View<'a> + 'static;
 }
 
 /// [`ClosedEq`] presented on its domain, so it satisfies [`Equivalence`].
@@ -350,106 +343,5 @@ where
         let at_b = Logic::forall_elim::<'b, TransView1<'a, Logic, S>>().mp(at_a);
         let at_c = Logic::forall_elim::<'c, TransView2<'a, 'b, Logic, S>>().mp(at_b);
         guard::<'b, Logic, S, _>(guard::<'c, Logic, S, _>(at_c))
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Substitution
-// ---------------------------------------------------------------------------
-
-type SubstView1<'x, Logic, S, P> = dyn for<'y> View<
-        'y,
-        Output = <Logic as Imply>::Imply<
-            <S as ClosedEq<Logic>>::Rel<'x, 'y>,
-            <Logic as Imply>::Imply<<P as View<'x>>::Output, <P as View<'y>>::Output>,
-        >,
-    > + 'static;
-
-type SubstView<Logic, S, P> = dyn for<'x> View<
-        'x,
-        Output = <Logic as FirstOrder>::ForAll<SubstView1<'x, Logic, S, P>>,
-    > + 'static;
-
-/// `λy. El(y) → (x ~ y → P(x) → P(y))`, with `'x` fixed.
-type SubstGuarded<'x, Logic, S, P> = dyn for<'y> View<
-        'y,
-        Output = <Logic as Imply>::Imply<
-            <S as ClosedEq<Logic>>::El<'y>,
-            <Logic as Imply>::Imply<
-                <S as ClosedEq<Logic>>::Rel<'x, 'y>,
-                <Logic as Imply>::Imply<<P as View<'x>>::Output, <P as View<'y>>::Output>,
-            >,
-        >,
-    > + 'static;
-
-/// [`ClosedEq::subst`] with the domain guards inserted.
-///
-/// Not a trait method: [`crate::logic::function::EqualityDef::eq_subst`] hangs
-/// off the *logic*, not off the relation, so the logic's impl calls this.
-pub fn guarded_subst<Logic, S, P>() -> thm!(
-    { Logic },
-    'x: { <S as ClosedEq<Logic>>::El::<'x> },
-    'y: { <S as ClosedEq<Logic>>::El::<'y> },
-    <S as ClosedEq<Logic>>::Rel::<'x, 'y>
-        >>= <P as View<'x>>::Output
-        >>= <P as View<'y>>::Output
-)
-where
-    Logic: FirstOrder + PropLogic,
-    S: ClosedEq<Logic> + ?Sized,
-    P: for<'a> View<'a> + 'static,
-{
-    forall_intro(Subst::<Logic, S, P>(PhantomData))
-}
-
-struct Subst<Logic, S: ?Sized, P: ?Sized>(PhantomData<(Logic, *const S, *const P)>);
-impl<Logic, S: ?Sized, P: ?Sized> Clone for Subst<Logic, S, P> {
-    fn clone(&self) -> Self {
-        Subst(PhantomData)
-    }
-}
-
-impl<Logic, S, P, Q> Generalise<Logic, Q> for Subst<Logic, S, P>
-where
-    Logic: FirstOrder + PropLogic,
-    S: ClosedEq<Logic> + ?Sized,
-    P: for<'a> View<'a> + 'static,
-    Q: for<'x> View<
-            'x,
-            Output = Logic::Imply<S::El<'x>, Logic::ForAll<SubstGuarded<'x, Logic, S, P>>>,
-        > + ?Sized,
-{
-    fn prove<'x>(self) -> Cert<Logic, <Q as View<'x>>::Output> {
-        Logic::forall_gen(Subst1::<'x, Logic, S, P>(PhantomData))
-    }
-}
-
-struct Subst1<'x, Logic, S: ?Sized, P: ?Sized>(PhantomData<(&'x (), Logic, *const S, *const P)>);
-impl<'x, Logic, S: ?Sized, P: ?Sized> Clone for Subst1<'x, Logic, S, P> {
-    fn clone(&self) -> Self {
-        Subst1(PhantomData)
-    }
-}
-
-impl<'x, Logic, S, P, Q> ForAllProof<Logic, S::El<'x>, Q> for Subst1<'x, Logic, S, P>
-where
-    Logic: FirstOrder + PropLogic,
-    S: ClosedEq<Logic> + ?Sized,
-    P: for<'a> View<'a> + 'static,
-    Q: for<'y> View<
-            'y,
-            Output = Logic::Imply<
-                S::El<'y>,
-                Logic::Imply<
-                    S::Rel<'x, 'y>,
-                    Logic::Imply<<P as View<'x>>::Output, <P as View<'y>>::Output>,
-                >,
-            >,
-        > + ?Sized,
-{
-    fn prove<'y>(self) -> Cert<Logic, Logic::Imply<S::El<'x>, <Q as View<'y>>::Output>> {
-        let at_x = Logic::forall_elim::<'x, SubstView<Logic, S, P>>().mp(S::subst::<P>());
-        let at_y = Logic::forall_elim::<'y, SubstView1<'x, Logic, S, P>>().mp(at_x);
-        guard::<'x, Logic, S, _>(guard::<'y, Logic, S, _>(at_y))
     }
 }

@@ -1,10 +1,10 @@
-use crate::logic::prop::{And, FirstOrder, Imply, View};
+use crate::logic::prop::{And, FirstOrder, Imply};
 use crate::macros::thm;
 use crate::rel::Set;
 use crate::rel::poset::{BinRel, Equivalence, Reflexive, Symmetric, Transitive};
 
-/// The definitional half of equality: name an equivalence relation and assert
-/// Leibniz's law for it.
+/// The definitional half of equality: name the equivalence relation that
+/// serves as this logic's `=`.
 ///
 /// This is the only trait a logic implements by hand. It carries no `Logic`
 /// parameter -- `Self` *is* the logic. Equality is used too often and sits too
@@ -19,21 +19,15 @@ use crate::rel::poset::{BinRel, Equivalence, Reflexive, Symmetric, Transitive};
 pub trait EqualityDef: Imply + FirstOrder {
     /// The relation that serves as equality, as a structure. Its domain
     /// ([`Set::El`]) is what counts as an object of this logic.
+    ///
+    /// Nothing here distinguishes equality from any other equivalence
+    /// relation. What does is substitution, and that is deliberately not a
+    /// method: as a schema over every `P: View` it would assert that *set*
+    /// equality buys the total congruence rustc gives *definitional* equality,
+    /// over all type-level constructions rather than over formulas of the
+    /// language. It is proved per-predicate instead, by induction on how the
+    /// predicate is built.
     type EqRel: Equivalence<Self>;
-
-    /// Substitution (Leibniz's law): forall x y. x = y -> (P(x) -> P(y)),
-    /// as a schema in the predicate `P`. This is the whole difference between
-    /// equality and an arbitrary equivalence relation, so it is the only axiom
-    /// [`Equivalence`] does not already supply.
-    fn eq_subst<P>() -> thm!(
-        { Self },
-        'x: { <Self::EqRel as Set>::El::<'x> },
-        'y: { <Self::EqRel as Set>::El::<'y> },
-        <Self::EqRel as BinRel>::Rel::<'x, 'y> >>=
-            <P as View<'x>>::Output >>= <P as View<'y>>::Output
-    )
-    where
-        P: for<'a> View<'a> + 'static;
 }
 
 /// Equality spelled directly on the logic.
@@ -74,16 +68,6 @@ pub trait Equality: EqualityDef {
         'z: { Self::El::<'z> },
         Self::Eq::<'x, 'y> >>= Self::Eq::<'y, 'z> >>= Self::Eq::<'x, 'z>
     );
-
-    /// Substitution (Leibniz's law): forall x y. x = y -> (P(x) -> P(y))
-    fn eq_subst<P>() -> thm!(
-        { Self },
-        'x: { Self::El::<'x> },
-        'y: { Self::El::<'y> },
-        Self::Eq::<'x, 'y> >>= <P as View<'x>>::Output >>= <P as View<'y>>::Output
-    )
-    where
-        P: for<'a> View<'a> + 'static;
 }
 
 impl<L: EqualityDef> Equality for L {
@@ -111,18 +95,6 @@ impl<L: EqualityDef> Equality for L {
         Self::Eq::<'x, 'y> >>= Self::Eq::<'y, 'z> >>= Self::Eq::<'x, 'z>
     ) {
         <L::EqRel as Transitive<L>>::transitive()
-    }
-
-    fn eq_subst<P>() -> thm!(
-        { Self },
-        'x: { Self::El::<'x> },
-        'y: { Self::El::<'y> },
-        Self::Eq::<'x, 'y> >>= <P as View<'x>>::Output >>= <P as View<'y>>::Output
-    )
-    where
-        P: for<'a> View<'a> + 'static,
-    {
-        <L as EqualityDef>::eq_subst::<P>()
     }
 }
 
