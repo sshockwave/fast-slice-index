@@ -1,4 +1,4 @@
-//! The nine assumptions of ZFC, and nothing else.
+//! The assumptions of ZFC, and nothing else.
 //!
 //! Every function here has the body `unsafe { cert() }`: it mints a certificate
 //! from nothing, which is exactly what an axiom is. Keeping them alone in one
@@ -41,6 +41,34 @@ use crate::macros::thm;
 /// quantifiers can be eliminated at a use site; `set.rs` carries a witness that
 /// the two spellings are the same proposition.
 pub fn ext() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<ExtView>> {
+    unsafe { cert() }
+}
+
+/// **Substitution** (schema), Leibniz's law: `∀x ∀y. x = y → (P(x) → P(y))`
+///
+/// This one cannot be proved, and the reason is worth stating precisely.
+///
+/// With `=` primitive, substitution is a *logical* axiom. Here [`Eq`] is
+/// defined, so Leibniz's law becomes a metatheorem, proved by induction on the
+/// structure of the formula `P` with two atomic base cases: `P = λv. z ∈ v`,
+/// which falls straight out of the definition, and `P = λv. v ∈ w`, which is
+/// exactly [`ext`]. Every other case is a connective or a quantifier and goes
+/// through by the induction hypothesis.
+///
+/// That induction is on the *syntax* of `P`. In this encoding `P` is an opaque
+/// type parameter — a bare [`View`] rustc cannot case on — so the metatheorem
+/// is not available internally and the schema has to be assumed. It is
+/// conservative over ZFC in the same sense [`separation`] and [`replacement`]
+/// are: all three quantify over arbitrary Rust `View`s rather than over
+/// formulas of the language of set theory, which is the standing assumption
+/// this development already makes about schemas.
+pub fn eq_subst<P>() -> thm!(
+    { Axiomize },
+    ForAll::<'x, 'y>((Eq::<'x, 'y>) >>= ((<P as View<'x>>::Output) >>= (<P as View<'y>>::Output)))
+)
+where
+    P: for<'a> View<'a> + ?Sized,
+{
     unsafe { cert() }
 }
 

@@ -18,6 +18,7 @@ use crate::logic::prop::{And, Cert, Imply, Intuitionistic, Negation, Or, neg::Pr
 
 pub mod axioms;
 mod base;
+pub mod equality;
 pub mod lang;
 pub mod theorems;
 

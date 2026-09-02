@@ -34,6 +34,13 @@ pub trait Rel2 {
 /// `'a ∈ 'b`. The one primitive relation.
 pub struct In<'a, 'b>(PhantomData<(&'a (), &'b ())>);
 
+/// `'a` is a set.
+///
+/// In ZFC every object is a set, so this is the trivially true predicate: it
+/// exists to fill [`crate::rel::Set::El`] for the universe, not to exclude
+/// anything. Spelled as a tautology at `'a` so the lifetime is used.
+pub type IsSet<'a> = <Axiomize as Imply>::Imply<In<'a, 'a>, In<'a, 'a>>;
+
 /// `∀z. (z ∈ x ↔ z ∈ y)` — the body of [`Eq`], with `'z` still to bind.
 pub type EqView<'x, 'y> =
     dyn for<'z> View<'z, Output = Iff<Axiomize, In<'z, 'x>, In<'z, 'y>>> + 'static;
