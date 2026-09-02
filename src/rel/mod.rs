@@ -1,3 +1,4 @@
+pub mod desc;
 pub mod eq;
 pub mod ext;
 pub mod poset;

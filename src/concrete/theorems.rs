@@ -22,6 +22,7 @@ use crate::logic::prop::{
     Imply, Intuitionistic, Negation, Or, PropLogic, View, and_comm, and_map, curry, exchange,
     forall_intro, iff_trans, reflexive, syllogism,
 };
+use crate::rel::desc::{DescUniqueView, DescUniqueView1, desc_unique};
 use crate::rel::eq::ClosedEq;
 use crate::rel::ext::{ExtReflView, Extensional, in_left, in_right};
 use crate::macros::pred;
@@ -41,16 +42,10 @@ pub type PairUniqueView =
 pub type PairUniqueView1<'a> = dyn for<'b> View<'b, Output = <Axiomize as FirstOrder>::ForAll<PairUniqueView2<'a, 'b>>>
     + 'static;
 /// `λp. ∀q. p = {a,b} → q = {a,b} → p = q`
-pub type PairUniqueView2<'a, 'b> = dyn for<'p> View<'p, Output = <Axiomize as FirstOrder>::ForAll<PairUniqueView3<'a, 'b, 'p>>>
-    + 'static;
-/// `λq. p = {a,b} → q = {a,b} → p = q`
-pub type PairUniqueView3<'a, 'b, 'p> = dyn for<'q> View<
-        'q,
-        Output = pred!(
-            { Axiomize },
-            IsPair::<'p, 'a, 'b> >>= IsPair::<'q, 'a, 'b> >>= Eq::<'p, 'q>
-        ),
-    > + 'static;
+///
+/// Once `a` and `b` are fixed, `{a,b}` is just *the* set satisfying a
+/// condition, so this is [`crate::rel::desc`]'s view at [`PairCond`].
+pub type PairUniqueView2<'a, 'b> = DescUniqueView1<Axiomize, SetIn, PairCond<'a, 'b>>;
 
 /// `∀a ∀b ∀p ∀q. p = {a,b} → q = {a,b} → p = q` — **proved**.
 ///
@@ -80,101 +75,7 @@ where
         + ?Sized,
 {
     fn prove<'b>(self) -> Cert<Axiomize, <Q as View<'b>>::Output> {
-        forall_intro::<Axiomize, PairUniqueView2<'a, 'b>, _>(PairUnique2(PhantomData))
-    }
-}
-
-#[derive(Clone, Copy)]
-struct PairUnique2<'a, 'b>(PhantomData<(&'a (), &'b ())>);
-impl<'a, 'b, Q> Generalise<Axiomize, Q> for PairUnique2<'a, 'b>
-where
-    Q: for<'p> View<'p, Output = <Axiomize as FirstOrder>::ForAll<PairUniqueView3<'a, 'b, 'p>>>
-        + ?Sized,
-{
-    fn prove<'p>(self) -> Cert<Axiomize, <Q as View<'p>>::Output> {
-        forall_intro::<Axiomize, PairUniqueView3<'a, 'b, 'p>, _>(PairUnique3(PhantomData))
-    }
-}
-
-#[derive(Clone, Copy)]
-struct PairUnique3<'a, 'b, 'p>(PhantomData<(&'a (), &'b (), &'p ())>);
-impl<'a, 'b, 'p, Q> Generalise<Axiomize, Q> for PairUnique3<'a, 'b, 'p>
-where
-    Q: for<'q> View<
-            'q,
-            Output = pred!(
-                { Axiomize },
-                IsPair::<'p, 'a, 'b> >>= IsPair::<'q, 'a, 'b> >>= Eq::<'p, 'q>
-            ),
-        > + ?Sized,
-{
-    fn prove<'q>(self) -> Cert<Axiomize, <Q as View<'q>>::Output> {
-        curry().mp(<Axiomize as FirstOrder>::forall_gen(PairUnique4::<
-            'a,
-            'b,
-            'p,
-            'q,
-            PairView<'p, 'a, 'b>,
-            PairView<'q, 'a, 'b>,
-        >(
-            PhantomData,
-            PhantomData,
-            PhantomData,
-        )))
-    }
-}
-
-struct PairUnique4<'a, 'b, 'p, 'q, E1: ?Sized, E2: ?Sized>(
-    PhantomData<(&'a (), &'b (), &'p (), &'q ())>,
-    PhantomData<E1>,
-    PhantomData<E2>,
-);
-impl<E1: ?Sized, E2: ?Sized> Clone for PairUnique4<'_, '_, '_, '_, E1, E2> {
-    fn clone(&self) -> Self {
-        PairUnique4(PhantomData, PhantomData, PhantomData)
-    }
-}
-impl<'a, 'b, 'p, 'q, E1, E2, Q>
-    ForAllProof<
-        Axiomize,
-        <Axiomize as And>::And<
-            <Axiomize as FirstOrder>::ForAll<E1>,
-            <Axiomize as FirstOrder>::ForAll<E2>,
-        >,
-        Q,
-    > for PairUnique4<'a, 'b, 'p, 'q, E1, E2>
-where
-    E1: for<'z> View<
-            'z,
-            Output = pred!({ Axiomize }, In::<'z, 'p>.iff(Eq::<'z, 'a> || Eq::<'z, 'b>)),
-        > + ?Sized,
-    E2: for<'z> View<
-            'z,
-            Output = pred!({ Axiomize }, In::<'z, 'q>.iff(Eq::<'z, 'a> || Eq::<'z, 'b>)),
-        > + ?Sized,
-    Q: for<'z> View<'z, Output = Iff<Axiomize, In<'z, 'p>, In<'z, 'q>>> + ?Sized,
-{
-    fn prove<'z>(
-        self,
-    ) -> Cert<
-        Axiomize,
-        <Axiomize as Imply>::Imply<
-            <Axiomize as And>::And<
-                <Axiomize as FirstOrder>::ForAll<E1>,
-                <Axiomize as FirstOrder>::ForAll<E2>,
-            >,
-            <Q as View<'z>>::Output,
-        >,
-    > {
-        // (z∈p ↔ D) and (z∈q ↔ D) give (z∈p ↔ D) and (D ↔ z∈q), which compose.
-        syllogism()
-            .mp(and_map(
-                <Axiomize as FirstOrder>::forall_elim::<'z, E1>(),
-                syllogism()
-                    .mp(<Axiomize as FirstOrder>::forall_elim::<'z, E2>())
-                    .mp(and_comm()),
-            ))
-            .mp(iff_trans())
+        desc_unique::<Axiomize, SetIn, PairCond<'a, 'b>>()
     }
 }
 
@@ -374,16 +275,10 @@ where
 pub type SingletonUniqueView = dyn for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<SingletonUniqueView1<'a>>>
     + 'static;
 /// `λs. ∀t. s = {a} → t = {a} → s = t`
-pub type SingletonUniqueView1<'a> = dyn for<'s> View<'s, Output = <Axiomize as FirstOrder>::ForAll<SingletonUniqueView2<'a, 's>>>
-    + 'static;
-/// `λt. s = {a} → t = {a} → s = t`
-pub type SingletonUniqueView2<'a, 's> = dyn for<'t> View<
-        't,
-        Output = pred!(
-            { Axiomize },
-            IsSingleton::<'s, 'a> >>= IsSingleton::<'t, 'a> >>= Eq::<'s, 't>
-        ),
-    > + 'static;
+///
+/// With `a` fixed, `{a}` is *the* set satisfying `z = a`, so this is
+/// [`crate::rel::desc`]'s view at [`SingletonCond`].
+pub type SingletonUniqueView1<'a> = DescUniqueView1<Axiomize, SetIn, SingletonCond<'a>>;
 
 /// `∀a ∀s ∀t. s = {a} → t = {a} → s = t` — **proved**.
 ///
@@ -402,94 +297,7 @@ where
         + ?Sized,
 {
     fn prove<'a>(self) -> Cert<Axiomize, <Q as View<'a>>::Output> {
-        forall_intro::<Axiomize, SingletonUniqueView1<'a>, _>(SingletonUnique1(PhantomData))
-    }
-}
-
-#[derive(Clone, Copy)]
-struct SingletonUnique1<'a>(PhantomData<&'a ()>);
-impl<'a, Q> Generalise<Axiomize, Q> for SingletonUnique1<'a>
-where
-    Q: for<'s> View<'s, Output = <Axiomize as FirstOrder>::ForAll<SingletonUniqueView2<'a, 's>>>
-        + ?Sized,
-{
-    fn prove<'s>(self) -> Cert<Axiomize, <Q as View<'s>>::Output> {
-        forall_intro::<Axiomize, SingletonUniqueView2<'a, 's>, _>(SingletonUnique2(PhantomData))
-    }
-}
-
-#[derive(Clone, Copy)]
-struct SingletonUnique2<'a, 's>(PhantomData<(&'a (), &'s ())>);
-impl<'a, 's, Q> Generalise<Axiomize, Q> for SingletonUnique2<'a, 's>
-where
-    Q: for<'t> View<
-            't,
-            Output = pred!(
-                { Axiomize },
-                IsSingleton::<'s, 'a> >>= IsSingleton::<'t, 'a> >>= Eq::<'s, 't>
-            ),
-        > + ?Sized,
-{
-    fn prove<'t>(self) -> Cert<Axiomize, <Q as View<'t>>::Output> {
-        curry().mp(<Axiomize as FirstOrder>::forall_gen(SingletonUnique3::<
-            'a,
-            's,
-            't,
-            SingletonView<'s, 'a>,
-            SingletonView<'t, 'a>,
-        >(
-            PhantomData,
-            PhantomData,
-            PhantomData,
-        )))
-    }
-}
-
-struct SingletonUnique3<'a, 's, 't, E1: ?Sized, E2: ?Sized>(
-    PhantomData<(&'a (), &'s (), &'t ())>,
-    PhantomData<E1>,
-    PhantomData<E2>,
-);
-impl<E1: ?Sized, E2: ?Sized> Clone for SingletonUnique3<'_, '_, '_, E1, E2> {
-    fn clone(&self) -> Self {
-        SingletonUnique3(PhantomData, PhantomData, PhantomData)
-    }
-}
-impl<'a, 's, 't, E1, E2, Q>
-    ForAllProof<
-        Axiomize,
-        <Axiomize as And>::And<
-            <Axiomize as FirstOrder>::ForAll<E1>,
-            <Axiomize as FirstOrder>::ForAll<E2>,
-        >,
-        Q,
-    > for SingletonUnique3<'a, 's, 't, E1, E2>
-where
-    E1: for<'z> View<'z, Output = Iff<Axiomize, In<'z, 's>, Eq<'z, 'a>>> + ?Sized,
-    E2: for<'z> View<'z, Output = Iff<Axiomize, In<'z, 't>, Eq<'z, 'a>>> + ?Sized,
-    Q: for<'z> View<'z, Output = Iff<Axiomize, In<'z, 's>, In<'z, 't>>> + ?Sized,
-{
-    fn prove<'z>(
-        self,
-    ) -> Cert<
-        Axiomize,
-        <Axiomize as Imply>::Imply<
-            <Axiomize as And>::And<
-                <Axiomize as FirstOrder>::ForAll<E1>,
-                <Axiomize as FirstOrder>::ForAll<E2>,
-            >,
-            <Q as View<'z>>::Output,
-        >,
-    > {
-        // (z∈s ↔ z=a) and (z∈t ↔ z=a) give (z∈s ↔ z=a) and (z=a ↔ z∈t).
-        syllogism()
-            .mp(and_map(
-                <Axiomize as FirstOrder>::forall_elim::<'z, E1>(),
-                syllogism()
-                    .mp(<Axiomize as FirstOrder>::forall_elim::<'z, E2>())
-                    .mp(and_comm()),
-            ))
-            .mp(iff_trans())
+        desc_unique::<Axiomize, SetIn, SingletonCond<'a>>()
     }
 }
 
@@ -1255,16 +1063,10 @@ where
 pub type SuccUniqueView =
     dyn for<'y> View<'y, Output = <Axiomize as FirstOrder>::ForAll<SuccUniqueView1<'y>>> + 'static;
 /// `λs. ∀t. s = y ∪ {y} → t = y ∪ {y} → s = t`
-pub type SuccUniqueView1<'y> = dyn for<'s> View<'s, Output = <Axiomize as FirstOrder>::ForAll<SuccUniqueView2<'y, 's>>>
-    + 'static;
-/// `λt. s = y ∪ {y} → t = y ∪ {y} → s = t`
-pub type SuccUniqueView2<'y, 's> = dyn for<'t> View<
-        't,
-        Output = pred!(
-            { Axiomize },
-            IsSuccOf::<'s, 'y> >>= IsSuccOf::<'t, 'y> >>= Eq::<'s, 't>
-        ),
-    > + 'static;
+///
+/// With `y` fixed, the successor is *the* set satisfying `w ∈ y ∨ w = y`, so
+/// this is [`crate::rel::desc`]'s view at [`SuccCond`].
+pub type SuccUniqueView1<'y> = DescUniqueView1<Axiomize, SetIn, SuccCond<'y>>;
 
 /// `∀y ∀s ∀t. IsSuccOf(s, y) → IsSuccOf(t, y) → s = t` — **proved**.
 ///
@@ -1282,106 +1084,7 @@ where
     Q: for<'y> View<'y, Output = <Axiomize as FirstOrder>::ForAll<SuccUniqueView1<'y>>> + ?Sized,
 {
     fn prove<'y>(self) -> Cert<Axiomize, <Q as View<'y>>::Output> {
-        forall_intro::<Axiomize, SuccUniqueView1<'y>, _>(SuccUnique1(PhantomData))
-    }
-}
-
-#[derive(Clone, Copy)]
-struct SuccUnique1<'y>(PhantomData<&'y ()>);
-impl<'y, Q> Generalise<Axiomize, Q> for SuccUnique1<'y>
-where
-    Q: for<'s> View<'s, Output = <Axiomize as FirstOrder>::ForAll<SuccUniqueView2<'y, 's>>>
-        + ?Sized,
-{
-    fn prove<'s>(self) -> Cert<Axiomize, <Q as View<'s>>::Output> {
-        forall_intro::<Axiomize, SuccUniqueView2<'y, 's>, _>(SuccUnique2(PhantomData))
-    }
-}
-
-#[derive(Clone, Copy)]
-struct SuccUnique2<'y, 's>(PhantomData<(&'y (), &'s ())>);
-impl<'y, 's, Q> Generalise<Axiomize, Q> for SuccUnique2<'y, 's>
-where
-    Q: for<'t> View<
-            't,
-            Output = pred!(
-                { Axiomize },
-                IsSuccOf::<'s, 'y> >>= IsSuccOf::<'t, 'y> >>= Eq::<'s, 't>
-            ),
-        > + ?Sized,
-{
-    fn prove<'t>(self) -> Cert<Axiomize, <Q as View<'t>>::Output> {
-        curry().mp(<Axiomize as FirstOrder>::forall_gen(SuccUnique3::<
-            'y,
-            's,
-            't,
-            SuccView<'s, 'y>,
-            SuccView<'t, 'y>,
-        >(
-            PhantomData,
-            PhantomData,
-            PhantomData,
-        )))
-    }
-}
-
-struct SuccUnique3<'y, 's, 't, E1: ?Sized, E2: ?Sized>(
-    PhantomData<(&'y (), &'s (), &'t ())>,
-    PhantomData<E1>,
-    PhantomData<E2>,
-);
-impl<E1: ?Sized, E2: ?Sized> Clone for SuccUnique3<'_, '_, '_, E1, E2> {
-    fn clone(&self) -> Self {
-        SuccUnique3(PhantomData, PhantomData, PhantomData)
-    }
-}
-impl<'y, 's, 't, E1, E2, Q>
-    ForAllProof<
-        Axiomize,
-        <Axiomize as And>::And<
-            <Axiomize as FirstOrder>::ForAll<E1>,
-            <Axiomize as FirstOrder>::ForAll<E2>,
-        >,
-        Q,
-    > for SuccUnique3<'y, 's, 't, E1, E2>
-where
-    E1: for<'w> View<
-            'w,
-            Output = pred!(
-                { Axiomize },
-                (In::<'w, 's>).iff((In::<'w, 'y>) || (Eq::<'w, 'y>))
-            ),
-        > + ?Sized,
-    E2: for<'w> View<
-            'w,
-            Output = pred!(
-                { Axiomize },
-                (In::<'w, 't>).iff((In::<'w, 'y>) || (Eq::<'w, 'y>))
-            ),
-        > + ?Sized,
-    Q: for<'w> View<'w, Output = Iff<Axiomize, In<'w, 's>, In<'w, 't>>> + ?Sized,
-{
-    fn prove<'w>(
-        self,
-    ) -> Cert<
-        Axiomize,
-        <Axiomize as Imply>::Imply<
-            <Axiomize as And>::And<
-                <Axiomize as FirstOrder>::ForAll<E1>,
-                <Axiomize as FirstOrder>::ForAll<E2>,
-            >,
-            <Q as View<'w>>::Output,
-        >,
-    > {
-        // (w∈s ↔ D) and (w∈t ↔ D) give (w∈s ↔ D) and (D ↔ w∈t), which compose.
-        syllogism()
-            .mp(and_map(
-                <Axiomize as FirstOrder>::forall_elim::<'w, E1>(),
-                syllogism()
-                    .mp(<Axiomize as FirstOrder>::forall_elim::<'w, E2>())
-                    .mp(and_comm()),
-            ))
-            .mp(iff_trans())
+        desc_unique::<Axiomize, SetIn, SuccCond<'y>>()
     }
 }
 
@@ -1424,7 +1127,7 @@ fn succ_unique_at<'y, 's, 't>() -> Cert<
         >())
         .pipe(<Axiomize as FirstOrder>::forall_elim::<
             't,
-            SuccUniqueView2<'y, 's>,
+            DescUniqueView<'s, Axiomize, SetIn, SuccCond<'y>>,
         >())
 }
 
@@ -2369,6 +2072,24 @@ const _: () = {
     use super::axioms::{
         choice, ext, infinity, pairing, power_set, regularity, replacement, separation, union,
     };
+    use crate::rel::desc::Describes;
+
+    /// The three uniqueness theorems are now one theorem at three conditions,
+    /// so each notion's `Is…` spelling has to *be* [`Describes`] at its
+    /// condition. If a condition ever drifts from the notion it names, the
+    /// uniqueness proof would still compile — while proving something else —
+    /// and these are what would stop it.
+    fn conditions_match_their_notions<'a, 'b, 'y, 's>(
+        p: Cert<Axiomize, Describes<'s, Axiomize, SetIn, PairCond<'a, 'b>>>,
+        t: Cert<Axiomize, Describes<'s, Axiomize, SetIn, SingletonCond<'a>>>,
+        c: Cert<Axiomize, Describes<'s, Axiomize, SetIn, SuccCond<'y>>>,
+    ) -> (
+        Cert<Axiomize, IsPair<'s, 'a, 'b>>,
+        Cert<Axiomize, IsSingleton<'s, 'a>>,
+        Cert<Axiomize, IsSuccOf<'s, 'y>>,
+    ) {
+        (p, t, c)
+    }
 
     /// Every axiom is stated and callable, both schemas included.
     fn axioms_are_callable() {
