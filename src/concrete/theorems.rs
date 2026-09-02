@@ -19,12 +19,15 @@ use super::equality::{SetEq, SetIn};
 use super::lang::*;
 use crate::logic::prop::{
     And, Cert, Deduction, DeductionUpgrade, ExistsProof, FirstOrder, ForAllProof, Generalise, Iff,
-    Imply, Intuitionistic, Negation, Or, PropLogic, View, and_comm, and_map, curry, exchange,
-    forall_intro, or_idem, syllogism,
+    Imply, Or, PropLogic, View, and_comm, curry, exchange, forall_intro, or_idem, syllogism,
 };
 use crate::rel::desc::{
     DescUniqueView, DescUniqueView1, SameAs, desc_congr_at, desc_elim_at, desc_intro_at,
     desc_unique,
+};
+use crate::rel::empty::{
+    EmptyUniqueView as GenEmptyUniqueView, EmptyUniqueView1 as GenEmptyUniqueView1,
+    IsEmpty as GenIsEmpty, empty_unique as gen_empty_unique,
 };
 use crate::rel::eq::ClosedEq;
 use crate::rel::ext::{ExtReflView, Extensional, in_left, in_right};
@@ -868,119 +871,18 @@ where
 // for the same reason pairs are unique: `Eq` is sharing members, and both sides
 // are pinned to the same membership condition. No axiom is spent here either.
 
-/// `¬A → (A → B)` — nothing follows from a member of the empty set.
-fn absurd_imply<A, B>() -> Cert<
-    Axiomize,
-    <Axiomize as Imply>::Imply<<Axiomize as Negation>::Neg<A>, <Axiomize as Imply>::Imply<A, B>>,
-> {
-    exchange()
-        .mp(syllogism())
-        .mp(<Axiomize as Intuitionistic>::explosion())
-}
-
 /// `λx. ∀y. IsEmpty(x) → IsEmpty(y) → x = y`
-pub type EmptyUniqueView =
-    dyn for<'x> View<'x, Output = <Axiomize as FirstOrder>::ForAll<EmptyUniqueView1<'x>>> + 'static;
+pub type EmptyUniqueView = GenEmptyUniqueView1<Axiomize, SetIn>;
 /// `λy. IsEmpty(x) → IsEmpty(y) → x = y`
-pub type EmptyUniqueView1<'x> = dyn for<'y> View<
-        'y,
-        Output = pred!(
-            { Axiomize },
-            IsEmpty::<'x> >>= IsEmpty::<'y> >>= Eq::<'x, 'y>
-        ),
-    > + 'static;
+pub type EmptyUniqueView1<'x> = GenEmptyUniqueView<'x, Axiomize, SetIn>;
 
 /// `∀x ∀y. IsEmpty(x) → IsEmpty(y) → x = y` — **proved**.
 ///
 /// There is at most one empty set. Both directions of the biconditional hold
-/// vacuously: neither side has a member to disagree about.
+/// vacuously: neither side has a member to disagree about. Nothing about sets
+/// enters, so the argument is [`crate::rel::empty`]'s.
 pub fn empty_unique() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<EmptyUniqueView>> {
-    forall_intro(EmptyUnique)
-}
-
-#[derive(Clone, Copy)]
-struct EmptyUnique;
-impl<Q> Generalise<Axiomize, Q> for EmptyUnique
-where
-    Q: for<'x> View<'x, Output = <Axiomize as FirstOrder>::ForAll<EmptyUniqueView1<'x>>> + ?Sized,
-{
-    fn prove<'x>(self) -> Cert<Axiomize, <Q as View<'x>>::Output> {
-        forall_intro::<Axiomize, EmptyUniqueView1<'x>, _>(EmptyUnique1(PhantomData))
-    }
-}
-
-#[derive(Clone, Copy)]
-struct EmptyUnique1<'x>(PhantomData<&'x ()>);
-impl<'x, Q> Generalise<Axiomize, Q> for EmptyUnique1<'x>
-where
-    Q: for<'y> View<
-            'y,
-            Output = pred!(
-                { Axiomize },
-                IsEmpty::<'x> >>= IsEmpty::<'y> >>= Eq::<'x, 'y>
-            ),
-        > + ?Sized,
-{
-    fn prove<'y>(self) -> Cert<Axiomize, <Q as View<'y>>::Output> {
-        curry().mp(<Axiomize as FirstOrder>::forall_gen(EmptyUnique2::<
-            'x,
-            'y,
-            EmptyView<'x>,
-            EmptyView<'y>,
-        >(
-            PhantomData,
-            PhantomData,
-            PhantomData,
-        )))
-    }
-}
-
-struct EmptyUnique2<'x, 'y, E1: ?Sized, E2: ?Sized>(
-    PhantomData<(&'x (), &'y ())>,
-    PhantomData<E1>,
-    PhantomData<E2>,
-);
-impl<E1: ?Sized, E2: ?Sized> Clone for EmptyUnique2<'_, '_, E1, E2> {
-    fn clone(&self) -> Self {
-        EmptyUnique2(PhantomData, PhantomData, PhantomData)
-    }
-}
-impl<'x, 'y, E1, E2, Q>
-    ForAllProof<
-        Axiomize,
-        <Axiomize as And>::And<
-            <Axiomize as FirstOrder>::ForAll<E1>,
-            <Axiomize as FirstOrder>::ForAll<E2>,
-        >,
-        Q,
-    > for EmptyUnique2<'x, 'y, E1, E2>
-where
-    E1: for<'z> View<'z, Output = <Axiomize as Negation>::Neg<In<'z, 'x>>> + ?Sized,
-    E2: for<'z> View<'z, Output = <Axiomize as Negation>::Neg<In<'z, 'y>>> + ?Sized,
-    Q: for<'z> View<'z, Output = Iff<Axiomize, In<'z, 'x>, In<'z, 'y>>> + ?Sized,
-{
-    fn prove<'z>(
-        self,
-    ) -> Cert<
-        Axiomize,
-        <Axiomize as Imply>::Imply<
-            <Axiomize as And>::And<
-                <Axiomize as FirstOrder>::ForAll<E1>,
-                <Axiomize as FirstOrder>::ForAll<E2>,
-            >,
-            <Q as View<'z>>::Output,
-        >,
-    > {
-        // z ∉ x gives z ∈ x → z ∈ y outright, and symmetrically.
-        and_map(
-            syllogism()
-                .mp(<Axiomize as FirstOrder>::forall_elim::<'z, E1>())
-                .mp(absurd_imply::<In<'z, 'x>, In<'z, 'y>>()),
-            syllogism()
-                .mp(<Axiomize as FirstOrder>::forall_elim::<'z, E2>())
-                .mp(absurd_imply::<In<'z, 'y>, In<'z, 'x>>()),
-        )
-    }
+    gen_empty_unique::<Axiomize, SetIn>()
 }
 
 /// `λy. ∀s ∀t. s = y ∪ {y} → t = y ∪ {y} → s = t`
@@ -2013,6 +1915,15 @@ const _: () = {
         Cert<Axiomize, IsSuccOf<'s, 'y>>,
     ) {
         (p, t, c)
+    }
+
+    /// Emptiness is not a [`Describes`], so it gets its own identification:
+    /// [`crate::rel::empty::IsEmpty`] at [`SetIn`] has to be the [`IsEmpty`]
+    /// the axioms are written in, or [`empty_unique`] proves the wrong thing.
+    fn emptiness_matches_its_notion<'e>(
+        e: Cert<Axiomize, GenIsEmpty<'e, Axiomize, SetIn>>,
+    ) -> Cert<Axiomize, IsEmpty<'e>> {
+        e
     }
 
     /// Every axiom is stated and callable, both schemas included.

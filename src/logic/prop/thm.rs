@@ -1,5 +1,6 @@
 use super::{
-    And, Cert, ExistsProof, FirstOrder, ForAllProof, Iff, Imply, Negation, Or, PropLogic, View,
+    And, Cert, ExistsProof, FirstOrder, ForAllProof, Iff, Imply, Intuitionistic, Negation, Or,
+    PropLogic, View,
 };
 use ::core::marker::PhantomData;
 
@@ -205,6 +206,18 @@ pub fn or_idem<P, Prop: And + Or>() -> Cert<Prop, Iff<Prop, P, Prop::Or<P, P>>> 
     Prop::and_intro()
         .mp(Prop::or_left())
         .mp(Prop::or_elim().mp(reflexive()).mp(reflexive()))
+}
+
+/// `¬A → (A → B)` — a refuted antecedent implies anything.
+///
+/// Routed through [`Intuitionistic::neg_def`] rather than reading `¬A` as
+/// `A → ⊥` directly: only some logics *define* it that way, and this holds of
+/// all of them.
+pub fn absurd_imply<A, B, Prop: Intuitionistic>()
+-> Cert<Prop, Prop::Imply<Prop::Neg<A>, Prop::Imply<A, B>>> {
+    syllogism()
+        .mp(Prop::and_left().mp(Prop::neg_def::<A>()))
+        .mp(exchange().mp(syllogism()).mp(Prop::explosion::<B>()))
 }
 
 /// Conjunction survives an assumption: every axiom is closed, so `upgrade`
