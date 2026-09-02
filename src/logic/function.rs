@@ -1,47 +1,129 @@
 use crate::logic::prop::{And, FirstOrder, Imply, View};
 use crate::macros::thm;
-use crate::rel::poset::{BinRel, Equivalence};
+use crate::rel::Set;
+use crate::rel::poset::{BinRel, Equivalence, Reflexive, Symmetric, Transitive};
 
-/// The equality symbol of the logic `L`.
+/// The definitional half of equality: name an equivalence relation and assert
+/// Leibniz's law for it.
 ///
-/// Equality is `L`'s own [`BinRel::Rel`]: the logic is the universe, and its
-/// distinguished relation on that universe is equality. Writing it through
-/// this alias keeps the reading unambiguous where a *structure*'s relation is
-/// also in scope -- `Self::Rel` is the structure's, `Eq<'a, 'b, Logic>` is the
-/// logic's.
+/// This is the only trait a logic implements by hand. It carries no `Logic`
+/// parameter -- `Self` *is* the logic. Equality is used too often and sits too
+/// deep to be one structure among many: in a set theory it applies to every
+/// object, because every object is a set.
 ///
-/// The alias is one step deep and lands on a rigid projection, so at a type
-/// parameter `L` it stays a four-node term rather than expanding into a
-/// definition. That is what keeps proof terms small; see [`crate::rel::set`].
-pub type Eq<'a, 'b, L> = <L as BinRel>::Rel<'a, 'b>;
+/// Reflexivity, symmetry and transitivity are deliberately *not* stated here.
+/// They come from [`EqRel`](EqualityDef::EqRel) being an [`Equivalence`], so
+/// the definition of an equivalence relation lives in exactly one place and
+/// anything proved generically about equivalence relations applies to equality
+/// for free.
+pub trait EqualityDef: Imply + FirstOrder {
+    /// The relation that serves as equality, as a structure. Its domain
+    /// ([`Set::El`]) is what counts as an object of this logic.
+    type EqRel: Equivalence<Self>;
 
-/// Equality: an equivalence relation on the logic's objects that additionally
-/// satisfies Leibniz's law.
-///
-/// Unlike [`crate::rel::poset`]'s relations this takes no `Logic` parameter --
-/// `Self` *is* the logic. Equality is used too often and sits too deep to be
-/// one structure among many: in a set theory it applies to every object,
-/// because every object is a set. So the logic carries the universe
-/// ([`crate::rel::Set::El`], "is an object") and equality on it ([`BinRel::Rel`]).
-///
-/// Reflexivity, symmetry and transitivity are deliberately *not* restated
-/// here. They are [`Equivalence<Self>`], so the definition lives in one place
-/// and anything proved generically about equivalence relations applies to
-/// equality for free. Because the bound's subject is `Self` it elaborates like
-/// a supertrait, so a plain `L: Equality` bound carries all three with no
-/// repetition at the use site.
-pub trait Equality: Imply + FirstOrder + Equivalence<Self> {
     /// Substitution (Leibniz's law): forall x y. x = y -> (P(x) -> P(y)),
     /// as a schema in the predicate `P`. This is the whole difference between
-    /// equality and an arbitrary equivalence relation.
+    /// equality and an arbitrary equivalence relation, so it is the only axiom
+    /// [`Equivalence`] does not already supply.
     fn eq_subst<P>() -> thm!(
         { Self },
-        ForAll::<'x, 'y>(
-            Eq::<'x, 'y, Self> >>= <P as View<'x>>::Output >>= <P as View<'y>>::Output
-        )
+        'x: { <Self::EqRel as Set>::El::<'x> },
+        'y: { <Self::EqRel as Set>::El::<'y> },
+        <Self::EqRel as BinRel>::Rel::<'x, 'y> >>=
+            <P as View<'x>>::Output >>= <P as View<'y>>::Output
     )
     where
         P: for<'a> View<'a> + 'static;
+}
+
+/// Equality spelled directly on the logic.
+///
+/// Pure convenience: every method proxies to [`EqualityDef::EqRel`]'s
+/// [`Equivalence`] impl, and the blanket impl below is the only one there will
+/// ever be. It exists so that call sites write `Logic::Eq<'a, 'b>` rather than
+/// `<Logic::EqRel as BinRel>::Rel<'a, 'b>`, and so that `Self::Rel` never
+/// leaks onto the logic itself.
+///
+/// [`Eq`](Equality::Eq) is an *associated type*, never a type alias, so
+/// `<L as Equality>::Eq<'a, 'b>` at a type parameter `L` is a rigid projection
+/// rustc cannot normalise. That is what keeps proof terms small; see
+/// [`crate::rel::set`] for the measurement.
+pub trait Equality: EqualityDef {
+    /// `'a` is an object of this logic -- what equality ranges over.
+    type El<'a>;
+
+    /// Equality relation between two terms at lifetimes `'a` and `'b`
+    type Eq<'a, 'b>;
+
+    /// Reflexivity: forall x. x = x
+    fn eq_refl() -> thm!({ Self }, 'x: { Self::El::<'x> }, Self::Eq::<'x, 'x>);
+
+    /// Symmetry: forall x y. x = y -> y = x
+    fn eq_symm() -> thm!(
+        { Self },
+        'x: { Self::El::<'x> },
+        'y: { Self::El::<'y> },
+        Self::Eq::<'x, 'y> >>= Self::Eq::<'y, 'x>
+    );
+
+    /// Transitivity: forall x y z. x = y -> y = z -> x = z
+    fn eq_trans() -> thm!(
+        { Self },
+        'x: { Self::El::<'x> },
+        'y: { Self::El::<'y> },
+        'z: { Self::El::<'z> },
+        Self::Eq::<'x, 'y> >>= Self::Eq::<'y, 'z> >>= Self::Eq::<'x, 'z>
+    );
+
+    /// Substitution (Leibniz's law): forall x y. x = y -> (P(x) -> P(y))
+    fn eq_subst<P>() -> thm!(
+        { Self },
+        'x: { Self::El::<'x> },
+        'y: { Self::El::<'y> },
+        Self::Eq::<'x, 'y> >>= <P as View<'x>>::Output >>= <P as View<'y>>::Output
+    )
+    where
+        P: for<'a> View<'a> + 'static;
+}
+
+impl<L: EqualityDef> Equality for L {
+    type El<'a> = <L::EqRel as Set>::El<'a>;
+    type Eq<'a, 'b> = <L::EqRel as BinRel>::Rel<'a, 'b>;
+
+    fn eq_refl() -> thm!({ Self }, 'x: { Self::El::<'x> }, Self::Eq::<'x, 'x>) {
+        <L::EqRel as Reflexive<L>>::refl()
+    }
+
+    fn eq_symm() -> thm!(
+        { Self },
+        'x: { Self::El::<'x> },
+        'y: { Self::El::<'y> },
+        Self::Eq::<'x, 'y> >>= Self::Eq::<'y, 'x>
+    ) {
+        <L::EqRel as Symmetric<L>>::sym()
+    }
+
+    fn eq_trans() -> thm!(
+        { Self },
+        'x: { Self::El::<'x> },
+        'y: { Self::El::<'y> },
+        'z: { Self::El::<'z> },
+        Self::Eq::<'x, 'y> >>= Self::Eq::<'y, 'z> >>= Self::Eq::<'x, 'z>
+    ) {
+        <L::EqRel as Transitive<L>>::transitive()
+    }
+
+    fn eq_subst<P>() -> thm!(
+        { Self },
+        'x: { Self::El::<'x> },
+        'y: { Self::El::<'y> },
+        Self::Eq::<'x, 'y> >>= <P as View<'x>>::Output >>= <P as View<'y>>::Output
+    )
+    where
+        P: for<'a> View<'a> + 'static,
+    {
+        <L as EqualityDef>::eq_subst::<P>()
+    }
 }
 
 /// Function trait: A binary relation F that is total and functional
@@ -80,7 +162,7 @@ where
         'x: { Self::Dom::<'x> },
         'y: { Self::F::<'x, 'y> },
         'z: { Self::F::<'x, 'z> },
-        Eq::<'y, 'z, Logic>
+        Logic::Eq::<'y, 'z>
     );
 }
 
@@ -93,7 +175,7 @@ where
     /// Different inputs map to different outputs
     fn injective() -> thm!(
         { Logic },
-        ForAll::<'x, 'y, 'z>((Self::F::<'x, 'z> && Self::F::<'y, 'z>).imply(Eq::<'x, 'y, Logic>))
+        ForAll::<'x, 'y, 'z>((Self::F::<'x, 'z> && Self::F::<'y, 'z>).imply(Logic::Eq::<'x, 'y>))
     );
 }
 
@@ -126,18 +208,11 @@ where
 /// Static witnesses: `cargo check` is the proof checker.
 #[expect(dead_code, reason = "typecheck-only proof assertions")]
 const _: () = {
-    const fn need_equivalence<Logic, R>()
-    where
-        R: Equivalence<Logic>,
-        Logic: Imply + FirstOrder,
-    {
-    }
+    const fn need_equality<L: Equality>() {}
 
-    /// A bare `L: Equality` bound carries reflexivity, symmetry and
-    /// transitivity of [`Eq`] with no repetition at the use site. This is the
-    /// whole reason the bound's subject is `Self` rather than a wrapper type:
-    /// only then does rustc elaborate it like a supertrait.
-    const fn equality_is_an_equivalence<L: Equality>() {
-        need_equivalence::<L, L>();
+    /// Defining the relation is all a logic has to do: the four `eq_*`
+    /// theorems and `El`/`Eq` follow with no further obligation.
+    const fn def_gives_equality<L: EqualityDef>() {
+        need_equality::<L>();
     }
 };

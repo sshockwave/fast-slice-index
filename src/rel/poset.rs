@@ -1,5 +1,5 @@
 use super::Set;
-use crate::logic::function::{Eq, Equality};
+use crate::logic::function::Equality;
 use crate::logic::prop::{FirstOrder, Imply};
 use crate::macros::thm;
 
@@ -34,7 +34,7 @@ where
         { Logic },
         'a: { Self::El::<'a> },
         'b: { Self::El::<'b> },
-        Self::Rel::<'a, 'b>.imply(Self::Rel::<'b, 'a>.imply(Eq::<'a, 'b, Logic>))
+        Self::Rel::<'a, 'b>.imply(Self::Rel::<'b, 'a>.imply(Logic::Eq::<'a, 'b>))
     );
 }
 

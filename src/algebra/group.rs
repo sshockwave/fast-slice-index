@@ -49,14 +49,14 @@
 //! keeps a consumer such as [`crate::logic::rat`] in one logic throughout,
 //! instead of mixing the operation's `Imply` with the field's.
 
-use crate::logic::function::{Eq, Equality};
+use crate::logic::function::Equality;
 use crate::logic::prop::{And, FirstOrder};
 use crate::macros::{pred, thm};
 use crate::rel::Set;
 
 macro_rules! expr {
     ($x:lifetime == $y:lifetime) => {
-        Eq::<$x, $y, Logic>
+        Logic::Eq::<$x, $y>
     };
     ($x:lifetime * $y:lifetime == $z:lifetime) => {
         <Self as BinOp<Logic>>::Op::<$x, $y, $z>
