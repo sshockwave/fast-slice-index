@@ -16,11 +16,12 @@
 #![forbid(unsafe_code)]
 
 use super::Axiomize;
-use super::lang::{Eq, In, IsSet};
+use super::axioms::ext;
+use super::lang::{Eq, ExtCongrView, ExtView, ExtView1, In, IsSet};
 use crate::logic::function::EqualityDef;
-use crate::logic::prop::Cert;
+use crate::logic::prop::{And, Cert, FirstOrder, Imply, syllogism};
 use crate::rel::eq::Closed;
-use crate::rel::ext::{Ext, ExtEq, Membership};
+use crate::rel::ext::{Ext, ExtEq, Extensional, Membership};
 
 /// `∈` on the universe of sets.
 pub struct SetIn;
@@ -32,6 +33,29 @@ impl Membership<Axiomize> for SetIn {
 }
 
 /// `=` on the universe of sets: the equality [`SetIn`] induces.
+/// Extensionality, discharged by [the axiom](super::axioms::ext).
+///
+/// The only place a ZFC assumption enters the equality machinery. Everything
+/// [`Ext`] proves without this — that equality is an equivalence, and that
+/// equals may be substituted on the right of `∈` — holds of any membership
+/// relation whatever.
+impl Extensional<Axiomize> for SetIn {
+    fn in_left_at<'x, 'y, 'w>() -> Cert<
+        Axiomize,
+        <Axiomize as Imply>::Imply<Eq<'x, 'y>, <Axiomize as Imply>::Imply<In<'x, 'w>, In<'y, 'w>>>,
+    > {
+        let congr = ext()
+            .pipe(<Axiomize as FirstOrder>::forall_elim::<'x, ExtView>())
+            .pipe(<Axiomize as FirstOrder>::forall_elim::<'y, ExtView1<'x>>());
+        syllogism().mp(congr).mp(syllogism()
+            .mp(<Axiomize as FirstOrder>::forall_elim::<
+                'w,
+                ExtCongrView<'x, 'y>,
+            >())
+            .mp(<Axiomize as And>::and_left()))
+    }
+}
+
 pub type SetEq = Ext<Axiomize, SetIn>;
 
 /// [`SetEq`] presented on its domain, so it is an

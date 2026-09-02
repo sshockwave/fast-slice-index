@@ -15,7 +15,6 @@
 use ::core::marker::PhantomData;
 
 use super::Axiomize;
-use super::axioms::ext;
 use super::equality::{SetEq, SetIn};
 use super::lang::*;
 use crate::logic::prop::{
@@ -24,7 +23,7 @@ use crate::logic::prop::{
     forall_intro, iff_trans, reflexive, syllogism,
 };
 use crate::rel::eq::ClosedEq;
-use crate::rel::ext::ExtReflView;
+use crate::rel::ext::{ExtReflView, Extensional, in_left, in_right};
 use crate::macros::pred;
 
 // ---------------------------------------------------------------------------
@@ -869,16 +868,10 @@ where
 // sharing members, so substituting on the right of `∈` is immediate. On the
 // left it is not derivable at all — a set's members do not determine which sets
 // contain it — and that is exactly what extensionality is assumed for.
-
-/// `x = y → z ∈ x → z ∈ y`, at fixed points. Free from the definition of [`Eq`].
-fn eq_in_right_at<'x, 'y, 'z>() -> Cert<
-    Axiomize,
-    <Axiomize as Imply>::Imply<Eq<'x, 'y>, <Axiomize as Imply>::Imply<In<'z, 'x>, In<'z, 'y>>>,
-> {
-    syllogism()
-        .mp(<Axiomize as FirstOrder>::forall_elim::<'z, EqView<'x, 'y>>())
-        .mp(<Axiomize as And>::and_left())
-}
+//
+// Both are proved generically in [`crate::rel::ext`], of an arbitrary
+// membership relation; what is left here is the instantiation at [`In`], plus
+// the axiom that discharges [`Extensional`] (in [`super::equality`]).
 
 /// `x = y → x ∈ w → y ∈ w`, at fixed points. This is [`super::axioms::ext`]
 /// with all three quantifiers eliminated.
@@ -886,126 +879,7 @@ fn eq_in_left_at<'x, 'y, 'w>() -> Cert<
     Axiomize,
     <Axiomize as Imply>::Imply<Eq<'x, 'y>, <Axiomize as Imply>::Imply<In<'x, 'w>, In<'y, 'w>>>,
 > {
-    let congr = ext()
-        .pipe(<Axiomize as FirstOrder>::forall_elim::<'x, ExtView>())
-        .pipe(<Axiomize as FirstOrder>::forall_elim::<'y, ExtView1<'x>>());
-    syllogism().mp(congr).mp(syllogism()
-        .mp(<Axiomize as FirstOrder>::forall_elim::<
-            'w,
-            ExtCongrView<'x, 'y>,
-        >())
-        .mp(<Axiomize as And>::and_left()))
-}
-
-/// `λx. ∀y ∀z. x = y → z ∈ x → z ∈ y`
-pub type EqInRightView =
-    dyn for<'x> View<'x, Output = <Axiomize as FirstOrder>::ForAll<EqInRightView1<'x>>> + 'static;
-/// `λy. ∀z. x = y → z ∈ x → z ∈ y`
-pub type EqInRightView1<'x> = dyn for<'y> View<'y, Output = <Axiomize as FirstOrder>::ForAll<EqInRightView2<'x, 'y>>>
-    + 'static;
-/// `λz. x = y → z ∈ x → z ∈ y`
-pub type EqInRightView2<'x, 'y> = dyn for<'z> View<'z, Output = pred!({ Axiomize }, Eq::<'x, 'y> >>= In::<'z, 'x> >>= In::<'z, 'y>)>
-    + 'static;
-
-/// `∀x ∀y ∀z. x = y → z ∈ x → z ∈ y` — **proved**, no axiom.
-///
-/// Equal sets have the same members. That is what [`Eq`] *says*, so this is
-/// really just the definition with its quantifier stripped; see
-/// [`eq_in_left`] for the direction that is not free.
-pub fn eq_in_right() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<EqInRightView>> {
-    forall_intro(EqInRight)
-}
-
-#[derive(Clone, Copy)]
-struct EqInRight;
-impl<Q> Generalise<Axiomize, Q> for EqInRight
-where
-    Q: for<'x> View<'x, Output = <Axiomize as FirstOrder>::ForAll<EqInRightView1<'x>>> + ?Sized,
-{
-    fn prove<'x>(self) -> Cert<Axiomize, <Q as View<'x>>::Output> {
-        forall_intro::<Axiomize, EqInRightView1<'x>, _>(EqInRight1(PhantomData))
-    }
-}
-
-#[derive(Clone, Copy)]
-struct EqInRight1<'x>(PhantomData<&'x ()>);
-impl<'x, Q> Generalise<Axiomize, Q> for EqInRight1<'x>
-where
-    Q: for<'y> View<'y, Output = <Axiomize as FirstOrder>::ForAll<EqInRightView2<'x, 'y>>> + ?Sized,
-{
-    fn prove<'y>(self) -> Cert<Axiomize, <Q as View<'y>>::Output> {
-        forall_intro::<Axiomize, EqInRightView2<'x, 'y>, _>(EqInRight2(PhantomData))
-    }
-}
-
-#[derive(Clone, Copy)]
-struct EqInRight2<'x, 'y>(PhantomData<(&'x (), &'y ())>);
-impl<'x, 'y, Q> Generalise<Axiomize, Q> for EqInRight2<'x, 'y>
-where
-    Q: for<'z> View<
-            'z,
-            Output = pred!({ Axiomize }, Eq::<'x, 'y> >>= In::<'z, 'x> >>= In::<'z, 'y>),
-        > + ?Sized,
-{
-    fn prove<'z>(self) -> Cert<Axiomize, <Q as View<'z>>::Output> {
-        eq_in_right_at::<'x, 'y, 'z>()
-    }
-}
-
-/// `λx. ∀y ∀w. x = y → x ∈ w → y ∈ w`
-pub type EqInLeftView =
-    dyn for<'x> View<'x, Output = <Axiomize as FirstOrder>::ForAll<EqInLeftView1<'x>>> + 'static;
-/// `λy. ∀w. x = y → x ∈ w → y ∈ w`
-pub type EqInLeftView1<'x> = dyn for<'y> View<'y, Output = <Axiomize as FirstOrder>::ForAll<EqInLeftView2<'x, 'y>>>
-    + 'static;
-/// `λw. x = y → x ∈ w → y ∈ w`
-pub type EqInLeftView2<'x, 'y> = dyn for<'w> View<'w, Output = pred!({ Axiomize }, Eq::<'x, 'y> >>= In::<'x, 'w> >>= In::<'y, 'w>)>
-    + 'static;
-
-/// `∀x ∀y ∀w. x = y → x ∈ w → y ∈ w` — **proved from
-/// [`super::axioms::ext`]**.
-///
-/// The first theorem in this module that spends an axiom. Everything before it
-/// followed from the definitions alone; this one cannot, because nothing about
-/// a set's own members constrains which sets contain it.
-pub fn eq_in_left() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<EqInLeftView>> {
-    forall_intro(EqInLeft)
-}
-
-#[derive(Clone, Copy)]
-struct EqInLeft;
-impl<Q> Generalise<Axiomize, Q> for EqInLeft
-where
-    Q: for<'x> View<'x, Output = <Axiomize as FirstOrder>::ForAll<EqInLeftView1<'x>>> + ?Sized,
-{
-    fn prove<'x>(self) -> Cert<Axiomize, <Q as View<'x>>::Output> {
-        forall_intro::<Axiomize, EqInLeftView1<'x>, _>(EqInLeft1(PhantomData))
-    }
-}
-
-#[derive(Clone, Copy)]
-struct EqInLeft1<'x>(PhantomData<&'x ()>);
-impl<'x, Q> Generalise<Axiomize, Q> for EqInLeft1<'x>
-where
-    Q: for<'y> View<'y, Output = <Axiomize as FirstOrder>::ForAll<EqInLeftView2<'x, 'y>>> + ?Sized,
-{
-    fn prove<'y>(self) -> Cert<Axiomize, <Q as View<'y>>::Output> {
-        forall_intro::<Axiomize, EqInLeftView2<'x, 'y>, _>(EqInLeft2(PhantomData))
-    }
-}
-
-#[derive(Clone, Copy)]
-struct EqInLeft2<'x, 'y>(PhantomData<(&'x (), &'y ())>);
-impl<'x, 'y, Q> Generalise<Axiomize, Q> for EqInLeft2<'x, 'y>
-where
-    Q: for<'w> View<
-            'w,
-            Output = pred!({ Axiomize }, Eq::<'x, 'y> >>= In::<'x, 'w> >>= In::<'y, 'w>),
-        > + ?Sized,
-{
-    fn prove<'w>(self) -> Cert<Axiomize, <Q as View<'w>>::Output> {
-        eq_in_left_at::<'x, 'y, 'w>()
-    }
+    <SetIn as Extensional<Axiomize>>::in_left_at::<'x, 'y, 'w>()
 }
 
 // ---------------------------------------------------------------------------
@@ -2533,7 +2407,7 @@ const _: () = {
         let _ = pair_is_singleton();
         let _ = singleton_injective();
         let _ = pair_collapses();
-        let _ = eq_in_right();
+        let _ = in_right::<Axiomize, SetIn>();
     }
 
     /// The function elimination rules.
@@ -2570,7 +2444,7 @@ const _: () = {
 
     /// The one theorem so far that spends an axiom.
     fn congruence_needs_extensionality() {
-        let _ = eq_in_left();
+        let _ = in_left::<Axiomize, SetIn>();
     }
 
     /// Restating [`super::axioms::ext`] against [`ExtView`] must not have
