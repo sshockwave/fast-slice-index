@@ -22,6 +22,7 @@ pub mod equality;
 pub mod function;
 pub mod lang;
 pub mod pair;
+pub mod succ;
 pub mod theorems;
 
 pub struct Axiomize;

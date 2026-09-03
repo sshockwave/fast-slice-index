@@ -18,13 +18,11 @@ use super::Axiomize;
 use super::equality::{SetEq, SetIn};
 use super::function::SetApp;
 use super::pair::SetPair;
+use super::succ::SetSucc;
 use super::lang::*;
 use crate::logic::prop::{
     And, Cert, Deduction, DeductionUpgrade, ExistsProof, FirstOrder, ForAllProof, Generalise, Iff,
     Imply, PropLogic, View, curry, exchange, forall_intro, syllogism,
-};
-use crate::rel::desc::{
-    DescUniqueView, DescUniqueView1, desc_unique,
 };
 use crate::rel::empty::{
     EmptyUniqueView as GenEmptyUniqueView, EmptyUniqueView1 as GenEmptyUniqueView1,
@@ -38,6 +36,7 @@ use crate::rel::func::{
     apply_unique, in_domain, is_rel, single_valued,
 };
 use crate::rel::pair::PairingTheorems;
+use crate::rel::succ::{SuccessorTheorems, unique_at as succ_unique_at_generic};
 use crate::macros::{pred, thm};
 
 // ---------------------------------------------------------------------------
@@ -288,34 +287,17 @@ pub fn empty_unique() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<EmptyUn
     gen_empty_unique::<Axiomize, SetIn>()
 }
 
-/// `λy. ∀s ∀t. s = y ∪ {y} → t = y ∪ {y} → s = t`
-pub type SuccUniqueView =
-    dyn for<'y> View<'y, Output = <Axiomize as FirstOrder>::ForAll<SuccUniqueView1<'y>>> + 'static;
-/// `λs. ∀t. s = y ∪ {y} → t = y ∪ {y} → s = t`
-///
-/// With `y` fixed, the successor is *the* set satisfying `w ∈ y ∨ w = y`, so
-/// this is [`crate::rel::desc`]'s view at [`SuccCond`].
-pub type SuccUniqueView1<'y> = DescUniqueView1<Axiomize, SetIn, SuccCond<'y>>;
-
 /// `∀y ∀s ∀t. IsSuccOf(s, y) → IsSuccOf(t, y) → s = t` — **proved**.
 ///
 /// Each set has at most one successor. With [`super::axioms::infinity`]
 /// supplying existence, this is what lets a successor be spoken of as *the*
 /// successor.
-pub fn succ_unique() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<SuccUniqueView>> {
-    forall_intro(SuccUnique)
-}
-
-#[derive(Clone, Copy)]
-struct SuccUnique;
-impl<Q> Generalise<Axiomize, Q> for SuccUnique
-where
-    Q: for<'y> View<'y, Output = <Axiomize as FirstOrder>::ForAll<SuccUniqueView1<'y>>> + ?Sized,
-{
-    fn prove<'y>(self) -> Cert<Axiomize, <Q as View<'y>>::Output> {
-        desc_unique::<Axiomize, SetIn, SuccCond<'y>>()
-    }
-}
+pub fn succ_unique() -> thm!(
+    { Axiomize },
+    ForAll::<'y, 's, 't>(
+        IsSuccOf::<'s, 'y> >>= IsSuccOf::<'t, 'y> >>= Eq::<'s, 't>
+    )
+) { <SetSucc as SuccessorTheorems<Axiomize>>::unique() }
 
 // ---------------------------------------------------------------------------
 // Zero and successor are natural numbers
@@ -347,18 +329,7 @@ fn succ_unique_at<'y, 's, 't>() -> Cert<
         IsSuccOf<'s, 'y>,
         <Axiomize as Imply>::Imply<IsSuccOf<'t, 'y>, Eq<'s, 't>>,
     >,
-> {
-    succ_unique()
-        .pipe(<Axiomize as FirstOrder>::forall_elim::<'y, SuccUniqueView>())
-        .pipe(<Axiomize as FirstOrder>::forall_elim::<
-            's,
-            SuccUniqueView1<'y>,
-        >())
-        .pipe(<Axiomize as FirstOrder>::forall_elim::<
-            't,
-            DescUniqueView<'s, Axiomize, SetIn, SuccCond<'y>>,
-        >())
-}
+> { succ_unique_at_generic::<'y, 's, 't, Axiomize, SetSucc>() }
 
 /// `λe. IsEmpty(e) → IsNat(e)`
 pub type ZeroIsNatView =
