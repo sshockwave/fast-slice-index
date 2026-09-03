@@ -4,7 +4,8 @@
 //! from nothing, which is exactly what an axiom is. Keeping them alone in one
 //! file means the trusted base of the whole development can be audited by
 //! reading it end to end — the language they are stated in, and everything
-//! derived from them, lives in [`super::theorems`].
+//! derived from them, lives in the corresponding generic `logic` and `rel`
+//! modules.
 //!
 //! `cert` is reachable here and nowhere outside `axiom`, so this is the only
 //! place new assumptions can enter.
@@ -66,7 +67,7 @@ pub fn union() -> thm!(
 ///
 /// `P` is a type parameter instantiated per predicate, not a quantified
 /// variable — the same predicativity discipline as
-/// [`super::theorems::induction`]. Carving only out of an
+/// the generic induction development. Carving only out of an
 /// existing `a` is what keeps this from being naive comprehension, which would
 /// be inconsistent.
 pub fn separation<P>() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<SeparationView<P>>>

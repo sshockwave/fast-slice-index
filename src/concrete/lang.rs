@@ -3,7 +3,8 @@
 //! This sits *below* [`super::axioms`] because the nine assumptions have to be
 //! written in some language, and that language cannot in turn depend on them.
 //! Nothing here proves anything — every item is a definition, so the module has
-//! no `fn` at all. The derivations live one layer up, in [`super::theorems`].
+//! no `fn` at all. Generic derivations live in the corresponding `logic` and
+//! `rel` modules.
 //!
 //! [`In`] is the sole primitive. Equality is *defined* ([`Eq`]) as having the
 //! same members, which is why [`super::axioms::ext`] only has to assume the
