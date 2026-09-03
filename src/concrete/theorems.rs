@@ -25,8 +25,7 @@ use crate::logic::prop::{
     Imply, PropLogic, View, curry, exchange, forall_intro, syllogism,
 };
 use crate::rel::empty::{
-    EmptyUniqueView as GenEmptyUniqueView, EmptyUniqueView1 as GenEmptyUniqueView1,
-    IsEmpty as GenIsEmpty, empty_unique as gen_empty_unique,
+    IsEmpty as GenIsEmpty, empty_unique as gen_empty_unique, empty_unique_at as gen_empty_unique_at,
 };
 use crate::rel::eq::ClosedEq;
 use crate::rel::ext::{Extensional, in_left, in_right};
@@ -273,17 +272,15 @@ pub fn applies_in_domain() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<Ap
 // for the same reason pairs are unique: `Eq` is sharing members, and both sides
 // are pinned to the same membership condition. No axiom is spent here either.
 
-/// `λx. ∀y. IsEmpty(x) → IsEmpty(y) → x = y`
-pub type EmptyUniqueView = GenEmptyUniqueView1<Axiomize, SetIn>;
-/// `λy. IsEmpty(x) → IsEmpty(y) → x = y`
-pub type EmptyUniqueView1<'x> = GenEmptyUniqueView<'x, Axiomize, SetIn>;
-
 /// `∀x ∀y. IsEmpty(x) → IsEmpty(y) → x = y` — **proved**.
 ///
 /// There is at most one empty set. Both directions of the biconditional hold
 /// vacuously: neither side has a member to disagree about. Nothing about sets
 /// enters, so the argument is [`crate::rel::empty`]'s.
-pub fn empty_unique() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<EmptyUniqueView>> {
+pub fn empty_unique() -> thm!(
+    { Axiomize },
+    ForAll::<'x, 'y>(IsEmpty::<'x> >>= IsEmpty::<'y> >>= Eq::<'x, 'y>)
+) {
     gen_empty_unique::<Axiomize, SetIn>()
 }
 
@@ -314,12 +311,7 @@ fn empty_unique_at<'x, 'y>() -> Cert<
     Axiomize,
     <Axiomize as Imply>::Imply<IsEmpty<'x>, <Axiomize as Imply>::Imply<IsEmpty<'y>, Eq<'x, 'y>>>,
 > {
-    empty_unique()
-        .pipe(<Axiomize as FirstOrder>::forall_elim::<'x, EmptyUniqueView>())
-        .pipe(<Axiomize as FirstOrder>::forall_elim::<
-            'y,
-            EmptyUniqueView1<'x>,
-        >())
+    gen_empty_unique_at::<'x, 'y, Axiomize, SetIn>()
 }
 
 /// `IsSuccOf(s, y) → IsSuccOf(t, y) → s = t`, at fixed points.
