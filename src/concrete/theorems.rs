@@ -323,15 +323,11 @@ fn succ_unique_at<'y, 's, 't>() -> Cert<
     >,
 > { succ_unique_at_generic::<'y, 's, 't, Axiomize, SetSucc>() }
 
-/// `λe. IsEmpty(e) → IsNat(e)`
-pub type ZeroIsNatView =
-    dyn for<'e> View<'e, Output = <Axiomize as Imply>::Imply<IsEmpty<'e>, IsNat<'e>>> + 'static;
-
 /// `∀e. IsEmpty(e) → IsNat(e)` — **proved**.
 ///
 /// Zero is a natural number. Every inductive set contains an empty set, and
 /// there is only one empty set to contain.
-pub fn zero_is_nat() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<ZeroIsNatView>> {
+pub fn zero_is_nat() -> thm!({ Axiomize }, ForAll::<'e>(IsEmpty::<'e> >>= IsNat::<'e>)) {
     forall_intro(ZeroIsNat)
 }
 
@@ -389,9 +385,6 @@ impl<'e, 'i>
     }
 }
 
-/// `λy. ∀s. IsNat(y) → IsSuccOf(s, y) → IsNat(s)`
-pub type SuccIsNatView =
-    dyn for<'y> View<'y, Output = <Axiomize as FirstOrder>::ForAll<SuccIsNatView1<'y>>> + 'static;
 /// `λs. IsNat(y) → IsSuccOf(s, y) → IsNat(s)`
 pub type SuccIsNatView1<'y> = dyn for<'s> View<
         's,
@@ -406,7 +399,10 @@ pub type SuccIsNatView1<'y> = dyn for<'s> View<
 /// The naturals are closed under the successor. With [`zero_is_nat`] this is
 /// the introduction half of arithmetic; induction, the elimination half, needs
 /// ω to exist and so needs [`super::axioms::separation`].
-pub fn succ_is_nat() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<SuccIsNatView>> {
+pub fn succ_is_nat() -> thm!(
+    { Axiomize },
+    ForAll::<'y, 's>(IsNat::<'y> >>= IsSuccOf::<'s, 'y> >>= IsNat::<'s>)
+) {
     forall_intro(SuccIsNat)
 }
 
