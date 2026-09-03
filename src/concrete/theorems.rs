@@ -30,9 +30,7 @@ use crate::rel::empty::{
 use crate::rel::eq::ClosedEq;
 use crate::rel::ext::{Extensional, in_left, in_right};
 use crate::rel::func::{
-    ApplyUniqueView, ApplyUniqueView1, ApplyUniqueView2, ApplyUniqueView3,
-    InDomainView as GenInDomainView, InDomainView1, InDomainView2, IsRelView, SingleValuedRuleView,
-    apply_unique, in_domain, is_rel, single_valued,
+    apply_unique, is_rel, single_valued,
 };
 use crate::rel::pair::PairingTheorems;
 use crate::rel::succ::{SuccessorTheorems, unique_at as succ_unique_at_generic};
@@ -207,59 +205,34 @@ fn eq_in_left_at<'x, 'y, 'w>() -> Cert<
 // aliases, every occurrence of `Applies` is a Kuratowski pair inside an
 // existential, and `apply_unique` mentions it six times under four quantifiers.
 
-/// `λf. IsFunction(f) → IsSingleValued(f)`
-pub type FuncSingleValuedView = SingleValuedRuleView<Axiomize, SetApp>;
-
 /// `∀f. IsFunction(f) → f is single-valued` — **proved**.
-pub fn func_single_valued() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<FuncSingleValuedView>>
-{
+pub fn func_single_valued() -> thm!({ Axiomize }, ForAll::<'f>(
+    IsFunction::<'f> >>= ForAll::<'a, 'b, 'c>(
+        (Applies::<'f, 'a, 'b> && Applies::<'f, 'a, 'c>) >>= Eq::<'b, 'c>
+    )
+)) {
     single_valued::<Axiomize, SetApp>()
 }
-
-/// `λf. IsFunction(f) → IsRelation(f)`
-pub type FuncIsRelationView = IsRelView<Axiomize, SetApp>;
 
 /// `∀f. IsFunction(f) → IsRelation(f)` — **proved**.
 ///
 /// Every function is a set of ordered pairs, so anything proved about relations
 /// applies to it.
-pub fn func_is_relation() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<FuncIsRelationView>> {
+pub fn func_is_relation() -> thm!({ Axiomize }, ForAll::<'f>(
+    IsFunction::<'f> >>= IsRelation::<'f>
+)) {
     is_rel::<Axiomize, SetApp>()
 }
-
-/// `λc. IsFunction(f) → (f(a)=b ∧ f(a)=c) → b = c`
-pub type FuncApplyUniqueView3<'f, 'a, 'b> = ApplyUniqueView3<'f, 'a, 'b, Axiomize, SetApp>;
-/// `λb. ∀c. …`
-pub type FuncApplyUniqueView2<'f, 'a> = ApplyUniqueView2<'f, 'a, Axiomize, SetApp>;
-/// `λa. ∀b ∀c. …`
-pub type FuncApplyUniqueView1<'f> = ApplyUniqueView1<'f, Axiomize, SetApp>;
-/// `λf. ∀a ∀b ∀c. …`
-pub type FuncApplyUniqueView = ApplyUniqueView<Axiomize, SetApp>;
 
 /// `∀f ∀a ∀b ∀c. IsFunction(f) → (f(a)=b ∧ f(a)=c) → b = c` — **proved**.
 ///
 /// A function has at most one value at each argument. This is the defining
 /// property unpacked into usable form: [`IsFunction`] states it behind three
 /// quantifiers, and this is that statement with them eliminated.
-pub fn func_apply_unique() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<FuncApplyUniqueView>>
-{
+pub fn func_apply_unique() -> thm!({ Axiomize }, ForAll::<'f, 'a, 'b, 'c>(
+    IsFunction::<'f> >>= ((Applies::<'f, 'a, 'b> && Applies::<'f, 'a, 'c>) >>= Eq::<'b, 'c>)
+)) {
     apply_unique::<Axiomize, SetApp>()
-}
-
-/// `λb. f(a) = b → a ∈ dom f`
-pub type AppliesInDomainView2<'f, 'a> = InDomainView2<'f, 'a, Axiomize, SetApp>;
-/// `λa. ∀b. …`
-pub type AppliesInDomainView1<'f> = InDomainView1<'f, Axiomize, SetApp>;
-/// `λf. ∀a ∀b. f(a) = b → a ∈ dom f`
-pub type AppliesInDomainView = GenInDomainView<Axiomize, SetApp>;
-
-/// `∀f ∀a ∀b. f(a) = b → a ∈ dom f` — **proved**.
-///
-/// Anything a function maps somewhere is in its domain: the witness for the
-/// existential is the value itself.
-pub fn applies_in_domain() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<AppliesInDomainView>>
-{
-    in_domain::<Axiomize, SetApp>()
 }
 
 // ---------------------------------------------------------------------------
@@ -1333,7 +1306,6 @@ const _: () = {
         let _ = func_single_valued();
         let _ = func_is_relation();
         let _ = func_apply_unique();
-        let _ = applies_in_domain();
     }
 
     /// Splitting [`IsSingleValued`] out of [`IsFunction`] must leave the
