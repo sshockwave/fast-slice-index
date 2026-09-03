@@ -21,7 +21,6 @@ use ::core::marker::PhantomData;
 use super::Axiomize;
 use crate::logic::prop::{And, FirstOrder, Iff, Imply, Negation, View};
 use crate::macros::pred;
-use crate::rel::desc::Description;
 
 /// A binary relation as a type-level schema parameter, for [`super::axioms::replacement`].
 ///
@@ -109,18 +108,6 @@ pub type PairView<'p, 'a, 'b> = dyn for<'z> View<'z, Output = pred!({ Axiomize }
 /// `IsPair(p, a, b) := ∀z. (z ∈ p ↔ (z = a ∨ z = b))`, i.e. `p = {a, b}`.
 pub type IsPair<'p, 'a, 'b> = <Axiomize as FirstOrder>::ForAll<PairView<'p, 'a, 'b>>;
 
-/// `λz. z = a` — the condition [`IsSingleton`] describes.
-pub struct SingletonCond<'a>(PhantomData<&'a ()>);
-impl<'a> Description<Axiomize> for SingletonCond<'a> {
-    type Holds<'z> = Eq<'z, 'a>;
-}
-
-/// `λz. z = a ∨ z = b` — the condition [`IsPair`] describes.
-pub struct PairCond<'a, 'b>(PhantomData<(&'a (), &'b ())>);
-impl<'a, 'b> Description<Axiomize> for PairCond<'a, 'b> {
-    type Holds<'z> = pred!({ Axiomize }, (Eq::<'z, 'a>) || (Eq::<'z, 'b>));
-}
-
 /// `IsSuccOf(s, y) := ∀w. (w ∈ s ↔ (w ∈ y ∨ w = y))`, i.e. `s = y ∪ {y}`.
 ///
 /// The von Neumann successor, used only to state [`super::axioms::infinity`].
@@ -134,12 +121,6 @@ pub type SuccView<'s, 'y> = dyn for<'w> View<
     > + 'static;
 
 pub type IsSuccOf<'s, 'y> = <Axiomize as FirstOrder>::ForAll<SuccView<'s, 'y>>;
-
-/// `λw. w ∈ y ∨ w = y` — the condition [`IsSuccOf`] describes.
-pub struct SuccCond<'y>(PhantomData<&'y ()>);
-impl<'y> Description<Axiomize> for SuccCond<'y> {
-    type Holds<'w> = pred!({ Axiomize }, (In::<'w, 'y>) || (Eq::<'w, 'y>));
-}
 
 /// `λz. z ∈ s ↔ (z ∈ a ∧ Q(z))` — the body of [`IsSeparated`].
 pub type SeparatedView<'s, 'a, Q> = dyn for<'z> View<
@@ -195,18 +176,6 @@ pub type IsInductive<'i> = <Axiomize as And>::And<HasEmpty<'i>, ClosedUnderSucc<
 
 /// `λi. IsInductive(i)` — the body of [`super::axioms::infinity`].
 pub type InductiveView = dyn for<'i> View<'i, Output = IsInductive<'i>> + 'static;
-
-/// `λi. IsInductive(i) → n ∈ i` — the body of [`IsNat`].
-pub type IsNatView<'n> = dyn for<'i> View<'i, Output = <Axiomize as Imply>::Imply<IsInductive<'i>, In<'n, 'i>>>
-    + 'static;
-
-/// `IsNat(n) := ∀i. IsInductive(i) → n ∈ i`
-///
-/// A natural number is what every inductive set is obliged to contain. This is
-/// first-order here — `i` ranges over sets, which are ordinary elements — so no
-/// second-order quantification sneaks in, and ω need not exist yet for the
-/// predicate to be stated.
-pub type IsNat<'n> = <Axiomize as FirstOrder>::ForAll<IsNatView<'n>>;
 
 /// `IsOrderedPair(p, a, b) := p = {{a}, {a, b}}` — the Kuratowski pair.
 ///

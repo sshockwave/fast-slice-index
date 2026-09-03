@@ -18,11 +18,11 @@ use crate::logic::prop::{And, Cert, Imply, Intuitionistic, Negation, Or, neg::Pr
 
 pub mod axioms;
 mod base;
-pub mod equality;
-pub mod function;
-pub mod lang;
-pub mod pair;
-pub mod succ;
+mod equality;
+mod function;
+mod lang;
+mod pair;
+mod succ;
 
 pub struct Axiomize;
 
