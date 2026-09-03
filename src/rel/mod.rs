@@ -3,6 +3,7 @@ pub mod empty;
 pub mod eq;
 pub mod ext;
 pub mod func;
+pub mod pair;
 pub mod poset;
 
 pub trait Set {

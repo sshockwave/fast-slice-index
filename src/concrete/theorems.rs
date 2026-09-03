@@ -17,14 +17,14 @@ use ::core::marker::PhantomData;
 use super::Axiomize;
 use super::equality::{SetEq, SetIn};
 use super::function::SetApp;
+use super::pair::SetPair;
 use super::lang::*;
 use crate::logic::prop::{
     And, Cert, Deduction, DeductionUpgrade, ExistsProof, FirstOrder, ForAllProof, Generalise, Iff,
     Imply, Or, PropLogic, View, and_comm, curry, exchange, forall_intro, or_idem, syllogism,
 };
 use crate::rel::desc::{
-    DescUniqueView, DescUniqueView1, SameAs, desc_congr_at, desc_elim_at, desc_intro_at,
-    desc_unique,
+    DescUniqueView, DescUniqueView1, SameAs, desc_congr_at, desc_elim_at, desc_unique,
 };
 use crate::rel::empty::{
     EmptyUniqueView as GenEmptyUniqueView, EmptyUniqueView1 as GenEmptyUniqueView1,
@@ -37,7 +37,8 @@ use crate::rel::func::{
     InDomainView as GenInDomainView, InDomainView1, InDomainView2, IsRelView, SingleValuedRuleView,
     apply_unique, in_domain, is_rel, single_valued,
 };
-use crate::macros::pred;
+use crate::rel::pair::PairingTheorems;
+use crate::macros::{pred, thm};
 
 // ---------------------------------------------------------------------------
 // Pairs are unique
@@ -47,48 +48,18 @@ use crate::macros::pred;
 // supplies the other half, and it needs no axiom either: two sets with the same
 // membership condition satisfy `Eq` by definition.
 
-/// `λa. ∀b ∀p ∀q. p = {a,b} → q = {a,b} → p = q`
-pub type PairUniqueView =
-    dyn for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<PairUniqueView1<'a>>> + 'static;
-/// `λb. ∀p ∀q. p = {a,b} → q = {a,b} → p = q`
-pub type PairUniqueView1<'a> = dyn for<'b> View<'b, Output = <Axiomize as FirstOrder>::ForAll<PairUniqueView2<'a, 'b>>>
-    + 'static;
-/// `λp. ∀q. p = {a,b} → q = {a,b} → p = q`
-///
-/// Once `a` and `b` are fixed, `{a,b}` is just *the* set satisfying a
-/// condition, so this is [`crate::rel::desc`]'s view at [`PairCond`].
-pub type PairUniqueView2<'a, 'b> = DescUniqueView1<Axiomize, SetIn, PairCond<'a, 'b>>;
-
 /// `∀a ∀b ∀p ∀q. p = {a,b} → q = {a,b} → p = q` — **proved**.
 ///
 /// Together with [`super::axioms::pairing`] this pins the pair down:
 /// it exists and is unique. Still no axiom — `Eq` is *defined* as sharing
 /// members, and both sets share the membership condition `z = a ∨ z = b`.
-pub fn pair_unique() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<PairUniqueView>> {
-    forall_intro(PairUnique)
-}
-
-#[derive(Clone, Copy)]
-struct PairUnique;
-impl<Q> Generalise<Axiomize, Q> for PairUnique
-where
-    Q: for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<PairUniqueView1<'a>>> + ?Sized,
-{
-    fn prove<'a>(self) -> Cert<Axiomize, <Q as View<'a>>::Output> {
-        forall_intro::<Axiomize, PairUniqueView1<'a>, _>(PairUnique1(PhantomData))
-    }
-}
-
-#[derive(Clone, Copy)]
-struct PairUnique1<'a>(PhantomData<&'a ()>);
-impl<'a, Q> Generalise<Axiomize, Q> for PairUnique1<'a>
-where
-    Q: for<'b> View<'b, Output = <Axiomize as FirstOrder>::ForAll<PairUniqueView2<'a, 'b>>>
-        + ?Sized,
-{
-    fn prove<'b>(self) -> Cert<Axiomize, <Q as View<'b>>::Output> {
-        desc_unique::<Axiomize, SetIn, PairCond<'a, 'b>>()
-    }
+pub fn pair_unique() -> thm!(
+    { Axiomize },
+    ForAll::<'a, 'b, 'p, 'q>(
+        IsPair::<'p, 'a, 'b> >>= IsPair::<'q, 'a, 'b> >>= Eq::<'p, 'q>
+    )
+) {
+    <SetPair as PairingTheorems<Axiomize>>::pair_unique()
 }
 
 // ---------------------------------------------------------------------------
@@ -112,105 +83,23 @@ fn eq_refl_at<'x>() -> Cert<Axiomize, Eq<'x, 'x>> {
 fn pair_member<'a, 'b, 'c, 'p>(
     side: Cert<Axiomize, <Axiomize as Or>::Or<Eq<'c, 'a>, Eq<'c, 'b>>>,
 ) -> Cert<Axiomize, <Axiomize as Imply>::Imply<IsPair<'p, 'a, 'b>, In<'c, 'p>>> {
-    desc_intro_at::<'p, 'c, Axiomize, SetIn, PairCond<'a, 'b>>(side)
+    crate::rel::pair::pair_member_at::<'a, 'b, 'c, 'p, Axiomize, SetPair>(side)
 }
-
-/// `λa. ∀b ∀p. p = {a,b} → a ∈ p`
-pub type PairLeftView =
-    dyn for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<PairLeftView1<'a>>> + 'static;
-/// `λb. ∀p. p = {a,b} → a ∈ p`
-pub type PairLeftView1<'a> = dyn for<'b> View<'b, Output = <Axiomize as FirstOrder>::ForAll<PairLeftView2<'a, 'b>>>
-    + 'static;
-/// `λp. p = {a,b} → a ∈ p`
-pub type PairLeftView2<'a, 'b> = dyn for<'p> View<'p, Output = pred!({ Axiomize }, IsPair::<'p, 'a, 'b> >>= In::<'a, 'p>)>
-    + 'static;
 
 /// `∀a ∀b ∀p. p = {a,b} → a ∈ p` — **proved**.
-pub fn pair_left() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<PairLeftView>> {
-    forall_intro(PairLeft)
+pub fn pair_left() -> thm!(
+    { Axiomize },
+    ForAll::<'a, 'b, 'p>(IsPair::<'p, 'a, 'b> >>= In::<'a, 'p>)
+) {
+    <SetPair as PairingTheorems<Axiomize>>::pair_left()
 }
-
-#[derive(Clone, Copy)]
-struct PairLeft;
-impl<Q> Generalise<Axiomize, Q> for PairLeft
-where
-    Q: for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<PairLeftView1<'a>>> + ?Sized,
-{
-    fn prove<'a>(self) -> Cert<Axiomize, <Q as View<'a>>::Output> {
-        forall_intro::<Axiomize, PairLeftView1<'a>, _>(PairLeft1(PhantomData))
-    }
-}
-
-#[derive(Clone, Copy)]
-struct PairLeft1<'a>(PhantomData<&'a ()>);
-impl<'a, Q> Generalise<Axiomize, Q> for PairLeft1<'a>
-where
-    Q: for<'b> View<'b, Output = <Axiomize as FirstOrder>::ForAll<PairLeftView2<'a, 'b>>> + ?Sized,
-{
-    fn prove<'b>(self) -> Cert<Axiomize, <Q as View<'b>>::Output> {
-        forall_intro::<Axiomize, PairLeftView2<'a, 'b>, _>(PairLeft2(PhantomData))
-    }
-}
-
-#[derive(Clone, Copy)]
-struct PairLeft2<'a, 'b>(PhantomData<(&'a (), &'b ())>);
-impl<'a, 'b, Q> Generalise<Axiomize, Q> for PairLeft2<'a, 'b>
-where
-    Q: for<'p> View<'p, Output = pred!({ Axiomize }, IsPair::<'p, 'a, 'b> >>= In::<'a, 'p>)>
-        + ?Sized,
-{
-    fn prove<'p>(self) -> Cert<Axiomize, <Q as View<'p>>::Output> {
-        pair_member(<Axiomize as Or>::or_left().mp(eq_refl_at::<'a>()))
-    }
-}
-
-/// `λa. ∀b ∀p. p = {a,b} → b ∈ p`
-pub type PairRightView =
-    dyn for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<PairRightView1<'a>>> + 'static;
-/// `λb. ∀p. p = {a,b} → b ∈ p`
-pub type PairRightView1<'a> = dyn for<'b> View<'b, Output = <Axiomize as FirstOrder>::ForAll<PairRightView2<'a, 'b>>>
-    + 'static;
-/// `λp. p = {a,b} → b ∈ p`
-pub type PairRightView2<'a, 'b> = dyn for<'p> View<'p, Output = pred!({ Axiomize }, IsPair::<'p, 'a, 'b> >>= In::<'b, 'p>)>
-    + 'static;
 
 /// `∀a ∀b ∀p. p = {a,b} → b ∈ p` — **proved**.
-pub fn pair_right() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<PairRightView>> {
-    forall_intro(PairRight)
-}
-
-#[derive(Clone, Copy)]
-struct PairRight;
-impl<Q> Generalise<Axiomize, Q> for PairRight
-where
-    Q: for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<PairRightView1<'a>>> + ?Sized,
-{
-    fn prove<'a>(self) -> Cert<Axiomize, <Q as View<'a>>::Output> {
-        forall_intro::<Axiomize, PairRightView1<'a>, _>(PairRight1(PhantomData))
-    }
-}
-
-#[derive(Clone, Copy)]
-struct PairRight1<'a>(PhantomData<&'a ()>);
-impl<'a, Q> Generalise<Axiomize, Q> for PairRight1<'a>
-where
-    Q: for<'b> View<'b, Output = <Axiomize as FirstOrder>::ForAll<PairRightView2<'a, 'b>>> + ?Sized,
-{
-    fn prove<'b>(self) -> Cert<Axiomize, <Q as View<'b>>::Output> {
-        forall_intro::<Axiomize, PairRightView2<'a, 'b>, _>(PairRight2(PhantomData))
-    }
-}
-
-#[derive(Clone, Copy)]
-struct PairRight2<'a, 'b>(PhantomData<(&'a (), &'b ())>);
-impl<'a, 'b, Q> Generalise<Axiomize, Q> for PairRight2<'a, 'b>
-where
-    Q: for<'p> View<'p, Output = pred!({ Axiomize }, IsPair::<'p, 'a, 'b> >>= In::<'b, 'p>)>
-        + ?Sized,
-{
-    fn prove<'p>(self) -> Cert<Axiomize, <Q as View<'p>>::Output> {
-        pair_member(<Axiomize as Or>::or_right().mp(eq_refl_at::<'b>()))
-    }
+pub fn pair_right() -> thm!(
+    { Axiomize },
+    ForAll::<'a, 'b, 'p>(IsPair::<'p, 'a, 'b> >>= In::<'b, 'p>)
+) {
+    <SetPair as PairingTheorems<Axiomize>>::pair_right()
 }
 
 // ---------------------------------------------------------------------------
@@ -227,76 +116,32 @@ where
 /// disjunction to choose a side of, only `a = a`.
 fn singleton_member_at<'a, 's>()
 -> Cert<Axiomize, <Axiomize as Imply>::Imply<IsSingleton<'s, 'a>, In<'a, 's>>> {
-    desc_intro_at::<'s, 'a, Axiomize, SetIn, SingletonCond<'a>>(eq_refl_at::<'a>())
+    crate::rel::pair::singleton_member_at::<'a, 's, Axiomize, SetPair>()
 }
-
-/// `λa. ∀s. s = {a} → a ∈ s`
-pub type SingletonMemberView = dyn for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<SingletonMemberView1<'a>>>
-    + 'static;
-/// `λs. s = {a} → a ∈ s`
-pub type SingletonMemberView1<'a> = dyn for<'s> View<'s, Output = pred!({ Axiomize }, IsSingleton::<'s, 'a> >>= In::<'a, 's>)>
-    + 'static;
 
 /// `∀a ∀s. s = {a} → a ∈ s` — **proved**.
 ///
 /// A singleton is not empty. This is what stops the ordered-pair proof from
 /// arguing vacuously about `{a}`.
-pub fn singleton_member() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<SingletonMemberView>> {
-    forall_intro(SingletonMember)
+pub fn singleton_member() -> thm!(
+    { Axiomize },
+    ForAll::<'a, 's>(IsSingleton::<'s, 'a> >>= In::<'a, 's>)
+) {
+    <SetPair as PairingTheorems<Axiomize>>::singleton_member()
 }
-
-#[derive(Clone, Copy)]
-struct SingletonMember;
-impl<Q> Generalise<Axiomize, Q> for SingletonMember
-where
-    Q: for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<SingletonMemberView1<'a>>>
-        + ?Sized,
-{
-    fn prove<'a>(self) -> Cert<Axiomize, <Q as View<'a>>::Output> {
-        forall_intro::<Axiomize, SingletonMemberView1<'a>, _>(SingletonMember1(PhantomData))
-    }
-}
-
-#[derive(Clone, Copy)]
-struct SingletonMember1<'a>(PhantomData<&'a ()>);
-impl<'a, Q> Generalise<Axiomize, Q> for SingletonMember1<'a>
-where
-    Q: for<'s> View<'s, Output = pred!({ Axiomize }, IsSingleton::<'s, 'a> >>= In::<'a, 's>)>
-        + ?Sized,
-{
-    fn prove<'s>(self) -> Cert<Axiomize, <Q as View<'s>>::Output> {
-        singleton_member_at::<'a, 's>()
-    }
-}
-
-/// `λa. ∀s ∀t. s = {a} → t = {a} → s = t`
-pub type SingletonUniqueView = dyn for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<SingletonUniqueView1<'a>>>
-    + 'static;
-/// `λs. ∀t. s = {a} → t = {a} → s = t`
-///
-/// With `a` fixed, `{a}` is *the* set satisfying `z = a`, so this is
-/// [`crate::rel::desc`]'s view at [`SingletonCond`].
-pub type SingletonUniqueView1<'a> = DescUniqueView1<Axiomize, SetIn, SingletonCond<'a>>;
 
 /// `∀a ∀s ∀t. s = {a} → t = {a} → s = t` — **proved**.
 ///
 /// The singleton counterpart of [`pair_unique`], and identical in shape: both
 /// sets share the membership condition `z = a`, and `Eq` is *defined* as
 /// sharing members.
-pub fn singleton_unique() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<SingletonUniqueView>> {
-    forall_intro(SingletonUnique)
-}
-
-#[derive(Clone, Copy)]
-struct SingletonUnique;
-impl<Q> Generalise<Axiomize, Q> for SingletonUnique
-where
-    Q: for<'a> View<'a, Output = <Axiomize as FirstOrder>::ForAll<SingletonUniqueView1<'a>>>
-        + ?Sized,
-{
-    fn prove<'a>(self) -> Cert<Axiomize, <Q as View<'a>>::Output> {
-        desc_unique::<Axiomize, SetIn, SingletonCond<'a>>()
-    }
+pub fn singleton_unique() -> thm!(
+    { Axiomize },
+    ForAll::<'a, 's, 't>(
+        IsSingleton::<'s, 'a> >>= IsSingleton::<'t, 'a> >>= Eq::<'s, 't>
+    )
+) {
+    <SetPair as PairingTheorems<Axiomize>>::singleton_unique()
 }
 
 // ---------------------------------------------------------------------------
