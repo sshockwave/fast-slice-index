@@ -9,10 +9,11 @@
 use core::marker::PhantomData;
 
 use crate::logic::prop::{
-    forall_intro, syllogism, And, Cert, Deduction, DeductionUpgrade, FirstOrder, Generalise, Iff,
-    Imply, Or, PropLogic, View,
+    forall_intro, or_idem, syllogism, And, Cert, Deduction, DeductionUpgrade, FirstOrder,
+    Generalise, Iff, Imply, Or, PropLogic, View, and_comm,
 };
 use crate::rel::desc::{Describes, Description, desc_intro_at, desc_unique_at};
+use crate::rel::desc::{SameAs, desc_congr_at, desc_elim_at};
 use crate::rel::eq::ClosedEq;
 use crate::rel::ext::{Ext, ExtEq, ExtReflView, Membership};
 use crate::macros::{pred, thm};
@@ -86,6 +87,28 @@ where
     >;
 }
 
+impl<'a, Logic, P> SameAs<Logic, PairCond<'a, 'a, Logic, P>>
+    for SingletonCond<'a, Logic, P>
+where
+    Logic: PropLogic + And + Or + FirstOrder,
+    P: Pairing<Logic> + ?Sized,
+{
+    fn iff_at<'z>() -> Cert<Logic, Iff<Logic, ExtEq<'z, 'a, Logic, P::Mem>, Logic::Or<ExtEq<'z, 'a, Logic, P::Mem>, ExtEq<'z, 'a, Logic, P::Mem>>>> {
+        or_idem::<ExtEq<'z, 'a, Logic, P::Mem>, Logic>()
+    }
+}
+
+impl<'a, Logic, P> SameAs<Logic, SingletonCond<'a, Logic, P>>
+    for PairCond<'a, 'a, Logic, P>
+where
+    Logic: PropLogic + And + Or + FirstOrder,
+    P: Pairing<Logic> + ?Sized,
+{
+    fn iff_at<'z>() -> Cert<Logic, Iff<Logic, Logic::Or<ExtEq<'z, 'a, Logic, P::Mem>, ExtEq<'z, 'a, Logic, P::Mem>>, ExtEq<'z, 'a, Logic, P::Mem>>> {
+        and_comm().mp(or_idem::<ExtEq<'z, 'a, Logic, P::Mem>, Logic>())
+    }
+}
+
 fn pair_describes_at<'p, 'a, 'b, Logic, P>() -> Cert<
     Logic,
     <Logic as crate::logic::prop::Imply>::Imply<PairAt<'p, 'a, 'b, Logic, P>, Describes<'p, Logic, <P as Pairing<Logic>>::Mem, PairCond<'a, 'b, Logic, P>>>,
@@ -152,6 +175,74 @@ where
             <P as Pairing<Logic>>::Mem,
             SingletonCond<'a, Logic, P>,
         >(eq_refl_at::<'a, Logic, P>()))
+}
+
+fn singleton_is_pair_at<'a, 's, Logic, P>() -> thm!(
+    { Logic },
+    SingletonAt::<'s, 'a, Logic, P> >>= PairAt::<'s, 'a, 'a, Logic, P>
+)
+where
+    Logic: PropLogic + And + Or + FirstOrder,
+    P: Pairing<Logic> + ?Sized,
+{
+    syllogism()
+        .mp(singleton_describes_at::<'s, 'a, Logic, P>())
+        .mp(syllogism()
+            .mp(desc_congr_at::<'s, Logic, P::Mem, SingletonCond<'a, Logic, P>, PairCond<'a, 'a, Logic, P>>())
+            .mp(Logic::and_right().mp(P::pair_iff::<'s, 'a, 'a>())))
+}
+
+fn pair_is_singleton_at<'a, 's, Logic, P>() -> thm!(
+    { Logic },
+    PairAt::<'s, 'a, 'a, Logic, P> >>= SingletonAt::<'s, 'a, Logic, P>
+)
+where
+    Logic: PropLogic + And + Or + FirstOrder,
+    P: Pairing<Logic> + ?Sized,
+{
+    syllogism()
+        .mp(pair_describes_at::<'s, 'a, 'a, Logic, P>())
+        .mp(syllogism()
+            .mp(desc_congr_at::<'s, Logic, P::Mem, PairCond<'a, 'a, Logic, P>, SingletonCond<'a, Logic, P>>())
+            .mp(Logic::and_right().mp(P::singleton_iff::<'s, 'a>())))
+}
+
+fn singleton_injective_at<'a, 'c, 's, Logic, P>() -> thm!(
+    { Logic },
+    SingletonAt::<'s, 'a, Logic, P> >>= SingletonAt::<'s, 'c, Logic, P>
+        >>= ExtEq::<'a, 'c, Logic, P::Mem>
+)
+where
+    Logic: PropLogic + And + Or + FirstOrder,
+    P: Pairing<Logic> + ?Sized,
+{
+    Deduction::<SingletonAt<'s, 'a, Logic, P>, Logic>::scope(|sa| {
+        Deduction::<SingletonAt<'s, 'c, Logic, P>, _>::scope(|sc| {
+            let a_in_s = sa.upgrade().pipe(singleton_member_at::<'a, 's, Logic, P>().upgrade().upgrade());
+            let sc_desc = sc.pipe(singleton_describes_at::<'s, 'c, Logic, P>().upgrade().upgrade());
+            let to_c = sc_desc.pipe(desc_elim_at::<'s, 'a, Logic, P::Mem, SingletonCond<'c, Logic, P>>().upgrade().upgrade());
+            a_in_s.pipe(to_c)
+        })
+    })
+}
+
+fn pair_collapses_at<'a, 'b, 'p, Logic, P>() -> thm!(
+    { Logic },
+    PairAt::<'p, 'a, 'b, Logic, P> >>= SingletonAt::<'p, 'a, Logic, P>
+        >>= ExtEq::<'b, 'a, Logic, P::Mem>
+)
+where
+    Logic: PropLogic + And + Or + FirstOrder,
+    P: Pairing<Logic> + ?Sized,
+{
+    Deduction::<PairAt<'p, 'a, 'b, Logic, P>, Logic>::scope(|pab| {
+        Deduction::<SingletonAt<'p, 'a, Logic, P>, _>::scope(|pa| {
+            let b_in_p = pab.upgrade().pipe(pair_member_at::<'a, 'b, 'b, 'p, Logic, P>(Logic::or_right().mp(eq_refl_at::<'b, Logic, P>())).upgrade().upgrade());
+            let pa_desc = pa.pipe(singleton_describes_at::<'p, 'a, Logic, P>().upgrade().upgrade());
+            let to_a = pa_desc.pipe(desc_elim_at::<'p, 'b, Logic, P::Mem, SingletonCond<'a, Logic, P>>().upgrade().upgrade());
+            b_in_p.pipe(to_a)
+        })
+    })
 }
 
 fn pair_unique_at<'a, 'b, 'p, 'q, Logic, P>() -> thm!(
@@ -402,6 +493,24 @@ where
                 >>= ExtEq::<'s, 't, Logic, Self::Mem>
         )
     );
+
+    fn singleton_is_pair() -> thm!({ Logic }, ForAll::<'a, 's>(
+        SingletonAt::<'s, 'a, Logic, Self> >>= PairAt::<'s, 'a, 'a, Logic, Self>
+    ));
+
+    fn pair_is_singleton() -> thm!({ Logic }, ForAll::<'a, 's>(
+        PairAt::<'s, 'a, 'a, Logic, Self> >>= SingletonAt::<'s, 'a, Logic, Self>
+    ));
+
+    fn singleton_injective() -> thm!({ Logic }, ForAll::<'a, 'c, 's>(
+        SingletonAt::<'s, 'a, Logic, Self> >>= SingletonAt::<'s, 'c, Logic, Self>
+            >>= ExtEq::<'a, 'c, Logic, Self::Mem>
+    ));
+
+    fn pair_collapses() -> thm!({ Logic }, ForAll::<'a, 'b, 'p>(
+        PairAt::<'p, 'a, 'b, Logic, Self> >>= SingletonAt::<'p, 'a, Logic, Self>
+            >>= ExtEq::<'b, 'a, Logic, Self::Mem>
+    ));
 }
 
 impl<Logic, P> PairingTheorems<Logic> for P
@@ -451,7 +560,89 @@ where
     ) {
         forall_intro(ProveSingletonUnique::<Logic, P>(PhantomData))
     }
+
+    fn singleton_is_pair() -> thm!({ Logic }, ForAll::<'a, 's>(
+        SingletonAt::<'s, 'a, Logic, Self> >>= PairAt::<'s, 'a, 'a, Logic, Self>
+    )) { forall_intro(SingletonIsPair::<Logic, P>(PhantomData)) }
+
+    fn pair_is_singleton() -> thm!({ Logic }, ForAll::<'a, 's>(
+        PairAt::<'s, 'a, 'a, Logic, Self> >>= SingletonAt::<'s, 'a, Logic, Self>
+    )) { forall_intro(PairIsSingleton::<Logic, P>(PhantomData)) }
+
+    fn singleton_injective() -> thm!({ Logic }, ForAll::<'a, 'c, 's>(
+        SingletonAt::<'s, 'a, Logic, Self> >>= SingletonAt::<'s, 'c, Logic, Self>
+            >>= ExtEq::<'a, 'c, Logic, Self::Mem>
+    )) { forall_intro(SingletonInjective::<Logic, P>(PhantomData)) }
+
+    fn pair_collapses() -> thm!({ Logic }, ForAll::<'a, 'b, 'p>(
+        PairAt::<'p, 'a, 'b, Logic, Self> >>= SingletonAt::<'p, 'a, Logic, Self>
+            >>= ExtEq::<'b, 'a, Logic, Self::Mem>
+    )) { forall_intro(PairCollapses::<Logic, P>(PhantomData)) }
 }
+
+struct SingletonIsPair<Logic, P: ?Sized>(PhantomData<(Logic, *const P)>);
+unit_clone!(SingletonIsPair<>);
+impl<Logic, P, Q> Generalise<Logic, Q> for SingletonIsPair<Logic, P>
+where Logic: PropLogic + And + Or + FirstOrder, P: Pairing<Logic> + ?Sized,
+    Q: for<'a> View<'a, Output = pred!({ Logic }, ForAll::<'s>(SingletonAt::<'s, 'a, Logic, P> >>= PairAt::<'s, 'a, 'a, Logic, P>))> + ?Sized,
+{ fn prove<'a>(self) -> Cert<Logic, <Q as View<'a>>::Output> { forall_intro(SingletonIsPair1::<'a, Logic, P>(PhantomData)) } }
+struct SingletonIsPair1<'a, Logic, P: ?Sized>(PhantomData<(&'a (), Logic, *const P)>);
+unit_clone!(SingletonIsPair1<'a>);
+impl<'a, Logic, P, Q> Generalise<Logic, Q> for SingletonIsPair1<'a, Logic, P>
+where Logic: PropLogic + And + Or + FirstOrder, P: Pairing<Logic> + ?Sized,
+    Q: for<'s> View<'s, Output = pred!({ Logic }, SingletonAt::<'s, 'a, Logic, P> >>= PairAt::<'s, 'a, 'a, Logic, P>)> + ?Sized,
+{ fn prove<'s>(self) -> Cert<Logic, <Q as View<'s>>::Output> { singleton_is_pair_at::<'a, 's, Logic, P>() } }
+
+struct PairIsSingleton<Logic, P: ?Sized>(PhantomData<(Logic, *const P)>);
+unit_clone!(PairIsSingleton<>);
+impl<Logic, P, Q> Generalise<Logic, Q> for PairIsSingleton<Logic, P>
+where Logic: PropLogic + And + Or + FirstOrder, P: Pairing<Logic> + ?Sized,
+    Q: for<'a> View<'a, Output = pred!({ Logic }, ForAll::<'s>(PairAt::<'s, 'a, 'a, Logic, P> >>= SingletonAt::<'s, 'a, Logic, P>))> + ?Sized,
+{ fn prove<'a>(self) -> Cert<Logic, <Q as View<'a>>::Output> { forall_intro(PairIsSingleton1::<'a, Logic, P>(PhantomData)) } }
+struct PairIsSingleton1<'a, Logic, P: ?Sized>(PhantomData<(&'a (), Logic, *const P)>);
+unit_clone!(PairIsSingleton1<'a>);
+impl<'a, Logic, P, Q> Generalise<Logic, Q> for PairIsSingleton1<'a, Logic, P>
+where Logic: PropLogic + And + Or + FirstOrder, P: Pairing<Logic> + ?Sized,
+    Q: for<'s> View<'s, Output = pred!({ Logic }, PairAt::<'s, 'a, 'a, Logic, P> >>= SingletonAt::<'s, 'a, Logic, P>)> + ?Sized,
+{ fn prove<'s>(self) -> Cert<Logic, <Q as View<'s>>::Output> { pair_is_singleton_at::<'a, 's, Logic, P>() } }
+
+struct SingletonInjective<Logic, P: ?Sized>(PhantomData<(Logic, *const P)>);
+unit_clone!(SingletonInjective<>);
+impl<Logic, P, Q> Generalise<Logic, Q> for SingletonInjective<Logic, P>
+where Logic: PropLogic + And + Or + FirstOrder, P: Pairing<Logic> + ?Sized,
+    Q: for<'a> View<'a, Output = pred!({ Logic }, ForAll::<'c, 's>(SingletonAt::<'s, 'a, Logic, P> >>= SingletonAt::<'s, 'c, Logic, P> >>= ExtEq::<'a, 'c, Logic, P::Mem>))> + ?Sized,
+{ fn prove<'a>(self) -> Cert<Logic, <Q as View<'a>>::Output> { forall_intro(SingletonInjective1::<'a, Logic, P>(PhantomData)) } }
+struct SingletonInjective1<'a, Logic, P: ?Sized>(PhantomData<(&'a (), Logic, *const P)>);
+unit_clone!(SingletonInjective1<'a>);
+impl<'a, Logic, P, Q> Generalise<Logic, Q> for SingletonInjective1<'a, Logic, P>
+where Logic: PropLogic + And + Or + FirstOrder, P: Pairing<Logic> + ?Sized,
+    Q: for<'c> View<'c, Output = pred!({ Logic }, ForAll::<'s>(SingletonAt::<'s, 'a, Logic, P> >>= SingletonAt::<'s, 'c, Logic, P> >>= ExtEq::<'a, 'c, Logic, P::Mem>))> + ?Sized,
+{ fn prove<'c>(self) -> Cert<Logic, <Q as View<'c>>::Output> { forall_intro(SingletonInjective2::<'a, 'c, Logic, P>(PhantomData)) } }
+struct SingletonInjective2<'a, 'c, Logic, P: ?Sized>(PhantomData<(&'a (), &'c (), Logic, *const P)>);
+unit_clone!(SingletonInjective2<'a, 'c>);
+impl<'a, 'c, Logic, P, Q> Generalise<Logic, Q> for SingletonInjective2<'a, 'c, Logic, P>
+where Logic: PropLogic + And + Or + FirstOrder, P: Pairing<Logic> + ?Sized,
+    Q: for<'s> View<'s, Output = pred!({ Logic }, SingletonAt::<'s, 'a, Logic, P> >>= SingletonAt::<'s, 'c, Logic, P> >>= ExtEq::<'a, 'c, Logic, P::Mem>)> + ?Sized,
+{ fn prove<'s>(self) -> Cert<Logic, <Q as View<'s>>::Output> { singleton_injective_at::<'a, 'c, 's, Logic, P>() } }
+
+struct PairCollapses<Logic, P: ?Sized>(PhantomData<(Logic, *const P)>);
+unit_clone!(PairCollapses<>);
+impl<Logic, P, Q> Generalise<Logic, Q> for PairCollapses<Logic, P>
+where Logic: PropLogic + And + Or + FirstOrder, P: Pairing<Logic> + ?Sized,
+    Q: for<'a> View<'a, Output = pred!({ Logic }, ForAll::<'b, 'p>(PairAt::<'p, 'a, 'b, Logic, P> >>= SingletonAt::<'p, 'a, Logic, P> >>= ExtEq::<'b, 'a, Logic, P::Mem>))> + ?Sized,
+{ fn prove<'a>(self) -> Cert<Logic, <Q as View<'a>>::Output> { forall_intro(PairCollapses1::<'a, Logic, P>(PhantomData)) } }
+struct PairCollapses1<'a, Logic, P: ?Sized>(PhantomData<(&'a (), Logic, *const P)>);
+unit_clone!(PairCollapses1<'a>);
+impl<'a, Logic, P, Q> Generalise<Logic, Q> for PairCollapses1<'a, Logic, P>
+where Logic: PropLogic + And + Or + FirstOrder, P: Pairing<Logic> + ?Sized,
+    Q: for<'b> View<'b, Output = pred!({ Logic }, ForAll::<'p>(PairAt::<'p, 'a, 'b, Logic, P> >>= SingletonAt::<'p, 'a, Logic, P> >>= ExtEq::<'b, 'a, Logic, P::Mem>))> + ?Sized,
+{ fn prove<'b>(self) -> Cert<Logic, <Q as View<'b>>::Output> { forall_intro(PairCollapses2::<'a, 'b, Logic, P>(PhantomData)) } }
+struct PairCollapses2<'a, 'b, Logic, P: ?Sized>(PhantomData<(&'a (), &'b (), Logic, *const P)>);
+unit_clone!(PairCollapses2<'a, 'b>);
+impl<'a, 'b, Logic, P, Q> Generalise<Logic, Q> for PairCollapses2<'a, 'b, Logic, P>
+where Logic: PropLogic + And + Or + FirstOrder, P: Pairing<Logic> + ?Sized,
+    Q: for<'p> View<'p, Output = pred!({ Logic }, PairAt::<'p, 'a, 'b, Logic, P> >>= SingletonAt::<'p, 'a, Logic, P> >>= ExtEq::<'b, 'a, Logic, P::Mem>)> + ?Sized,
+{ fn prove<'p>(self) -> Cert<Logic, <Q as View<'p>>::Output> { pair_collapses_at::<'a, 'b, 'p, Logic, P>() } }
 
 struct ProvePairUnique<Logic, P: ?Sized>(PhantomData<(Logic, *const P)>);
 unit_clone!(ProvePairUnique<>);
