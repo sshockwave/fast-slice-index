@@ -12,7 +12,7 @@
 //! back out. The three routes to getting one are all heavier than a ternary
 //! relation:
 //!
-//! - **Take pairs from [`ZF`](crate::logic::zfc::ZF).** `ZF::pairing` gives
+//! - **Take pairs from a set-theoretic language.** A pairing axiom gives
 //!   genuine ordered pairs, but then these traits and
 //!   [`Rationals`](crate::logic::rat::Rationals) would have to extend `ZF` —
 //!   dragging all of set theory in to state a group axiom — and every use of

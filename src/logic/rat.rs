@@ -114,7 +114,8 @@ macro_rules! expr {
 ///
 /// Existentials use the classical encoding
 /// `∃x. A(x) ∧ B(x)` ≡ `¬∀x. A(x) → ¬B(x)`. That equivalence is *classical*,
-/// so [`Contraposition`] is a supertrait here (as in [`crate::logic::zfc::ZF`])
+/// so [`Contraposition`] is a supertrait here, as required by the generic
+/// logical development.
 /// rather than just [`Equality`]'s intuitionistic `L1`/`L2` — without it the
 /// encoding is strictly weaker than the existential it stands for, and the
 /// witnesses in [`AbelianGroup::inverse`] and [`Rationals::mul_inverse`] could
