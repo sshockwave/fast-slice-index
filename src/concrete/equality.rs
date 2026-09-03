@@ -24,22 +24,25 @@ use crate::rel::eq::Closed;
 use crate::rel::ext::{Ext, ExtEq, Extensional, Membership};
 
 /// `∈` on the universe of sets.
-pub struct SetIn;
-
-impl Membership<Axiomize> for SetIn {
+///
+/// The ambient logic is its own membership vocabulary. Keeping this as an
+/// associated implementation avoids a separate concrete wrapper type at every
+/// generic proof boundary.
+impl Membership<Axiomize> for Axiomize {
     /// In ZFC every object is a set, so the domain is everything.
     type El<'a> = IsSet<'a>;
     type In<'a, 'b> = In<'a, 'b>;
 }
 
-/// `=` on the universe of sets: the equality [`SetIn`] induces.
+/// `=` on the universe of sets: the equality induced by [`Axiomize`]'s
+/// membership vocabulary.
 /// Extensionality, discharged by [the axiom](super::axioms::ext).
 ///
 /// The only place a ZFC assumption enters the equality machinery. Everything
 /// [`Ext`] proves without this — that equality is an equivalence, and that
 /// equals may be substituted on the right of `∈` — holds of any membership
 /// relation whatever.
-impl Extensional<Axiomize> for SetIn {
+impl Extensional<Axiomize> for Axiomize {
     fn in_left_at<'x, 'y, 'w>() -> Cert<
         Axiomize,
         <Axiomize as Imply>::Imply<Eq<'x, 'y>, <Axiomize as Imply>::Imply<In<'x, 'w>, In<'y, 'w>>>,
@@ -56,14 +59,8 @@ impl Extensional<Axiomize> for SetIn {
     }
 }
 
-pub type SetEq = Ext<Axiomize, SetIn>;
-
-/// [`SetEq`] presented on its domain, so it is an
-/// [`Equivalence`](crate::rel::poset::Equivalence).
-pub type SetEqRel = Closed<Axiomize, SetEq>;
-
 impl EqualityDef for Axiomize {
-    type EqRel = SetEqRel;
+    type EqRel = Closed<Axiomize, Ext<Axiomize, Axiomize>>;
 }
 
 /// [`lang::Eq`](Eq) and the induced [`ExtEq`] are the same proposition — the
@@ -73,6 +70,6 @@ impl EqualityDef for Axiomize {
 #[expect(dead_code, reason = "typecheck-only proof assertion")]
 fn eq_is_extensional<'x, 'y>(
     c: Cert<Axiomize, Eq<'x, 'y>>,
-) -> Cert<Axiomize, ExtEq<'x, 'y, Axiomize, SetIn>> {
+) -> Cert<Axiomize, ExtEq<'x, 'y, Axiomize, Axiomize>> {
     c
 }

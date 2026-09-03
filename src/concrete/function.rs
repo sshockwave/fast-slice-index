@@ -22,10 +22,8 @@ use crate::logic::prop::{And, Cert, FirstOrder, Iff, Imply, reflexive};
 use crate::rel::func::{Application, DomainView, SvView};
 
 /// Application on the universe of sets: `⟨a, b⟩ ∈ f`.
-pub struct SetApp;
-
-impl Application<Axiomize> for SetApp {
-    type Mem = super::equality::SetIn;
+impl Application<Axiomize> for Axiomize {
+    type Mem = Axiomize;
 
     type App<'f, 'a, 'b> = Applies<'f, 'a, 'b>;
     type IsRel<'f> = IsRelation<'f>;
@@ -35,13 +33,11 @@ impl Application<Axiomize> for SetApp {
 
     fn function_iff<'f>() -> Cert<
         Axiomize,
-        Iff<
-            Axiomize,
-            IsFunction<'f>,
-            <Axiomize as And>::And<IsRelation<'f>, IsSingleValued<'f>>,
-        >,
+        Iff<Axiomize, IsFunction<'f>, <Axiomize as And>::And<IsRelation<'f>, IsSingleValued<'f>>>,
     > {
-        <Axiomize as And>::and_intro().mp(reflexive()).mp(reflexive())
+        <Axiomize as And>::and_intro()
+            .mp(reflexive())
+            .mp(reflexive())
     }
 
     fn single_valued_iff<'f>() -> Cert<
@@ -49,10 +45,12 @@ impl Application<Axiomize> for SetApp {
         Iff<
             Axiomize,
             IsSingleValued<'f>,
-            <Axiomize as FirstOrder>::ForAll<SvView<'f, Axiomize, Self>>,
+            <Axiomize as FirstOrder>::ForAll<SvView<'f, Axiomize, Axiomize>>,
         >,
     > {
-        <Axiomize as And>::and_intro().mp(reflexive()).mp(reflexive())
+        <Axiomize as And>::and_intro()
+            .mp(reflexive())
+            .mp(reflexive())
     }
 
     fn in_domain_iff<'f, 'a>() -> Cert<
@@ -63,7 +61,9 @@ impl Application<Axiomize> for SetApp {
             <Axiomize as FirstOrder>::Exists<DomainView<'f, 'a, Axiomize, Self>>,
         >,
     > {
-        <Axiomize as And>::and_intro().mp(reflexive()).mp(reflexive())
+        <Axiomize as And>::and_intro()
+            .mp(reflexive())
+            .mp(reflexive())
     }
 }
 
@@ -73,8 +73,8 @@ impl Application<Axiomize> for SetApp {
 /// identification broke, rather than leaving it to be read off a trait impl.
 #[expect(dead_code, reason = "typecheck-only proof assertions")]
 fn notions_match_the_language<'f, 'a, 'b, 'c>(
-    s: Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<SvView<'f, Axiomize, SetApp>>>,
-    d: Cert<Axiomize, <Axiomize as FirstOrder>::Exists<DomainView<'f, 'a, Axiomize, SetApp>>>,
+    s: Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<SvView<'f, Axiomize, Axiomize>>>,
+    d: Cert<Axiomize, <Axiomize as FirstOrder>::Exists<DomainView<'f, 'a, Axiomize, Axiomize>>>,
     e: Cert<Axiomize, <Axiomize as Imply>::Imply<Applies<'f, 'a, 'b>, Eq<'b, 'c>>>,
 ) -> (
     Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<SingleValuedView<'f>>>,
@@ -82,8 +82,8 @@ fn notions_match_the_language<'f, 'a, 'b, 'c>(
     Cert<
         Axiomize,
         <Axiomize as Imply>::Imply<
-            <SetApp as Application<Axiomize>>::App<'f, 'a, 'b>,
-            crate::rel::ext::ExtEq<'b, 'c, Axiomize, <SetApp as Application<Axiomize>>::Mem>,
+            <Axiomize as Application<Axiomize>>::App<'f, 'a, 'b>,
+            crate::rel::ext::ExtEq<'b, 'c, Axiomize, <Axiomize as Application<Axiomize>>::Mem>,
         >,
     >,
 ) {
