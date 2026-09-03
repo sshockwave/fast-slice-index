@@ -18,11 +18,23 @@
 
 use super::Axiomize;
 use super::base::sealed_cert::cert;
-use super::lang::{
-    Applies, Eq, ExtView, In, InductiveView, IsFunction, IsPair, Rel2, SeparationView, Subset,
-};
+use ::core::marker::PhantomData;
+
 use crate::logic::prop::{Cert, FirstOrder, View};
+use crate::logic::zfc::Rel2;
 use crate::macros::thm;
+use crate::rel::empty::IsEmpty;
+use crate::rel::ext::{InLeftView2, Membership};
+use crate::rel::func::Application;
+use crate::rel::pair::Pairing;
+use crate::rel::succ::Successor;
+
+/// The one primitive atom of Axiomize's set language.
+///
+/// This has to be public because it instantiates the public
+/// [`Membership::In`] associated type. Composite set-language propositions are
+/// expressed through the generic relation traits instead.
+pub struct In<'a, 'b>(PhantomData<(&'a (), &'b ())>);
 
 // ---------------------------------------------------------------------------
 // The axioms
@@ -35,20 +47,19 @@ use crate::macros::thm;
 ///
 /// `∀x ∀y. x = y → ∀w. (x ∈ w ↔ y ∈ w)`
 ///
-/// [`Eq`] is *defined* as having the same members, so the usual other direction
-/// is free and this congruence is the axiom's entire content.
+/// Equality is *defined* as having the same members, so the usual other
+/// direction is free and this congruence is the axiom's entire content.
 ///
-/// Stated against [`ExtView`] rather than an inline `pred!` body so the
-/// quantifiers can be eliminated at a use site; `set.rs` carries a witness that
-/// the two spellings are the same proposition.
-pub fn ext() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<ExtView>> {
+/// Stated using the generic extensionality view so quantifiers can be
+/// eliminated at a use site.
+pub fn ext() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<InLeftView2<Axiomize, Axiomize>>> {
     unsafe { cert() }
 }
 
 /// **Pairing**: `∀x ∀y. ∃p. p = {x, y}`
 pub fn pairing() -> thm!(
     { Axiomize },
-    ForAll::<'x, 'y>(Exists::<'p>(IsPair::<'p, 'x, 'y>))
+    ForAll::<'x, 'y>(Exists::<'p>(<Axiomize as Pairing<Axiomize>>::Pair::<'p, 'x, 'y>))
 ) {
     unsafe { cert() }
 }
@@ -57,7 +68,10 @@ pub fn pairing() -> thm!(
 pub fn union() -> thm!(
     { Axiomize },
     ForAll::<'f>(Exists::<'u>(ForAll::<'z>(
-        (In::<'z, 'u>).iff(Exists::<'y>((In::<'z, 'y>) && (In::<'y, 'f>)))
+        (<Axiomize as Membership<Axiomize>>::In::<'z, 'u>).iff(Exists::<'y>(
+            (<Axiomize as Membership<Axiomize>>::In::<'z, 'y>)
+                && (<Axiomize as Membership<Axiomize>>::In::<'y, 'f>)
+        ))
     )))
 ) {
     unsafe { cert() }
@@ -70,7 +84,14 @@ pub fn union() -> thm!(
 /// the generic induction development. Carving only out of an
 /// existing `a` is what keeps this from being naive comprehension, which would
 /// be inconsistent.
-pub fn separation<P>() -> Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<SeparationView<P>>>
+pub fn separation<P>() -> thm!(
+    { Axiomize },
+    ForAll::<'a>(Exists::<'s>(ForAll::<'z>(
+        (<Axiomize as Membership<Axiomize>>::In::<'z, 's>).iff(
+            (<Axiomize as Membership<Axiomize>>::In::<'z, 'a>) && (<P as View<'z>>::Output)
+        )
+    )))
+)
 where
     P: for<'z> View<'z> + ?Sized,
 {
@@ -81,7 +102,10 @@ where
 pub fn power_set() -> thm!(
     { Axiomize },
     ForAll::<'x>(Exists::<'p>(ForAll::<'z>(
-        (In::<'z, 'p>).iff(Subset::<'z, 'x>)
+        (<Axiomize as Membership<Axiomize>>::In::<'z, 'p>).iff(ForAll::<'w>(
+            (<Axiomize as Membership<Axiomize>>::In::<'w, 'z>)
+                >>= (<Axiomize as Membership<Axiomize>>::In::<'w, 'x>)
+        ))
     )))
 ) {
     unsafe { cert() }
@@ -90,8 +114,11 @@ pub fn power_set() -> thm!(
 /// **Regularity**: every nonempty set has an ∈-minimal member.
 pub fn regularity() -> thm!(
     { Axiomize },
-    ForAll::<'x>((Exists::<'y>(In::<'y, 'x>)).imply(Exists::<'y>(
-        (In::<'y, 'x>) && (!(Exists::<'z>((In::<'z, 'y>) && (In::<'z, 'x>))))
+    ForAll::<'x>((Exists::<'y>(<Axiomize as Membership<Axiomize>>::In::<'y, 'x>)).imply(Exists::<'y>(
+        (<Axiomize as Membership<Axiomize>>::In::<'y, 'x>) && (!(Exists::<'z>(
+            (<Axiomize as Membership<Axiomize>>::In::<'z, 'y>)
+                && (<Axiomize as Membership<Axiomize>>::In::<'z, 'x>)
+        )))
     )))
 ) {
     unsafe { cert() }
@@ -99,10 +126,22 @@ pub fn regularity() -> thm!(
 
 /// **Infinity**: some set contains ∅ and is closed under `y ↦ y ∪ {y}`.
 ///
-/// Stated against [`InductiveView`] for the same reason as [`ext`]: an inline
-/// body is anonymous, and this existential has to be eliminated to be of any
-/// use. `set.rs` witnesses that the two spellings are the same proposition.
-pub fn infinity() -> Cert<Axiomize, <Axiomize as FirstOrder>::Exists<InductiveView>> {
+/// Its generic spelling retains the quantified structure needed by clients.
+pub fn infinity() -> thm!(
+    { Axiomize },
+    Exists::<'i>(
+        (Exists::<'e>(
+            (<Axiomize as Membership<Axiomize>>::In::<'e, 'i>)
+                && (IsEmpty::<'e, Axiomize, Axiomize>)
+        )) && (ForAll::<'y>(
+            (<Axiomize as Membership<Axiomize>>::In::<'y, 'i>)
+                >>= Exists::<'s>(
+                    (<Axiomize as Membership<Axiomize>>::In::<'s, 'i>)
+                        && (<Axiomize as Successor<Axiomize>>::Succ::<'s, 'y>)
+                )
+        ))
+    )
+) {
     unsafe { cert() }
 }
 
@@ -111,11 +150,15 @@ pub fn infinity() -> Cert<Axiomize, <Axiomize as FirstOrder>::Exists<InductiveVi
 pub fn replacement<R>() -> thm!(
     { Axiomize },
     ForAll::<'a>(
-        (ForAll::<'x>((In::<'x, 'a>).imply(ForAll::<'y, 'w>(
-            ((<R as Rel2>::At::<'x, 'y>) && (<R as Rel2>::At::<'x, 'w>)).imply(Eq::<'y, 'w>)
+        (ForAll::<'x>((<Axiomize as Membership<Axiomize>>::In::<'x, 'a>).imply(ForAll::<'y, 'w>(
+            ((<R as Rel2>::At::<'x, 'y>) && (<R as Rel2>::At::<'x, 'w>)).imply(
+                crate::rel::ext::ExtEq::<'y, 'w, Axiomize, Axiomize>
+            )
         ))))
         .imply(Exists::<'b>(ForAll::<'y>(
-            (In::<'y, 'b>).iff(Exists::<'x>((In::<'x, 'a>) && (<R as Rel2>::At::<'x, 'y>)))
+            (<Axiomize as Membership<Axiomize>>::In::<'y, 'b>).iff(Exists::<'x>(
+                (<Axiomize as Membership<Axiomize>>::In::<'x, 'a>) && (<R as Rel2>::At::<'x, 'y>)
+            ))
         )))
     )
 )
@@ -129,10 +172,15 @@ where
 pub fn choice() -> thm!(
     { Axiomize },
     ForAll::<'a>(
-        (ForAll::<'x>((In::<'x, 'a>).imply(Exists::<'w>(In::<'w, 'x>)))).imply(Exists::<'c>(
-            (IsFunction::<'c>)
+        (ForAll::<'x>((<Axiomize as Membership<Axiomize>>::In::<'x, 'a>).imply(Exists::<'w>(
+            <Axiomize as Membership<Axiomize>>::In::<'w, 'x>
+        )))).imply(Exists::<'c>(
+            (<Axiomize as Application<Axiomize>>::IsFunction::<'c>)
                 && (ForAll::<'x>(
-                    (In::<'x, 'a>).imply(Exists::<'w>((Applies::<'c, 'x, 'w>) && (In::<'w, 'x>)))
+                    (<Axiomize as Membership<Axiomize>>::In::<'x, 'a>).imply(Exists::<'w>(
+                        (<Axiomize as Application<Axiomize>>::App::<'c, 'x, 'w>)
+                            && (<Axiomize as Membership<Axiomize>>::In::<'w, 'x>)
+                    ))
                 ))
         ))
     )

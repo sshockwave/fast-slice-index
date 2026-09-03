@@ -20,7 +20,6 @@ pub mod axioms;
 mod base;
 mod equality;
 mod function;
-mod lang;
 mod pair;
 mod succ;
 

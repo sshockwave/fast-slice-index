@@ -5,7 +5,7 @@
 //! membership of the domain — is in [`crate::rel::func`], generic over the
 //! application relation. All this module does is say which relation
 //! [`Axiomize`] means by `f(a) = b`, and discharge the three unfoldings that
-//! connect the opaque notions to their spellings in [`super::lang`].
+//! connect the associated notions to their generic spellings.
 //!
 //! Each unfolding is [`reflexive`] in both directions, because at `Axiomize`
 //! every notion *is* its definition. That triviality is exactly what is not
@@ -15,25 +15,39 @@
 #![forbid(unsafe_code)]
 
 use super::Axiomize;
-use super::lang::{
-    Applies, Eq, InDomain, InDomainView, IsFunction, IsRelation, IsSingleValued, SingleValuedView,
-};
 use crate::logic::prop::{And, Cert, FirstOrder, Iff, Imply, reflexive};
+use crate::macros::pred;
 use crate::rel::func::{Application, DomainView, SvView};
+use crate::rel::pair::Pairing;
 
 /// Application on the universe of sets: `⟨a, b⟩ ∈ f`.
 impl Application<Axiomize> for Axiomize {
     type Mem = Axiomize;
 
-    type App<'f, 'a, 'b> = Applies<'f, 'a, 'b>;
-    type IsRel<'f> = IsRelation<'f>;
-    type IsSingleValued<'f> = IsSingleValued<'f>;
-    type IsFunction<'f> = IsFunction<'f>;
-    type InDomain<'f, 'a> = InDomain<'f, 'a>;
+    type App<'f, 'a, 'b> = pred!(
+        { Axiomize },
+        Exists::<'p, 'u, 'v>(
+            <Axiomize as Pairing<Axiomize>>::Singleton::<'u, 'a>
+                && (<Axiomize as Pairing<Axiomize>>::Pair::<'v, 'a, 'b>
+                    && (<Axiomize as Pairing<Axiomize>>::Pair::<'p, 'u, 'v>
+                        && <Axiomize as crate::rel::ext::Membership<Axiomize>>::In::<'p, 'f>))
+        )
+    );
+    type IsRel<'f> = pred!(
+        { Axiomize },
+        ForAll::<'z>(<Axiomize as crate::rel::ext::Membership<Axiomize>>::In::<'z, 'f>
+            >>= Exists::<'a, 'b>(<Axiomize as Application<Axiomize>>::App::<'z, 'a, 'b>))
+    );
+    type IsSingleValued<'f> = <Axiomize as FirstOrder>::ForAll<SvView<'f, Axiomize, Axiomize>>;
+    type IsFunction<'f> = <Axiomize as And>::And<
+        <Axiomize as Application<Axiomize>>::IsRel<'f>,
+        <Axiomize as Application<Axiomize>>::IsSingleValued<'f>,
+    >;
+    type InDomain<'f, 'a> = <Axiomize as FirstOrder>::Exists<DomainView<'f, 'a, Axiomize, Axiomize>>;
 
     fn function_iff<'f>() -> Cert<
         Axiomize,
-        Iff<Axiomize, IsFunction<'f>, <Axiomize as And>::And<IsRelation<'f>, IsSingleValued<'f>>>,
+        Iff<Axiomize, Self::IsFunction<'f>, <Axiomize as And>::And<Self::IsRel<'f>, Self::IsSingleValued<'f>>>,
     > {
         <Axiomize as And>::and_intro()
             .mp(reflexive())
@@ -44,7 +58,7 @@ impl Application<Axiomize> for Axiomize {
         Axiomize,
         Iff<
             Axiomize,
-            IsSingleValued<'f>,
+            Self::IsSingleValued<'f>,
             <Axiomize as FirstOrder>::ForAll<SvView<'f, Axiomize, Axiomize>>,
         >,
     > {
@@ -57,7 +71,7 @@ impl Application<Axiomize> for Axiomize {
         Axiomize,
         Iff<
             Axiomize,
-            InDomain<'f, 'a>,
+            Self::InDomain<'f, 'a>,
             <Axiomize as FirstOrder>::Exists<DomainView<'f, 'a, Axiomize, Self>>,
         >,
     > {
@@ -68,17 +82,15 @@ impl Application<Axiomize> for Axiomize {
 }
 
 /// The three unfoldings above are `reflexive` in both directions only because
-/// each opaque notion is spelled the same way [`super::lang`] spells it. If one
-/// ever drifts, `reflexive` stops typechecking — but these say *which*
-/// identification broke, rather than leaving it to be read off a trait impl.
+/// each associated notion is spelled directly by its generic definition.
 #[expect(dead_code, reason = "typecheck-only proof assertions")]
 fn notions_match_the_language<'f, 'a, 'b, 'c>(
     s: Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<SvView<'f, Axiomize, Axiomize>>>,
     d: Cert<Axiomize, <Axiomize as FirstOrder>::Exists<DomainView<'f, 'a, Axiomize, Axiomize>>>,
-    e: Cert<Axiomize, <Axiomize as Imply>::Imply<Applies<'f, 'a, 'b>, Eq<'b, 'c>>>,
+    e: Cert<Axiomize, <Axiomize as Imply>::Imply<<Axiomize as Application<Axiomize>>::App<'f, 'a, 'b>, crate::rel::ext::ExtEq<'b, 'c, Axiomize, Axiomize>>>,
 ) -> (
-    Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<SingleValuedView<'f>>>,
-    Cert<Axiomize, <Axiomize as FirstOrder>::Exists<InDomainView<'f, 'a>>>,
+    Cert<Axiomize, <Axiomize as FirstOrder>::ForAll<SvView<'f, Axiomize, Axiomize>>>,
+    Cert<Axiomize, <Axiomize as FirstOrder>::Exists<DomainView<'f, 'a, Axiomize, Axiomize>>>,
     Cert<
         Axiomize,
         <Axiomize as Imply>::Imply<

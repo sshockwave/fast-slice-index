@@ -17,11 +17,11 @@
 
 use super::Axiomize;
 use super::axioms::ext;
-use super::lang::{Eq, ExtCongrView, ExtView, ExtView1, In, IsSet};
+use super::axioms::In;
 use crate::logic::function::EqualityDef;
-use crate::logic::prop::{And, Cert, FirstOrder, Imply, syllogism};
+use crate::logic::prop::{Cert, FirstOrder, Imply};
 use crate::rel::eq::Closed;
-use crate::rel::ext::{Ext, ExtEq, Extensional, Membership};
+use crate::rel::ext::{Ext, ExtEq, Extensional, InLeftView2, Membership};
 
 /// `∈` on the universe of sets.
 ///
@@ -30,7 +30,7 @@ use crate::rel::ext::{Ext, ExtEq, Extensional, Membership};
 /// generic proof boundary.
 impl Membership<Axiomize> for Axiomize {
     /// In ZFC every object is a set, so the domain is everything.
-    type El<'a> = IsSet<'a>;
+    type El<'a> = <Axiomize as Imply>::Imply<In<'a, 'a>, In<'a, 'a>>;
     type In<'a, 'b> = In<'a, 'b>;
 }
 
@@ -45,17 +45,12 @@ impl Membership<Axiomize> for Axiomize {
 impl Extensional<Axiomize> for Axiomize {
     fn in_left_at<'x, 'y, 'w>() -> Cert<
         Axiomize,
-        <Axiomize as Imply>::Imply<Eq<'x, 'y>, <Axiomize as Imply>::Imply<In<'x, 'w>, In<'y, 'w>>>,
+        <Axiomize as Imply>::Imply<ExtEq<'x, 'y, Axiomize, Axiomize>, <Axiomize as Imply>::Imply<In<'x, 'w>, In<'y, 'w>>>,
     > {
-        let congr = ext()
-            .pipe(<Axiomize as FirstOrder>::forall_elim::<'x, ExtView>())
-            .pipe(<Axiomize as FirstOrder>::forall_elim::<'y, ExtView1<'x>>());
-        syllogism().mp(congr).mp(syllogism()
-            .mp(<Axiomize as FirstOrder>::forall_elim::<
-                'w,
-                ExtCongrView<'x, 'y>,
-            >())
-            .mp(<Axiomize as And>::and_left()))
+        ext()
+            .pipe(<Axiomize as FirstOrder>::forall_elim::<'x, InLeftView2<Axiomize, Axiomize>>())
+            .pipe(<Axiomize as FirstOrder>::forall_elim::<'y, crate::rel::ext::InLeftView1<'x, Axiomize, Axiomize>>())
+            .pipe(<Axiomize as FirstOrder>::forall_elim::<'w, crate::rel::ext::InLeftView<'x, 'y, Axiomize, Axiomize>>())
     }
 }
 
@@ -63,13 +58,10 @@ impl EqualityDef for Axiomize {
     type EqRel = Closed<Axiomize, Ext<Axiomize, Axiomize>>;
 }
 
-/// [`lang::Eq`](Eq) and the induced [`ExtEq`] are the same proposition — the
-/// alias is what the axioms are stated against, the projection is what the
-/// generic proofs produce, and the delegation above is only sound if a
-/// certificate for one is a certificate for the other.
+/// The concrete equality and the induced [`ExtEq`] are the same proposition.
 #[expect(dead_code, reason = "typecheck-only proof assertion")]
 fn eq_is_extensional<'x, 'y>(
-    c: Cert<Axiomize, Eq<'x, 'y>>,
+    c: Cert<Axiomize, ExtEq<'x, 'y, Axiomize, Axiomize>>,
 ) -> Cert<Axiomize, ExtEq<'x, 'y, Axiomize, Axiomize>> {
     c
 }
