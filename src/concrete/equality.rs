@@ -16,12 +16,12 @@
 #![forbid(unsafe_code)]
 
 use super::Axiomize;
-use super::axioms::ext;
 use super::axioms::In;
 use crate::logic::function::EqualityDef;
 use crate::logic::prop::{Cert, FirstOrder, Imply};
 use crate::rel::eq::Closed;
 use crate::rel::ext::{Ext, ExtEq, Extensional, InLeftView2, Membership};
+use crate::rel::zfc::Zfc;
 
 /// `∈` on the universe of sets.
 ///
@@ -36,7 +36,7 @@ impl Membership<Axiomize> for Axiomize {
 
 /// `=` on the universe of sets: the equality induced by [`Axiomize`]'s
 /// membership vocabulary.
-/// Extensionality, discharged by [the axiom](super::axioms::ext).
+/// Extensionality, discharged by [`Zfc::extensionality`].
 ///
 /// The only place a ZFC assumption enters the equality machinery. Everything
 /// [`Ext`] proves without this — that equality is an equivalence, and that
@@ -47,7 +47,7 @@ impl Extensional<Axiomize> for Axiomize {
         Axiomize,
         <Axiomize as Imply>::Imply<ExtEq<'x, 'y, Axiomize, Axiomize>, <Axiomize as Imply>::Imply<In<'x, 'w>, In<'y, 'w>>>,
     > {
-        ext()
+        <Axiomize as Zfc<Axiomize>>::extensionality()
             .pipe(<Axiomize as FirstOrder>::forall_elim::<'x, InLeftView2<Axiomize, Axiomize>>())
             .pipe(<Axiomize as FirstOrder>::forall_elim::<'y, crate::rel::ext::InLeftView1<'x, Axiomize, Axiomize>>())
             .pipe(<Axiomize as FirstOrder>::forall_elim::<'w, crate::rel::ext::InLeftView<'x, 'y, Axiomize, Axiomize>>())

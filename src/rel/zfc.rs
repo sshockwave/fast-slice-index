@@ -1,108 +1,105 @@
-//! The concrete `Axiomize` implementation of the generic ZFC interface.
+//! ZFC as a generic set-theory interface.
 //!
-//! Every method in the [`Zfc`] implementation mints a certificate from
-//! nothing, which is exactly what an axiom is. This is the only module where
-//! those assumptions enter; their propositions and vocabulary are generic.
-#![expect(unsafe_code, reason = "this module states axioms; see `base.rs`")]
+//! The vocabulary is inherited from the smaller relation traits. Each method
+//! states one axiom directly, in the same style as the algebraic law traits.
+//! At a generic `Z: Zfc<Logic>` boundary, membership, pairing, successor, and
+//! application remain rigid associated projections rather than expanding a
+//! concrete set-language encoding.
 
-use core::marker::PhantomData;
-
-use super::Axiomize;
-use super::base::sealed_cert::cert;
 use crate::algebra::group::BinOp;
-use crate::logic::prop::View;
+use crate::logic::function::Equality;
+use crate::logic::prop::{And, FirstOrder, Negation, Or, PropLogic, View};
 use crate::macros::thm;
 use crate::rel::empty::IsEmpty;
-use crate::rel::ext::ExtEq;
-use crate::rel::zfc::Zfc;
+use crate::rel::ext::{ExtEq, Membership};
+use crate::rel::func::Application;
+use crate::rel::pair::Pairing;
+use crate::rel::succ::Successor;
 
-/// The one primitive atom of `Axiomize`'s set language.
-///
-/// This is public because it instantiates [`crate::rel::ext::Membership::In`].
-/// Every composite proposition is exposed through generic associated
-/// vocabulary instead.
-pub struct In<'a, 'b>(PhantomData<(&'a (), &'b ())>);
-
-impl Zfc<Axiomize> for Axiomize {
+/// A set theory satisfying the ZFC axioms.
+pub trait Zfc<Logic>:
+    Membership<Logic>
+    + Pairing<Logic, Mem = Self>
+    + Successor<Logic, Mem = Self>
+    + Application<Logic, Mem = Self>
+    + 'static
+where
+    Logic: PropLogic + And + Or + Negation + FirstOrder + Equality,
+{
+    /// Extensionality, in the congruence direction not supplied by the
+    /// definition of [`ExtEq`].
     fn extensionality() -> thm!(
-        { Axiomize },
+        { Logic },
         ForAll::<'x, 'y, 'w>(
-            ExtEq::<'x, 'y, Axiomize, Self>
+            ExtEq::<'x, 'y, Logic, Self>
                 >>= Self::In::<'x, 'w>
                 >>= Self::In::<'y, 'w>
         )
-    ) {
-        unsafe { cert() }
-    }
+    );
 
+    /// Pairing: `forall x y. exists p. p = {x, y}`.
     fn pairing() -> thm!(
-        { Axiomize },
+        { Logic },
         ForAll::<'x, 'y>(Exists::<'p>(Self::Pair::<'p, 'x, 'y>))
-    ) {
-        unsafe { cert() }
-    }
+    );
 
+    /// Union: every set has a union.
     fn union() -> thm!(
-        { Axiomize },
+        { Logic },
         ForAll::<'f>(Exists::<'u>(ForAll::<'z>(
             Self::In::<'z, 'u>.iff(Exists::<'y>(
                 Self::In::<'z, 'y> && Self::In::<'y, 'f>
             ))
         )))
-    ) {
-        unsafe { cert() }
-    }
+    );
 
+    /// Separation schema.
     fn separation<P>() -> thm!(
-        { Axiomize },
+        { Logic },
         ForAll::<'a>(Exists::<'s>(ForAll::<'z>(
             Self::In::<'z, 's>.iff(Self::In::<'z, 'a> && <P as View<'z>>::Output)
         )))
     )
     where
-        P: for<'z> View<'z> + ?Sized,
-    {
-        unsafe { cert() }
-    }
+        P: for<'z> View<'z> + ?Sized;
 
+    /// Power set: every set has a set of all its subsets.
     fn power_set() -> thm!(
-        { Axiomize },
+        { Logic },
         ForAll::<'x>(Exists::<'p>(ForAll::<'z>(
             Self::In::<'z, 'p>.iff(ForAll::<'w>(
                 Self::In::<'w, 'z> >>= Self::In::<'w, 'x>
             ))
         )))
-    ) {
-        unsafe { cert() }
-    }
+    );
 
+    /// Regularity: every nonempty set has a membership-minimal member.
     fn regularity() -> thm!(
-        { Axiomize },
+        { Logic },
         ForAll::<'x>(
             Exists::<'y>(Self::In::<'y, 'x>).imply(Exists::<'y>(
                 Self::In::<'y, 'x>
                     && !Exists::<'z>(Self::In::<'z, 'y> && Self::In::<'z, 'x>)
             ))
         )
-    ) {
-        unsafe { cert() }
-    }
+    );
 
+    /// Infinity: an inductive set exists.
     fn infinity() -> thm!(
-        { Axiomize },
+        { Logic },
         Exists::<'i>(
-            Exists::<'e>(Self::In::<'e, 'i> && IsEmpty::<'e, Axiomize, Self>)
+            Exists::<'e>(Self::In::<'e, 'i> && IsEmpty::<'e, Logic, Self>)
                 && ForAll::<'y>(
                     Self::In::<'y, 'i>
                         >>= Exists::<'s>(Self::In::<'s, 'i> && Self::Succ::<'s, 'y>)
                 )
         )
-    ) {
-        unsafe { cert() }
-    }
+    );
 
+    /// Replacement for the unary function obtained by fixing the second
+    /// argument of `R`. [`BinOp::single_valued`] supplies functionality.
     fn replacement<'parameter, R>() -> thm!(
-        { Axiomize },
+        { Logic },
         ForAll::<'a>(Exists::<'b>(ForAll::<'y>(
             Self::In::<'y, 'b>.iff(Exists::<'x>(
                 Self::In::<'x, 'a> && R::Op::<'x, 'parameter, 'y>
@@ -110,13 +107,11 @@ impl Zfc<Axiomize> for Axiomize {
         )))
     )
     where
-        R: BinOp<Axiomize>,
-    {
-        unsafe { cert() }
-    }
+        R: BinOp<Logic>;
 
+    /// Choice: every set of nonempty sets admits a choice function.
     fn choice() -> thm!(
-        { Axiomize },
+        { Logic },
         ForAll::<'a>(
             ForAll::<'x>(
                 Self::In::<'x, 'a>.imply(Exists::<'w>(Self::In::<'w, 'x>))
@@ -129,7 +124,5 @@ impl Zfc<Axiomize> for Axiomize {
                     )
             ))
         )
-    ) {
-        unsafe { cert() }
-    }
+    );
 }

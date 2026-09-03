@@ -14,7 +14,8 @@
 //!
 //! - **Take pairs from a set-theoretic language.** A pairing axiom gives
 //!   genuine ordered pairs, but then these traits and
-//!   [`Rationals`](crate::logic::rat::Rationals) would have to extend `ZF` —
+//!   [`Rationals`](crate::logic::rat::Rationals) would have to extend
+//!   [`Zfc`](crate::rel::zfc::Zfc) —
 //!   dragging all of set theory in to state a group axiom — and every use of
 //!   the operation would carry Kuratowski projections plus their
 //!   well-definedness lemmas.
