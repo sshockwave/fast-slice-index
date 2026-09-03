@@ -254,8 +254,8 @@ pub type SingleValuedView<'f> = dyn for<'a> View<'a, Output = <Axiomize as First
 
 /// `IsSingleValued(f) := ∀a ∀b ∀c. (f(a)=b ∧ f(a)=c) → b = c`
 ///
-/// Split out of [`IsFunction`] and named so its quantifiers can be eliminated;
-/// [`super::theorems::func_apply_unique`] is what that buys.
+/// Split out of [`IsFunction`] so its quantifiers can be eliminated through
+/// [`crate::rel::func::Application`].
 pub type IsSingleValued<'f> = <Axiomize as FirstOrder>::ForAll<SingleValuedView<'f>>;
 
 /// `IsFunction(f) := IsRelation(f) ∧ f is single-valued`
